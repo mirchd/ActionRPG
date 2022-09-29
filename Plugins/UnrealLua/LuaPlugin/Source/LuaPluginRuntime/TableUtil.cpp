@@ -36,11 +36,11 @@ FORCEINLINE uint64 GetPropertyFlag(FProperty* Property)
 {
 	UClass* PropertyClass = Property->GetClass();
 	uint64 CastFlag = uint64(PropertyClass->ClassCastFlags);
-	CastFlag = CastFlag & (CASTCLASS_UByteProperty | CASTCLASS_UIntProperty | CASTCLASS_UInt8Property
-		| CASTCLASS_UUInt64Property | CASTCLASS_UUInt32Property | CASTCLASS_UUInt16Property
-		| CASTCLASS_UInt64Property | CASTCLASS_UInt16Property | CASTCLASS_UBoolProperty
-		| CASTCLASS_UNameProperty | CASTCLASS_UStrProperty | CASTCLASS_UTextProperty
-		| CASTCLASS_UDoubleProperty | CASTCLASS_UFloatProperty | CASTCLASS_UObjectProperty | CASTCLASS_UStructProperty);
+	CastFlag = CastFlag & (CASTCLASS_FByteProperty | CASTCLASS_FIntProperty | CASTCLASS_FInt8Property
+		| CASTCLASS_FUInt64Property | CASTCLASS_FUInt32Property | CASTCLASS_FUInt16Property
+		| CASTCLASS_FInt64Property | CASTCLASS_FInt16Property | CASTCLASS_FBoolProperty
+		| CASTCLASS_FNameProperty | CASTCLASS_FStrProperty | CASTCLASS_FTextProperty
+		| CASTCLASS_FDoubleProperty | CASTCLASS_FFloatProperty | CASTCLASS_FObjectProperty | CASTCLASS_FStructProperty);
 	return CastFlag;
 }
 
@@ -1466,37 +1466,37 @@ UnrealLua::ArgType UTableUtil::GetTypeOfProperty(FProperty* Property)
 	uint64 CastFlag = GetPropertyFlag(Property);
 	switch (CastFlag)
 	{
-	case CASTCLASS_UByteProperty:
+	case CASTCLASS_FByteProperty:
 		return UnrealLua::Type::TYPE_Byte;
-	case CASTCLASS_UIntProperty:
+	case CASTCLASS_FIntProperty:
 		return UnrealLua::Type::TYPE_INTERGER;
-	case CASTCLASS_UInt8Property:
+	case CASTCLASS_FInt8Property:
 		return UnrealLua::Type::TYPE_INTERGER8;
-	case CASTCLASS_UUInt64Property:
+	case CASTCLASS_FUInt64Property:
 		return UnrealLua::Type::TYPE_INTERGERu64;
-	case CASTCLASS_UUInt32Property:
+	case CASTCLASS_FUInt32Property:
 		return UnrealLua::Type::TYPE_INTERGERu32;
-	case CASTCLASS_UUInt16Property:
+	case CASTCLASS_FUInt16Property:
 		return UnrealLua::Type::TYPE_INTERGERu16;
-	case CASTCLASS_UInt64Property:
+	case CASTCLASS_FInt64Property:
 		return UnrealLua::Type::TYPE_INTERGER64;
-	case CASTCLASS_UInt16Property:
+	case CASTCLASS_FInt16Property:
 		return UnrealLua::Type::TYPE_INTERGER16;
-	case CASTCLASS_UBoolProperty:
+	case CASTCLASS_FBoolProperty:
 		return UnrealLua::Type::TYPE_TBOOLEAN;
-	case CASTCLASS_UNameProperty:
+	case CASTCLASS_FNameProperty:
 		return UnrealLua::Type::TYPE_Name;
-	case CASTCLASS_UStrProperty:
+	case CASTCLASS_FStrProperty:
 		return UnrealLua::Type::TYPE_String;
-	case CASTCLASS_UTextProperty:
+	case CASTCLASS_FTextProperty:
 		return UnrealLua::Type::TYPE_Text;
-	case CASTCLASS_UDoubleProperty:
+	case CASTCLASS_FDoubleProperty:
 		return UnrealLua::Type::TYPE_TNUMBERdouble;
-	case CASTCLASS_UFloatProperty:
+	case CASTCLASS_FFloatProperty:
 		return UnrealLua::Type::TYPE_TNUMBERfloat;
-	case CASTCLASS_UObjectProperty:
+	case CASTCLASS_FObjectProperty:
 		return UnrealLua::Type::TYPE_UOBJECT;
-	case CASTCLASS_UStructProperty:
+	case CASTCLASS_FStructProperty:
 		return GetNewType("F" + ((FStructProperty*)Property)->Struct->GetName());
 	}
 	return -1;

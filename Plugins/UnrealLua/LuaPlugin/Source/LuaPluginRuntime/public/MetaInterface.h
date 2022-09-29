@@ -32,13 +32,13 @@ struct LuaBasePropertyInterface:public LuaBaseBpInterface
 
 static TSharedPtr<LuaBasePropertyInterface> CreatePropertyInterface(lua_State*inL, FProperty* Property);
 
-struct LuaUBoolProperty :public LuaBasePropertyInterface
+struct LuaFBoolProperty :public LuaBasePropertyInterface
 {
 	FBoolProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUBoolProperty(){}
-	LuaUBoolProperty(lua_State*inL, FBoolProperty* InProperty):Property(InProperty)
+	virtual ~LuaFBoolProperty(){}
+	LuaFBoolProperty(lua_State*inL, FBoolProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -93,13 +93,13 @@ struct LuaUBoolProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUIntProperty :public LuaBasePropertyInterface
+struct LuaFIntProperty :public LuaBasePropertyInterface
 {
 	FIntProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUIntProperty(){}
-	LuaUIntProperty(lua_State*inL, FIntProperty* InProperty):Property(InProperty)
+	virtual ~LuaFIntProperty(){}
+	LuaFIntProperty(lua_State*inL, FIntProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -154,13 +154,13 @@ struct LuaUIntProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUInt8Property :public LuaBasePropertyInterface
+struct LuaFInt8Property :public LuaBasePropertyInterface
 {
 	FInt8Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty() { return Property; }
-	virtual ~LuaUInt8Property() {}
-	LuaUInt8Property(lua_State*inL, FInt8Property* InProperty) :Property(InProperty)
+	virtual ~LuaFInt8Property() {}
+	LuaFInt8Property(lua_State*inL, FInt8Property* InProperty) :Property(InProperty)
 	{
 
 	}
@@ -215,13 +215,13 @@ struct LuaUInt8Property :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUUInt16Property :public LuaBasePropertyInterface
+struct LuaFUInt16Property :public LuaBasePropertyInterface
 {
 	FUInt16Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUUInt16Property(){}
-	LuaUUInt16Property(lua_State*inL, FUInt16Property* InProperty):Property(InProperty)
+	virtual ~LuaFUInt16Property(){}
+	LuaFUInt16Property(lua_State*inL, FUInt16Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -276,13 +276,13 @@ struct LuaUUInt16Property :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUInt16Property :public LuaBasePropertyInterface
+struct LuaFInt16Property :public LuaBasePropertyInterface
 {
 	FInt16Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUInt16Property(){}
-	LuaUInt16Property(lua_State*inL, FInt16Property* InProperty):Property(InProperty)
+	virtual ~LuaFInt16Property(){}
+	LuaFInt16Property(lua_State*inL, FInt16Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -337,13 +337,13 @@ struct LuaUInt16Property :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUUInt32Property :public LuaBasePropertyInterface
+struct LuaFUInt32Property :public LuaBasePropertyInterface
 {
 	FUInt32Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUUInt32Property(){}
-	LuaUUInt32Property(lua_State*inL, FUInt32Property* InProperty):Property(InProperty)
+	virtual ~LuaFUInt32Property(){}
+	LuaFUInt32Property(lua_State*inL, FUInt32Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -398,13 +398,13 @@ struct LuaUUInt32Property :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUInt64Property :public LuaBasePropertyInterface
+struct LuaFInt64Property :public LuaBasePropertyInterface
 {
 	FInt64Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUInt64Property(){}
-	LuaUInt64Property(lua_State*inL, FInt64Property* InProperty):Property(InProperty)
+	virtual ~LuaFInt64Property(){}
+	LuaFInt64Property(lua_State*inL, FInt64Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -459,13 +459,13 @@ struct LuaUInt64Property :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUUInt64Property :public LuaBasePropertyInterface
+struct LuaFUInt64Property :public LuaBasePropertyInterface
 {
 	FUInt64Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUUInt64Property(){}
-	LuaUUInt64Property(lua_State*inL, FUInt64Property* InProperty):Property(InProperty)
+	virtual ~LuaFUInt64Property(){}
+	LuaFUInt64Property(lua_State*inL, FUInt64Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -520,13 +520,13 @@ struct LuaUUInt64Property :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUFloatProperty :public LuaBasePropertyInterface
+struct LuaFFloatProperty :public LuaBasePropertyInterface
 {
 	FFloatProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUFloatProperty(){}
-	LuaUFloatProperty(lua_State*inL, FFloatProperty* InProperty):Property(InProperty)
+	virtual ~LuaFFloatProperty(){}
+	LuaFFloatProperty(lua_State*inL, FFloatProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -581,13 +581,13 @@ struct LuaUFloatProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUDoubleProperty :public LuaBasePropertyInterface
+struct LuaFDoubleProperty :public LuaBasePropertyInterface
 {
 	FDoubleProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUDoubleProperty(){}
-	LuaUDoubleProperty(lua_State*inL, FDoubleProperty* InProperty):Property(InProperty)
+	virtual ~LuaFDoubleProperty(){}
+	LuaFDoubleProperty(lua_State*inL, FDoubleProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -642,13 +642,13 @@ struct LuaUDoubleProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUObjectPropertyBase :public LuaBasePropertyInterface
+struct LuaFObjectPropertyBase :public LuaBasePropertyInterface
 {
 	FObjectPropertyBase* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUObjectPropertyBase(){}
-	LuaUObjectPropertyBase(lua_State*inL, FObjectPropertyBase* InProperty):Property(InProperty)
+	virtual ~LuaFObjectPropertyBase(){}
+	LuaFObjectPropertyBase(lua_State*inL, FObjectPropertyBase* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -703,13 +703,13 @@ struct LuaUObjectPropertyBase :public LuaBasePropertyInterface
 		Property->SetObjectPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUObjectProperty :public LuaBasePropertyInterface
+struct LuaFObjectProperty :public LuaBasePropertyInterface
 {
 	FObjectProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUObjectProperty(){}
-	LuaUObjectProperty(lua_State*inL, FObjectProperty* InProperty):Property(InProperty)
+	virtual ~LuaFObjectProperty(){}
+	LuaFObjectProperty(lua_State*inL, FObjectProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -764,13 +764,13 @@ struct LuaUObjectProperty :public LuaBasePropertyInterface
 		Property->SetObjectPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUClassProperty :public LuaBasePropertyInterface
+struct LuaFClassProperty :public LuaBasePropertyInterface
 {
 	FClassProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUClassProperty(){}
-	LuaUClassProperty(lua_State*inL, FClassProperty* InProperty):Property(InProperty)
+	virtual ~LuaFClassProperty(){}
+	LuaFClassProperty(lua_State*inL, FClassProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -825,13 +825,13 @@ struct LuaUClassProperty :public LuaBasePropertyInterface
 		Property->SetObjectPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUStrProperty :public LuaBasePropertyInterface
+struct LuaFStrProperty :public LuaBasePropertyInterface
 {
 	FStrProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUStrProperty(){}
-	LuaUStrProperty(lua_State*inL, FStrProperty* InProperty):Property(InProperty)
+	virtual ~LuaFStrProperty(){}
+	LuaFStrProperty(lua_State*inL, FStrProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -886,13 +886,13 @@ struct LuaUStrProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUNameProperty :public LuaBasePropertyInterface
+struct LuaFNameProperty :public LuaBasePropertyInterface
 {
 	FNameProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUNameProperty(){}
-	LuaUNameProperty(lua_State*inL, FNameProperty* InProperty):Property(InProperty)
+	virtual ~LuaFNameProperty(){}
+	LuaFNameProperty(lua_State*inL, FNameProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -953,13 +953,13 @@ struct LuaUNameProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUTextProperty :public LuaBasePropertyInterface
+struct LuaFTextProperty :public LuaBasePropertyInterface
 {
 	FTextProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUTextProperty(){}
-	LuaUTextProperty(lua_State*inL, FTextProperty* InProperty):Property(InProperty)
+	virtual ~LuaFTextProperty(){}
+	LuaFTextProperty(lua_State*inL, FTextProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1036,13 +1036,13 @@ struct LuaUTextProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUByteProperty :public LuaBasePropertyInterface
+struct LuaFByteProperty :public LuaBasePropertyInterface
 {
 	FByteProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUByteProperty(){}
-	LuaUByteProperty(lua_State*inL, FByteProperty* InProperty):Property(InProperty)
+	virtual ~LuaFByteProperty(){}
+	LuaFByteProperty(lua_State*inL, FByteProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1097,14 +1097,14 @@ struct LuaUByteProperty :public LuaBasePropertyInterface
 		Property->SetPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUEnumProperty :public LuaBasePropertyInterface
+struct LuaFEnumProperty :public LuaBasePropertyInterface
 {
 	FEnumProperty* Property;
 	TSharedPtr<LuaBasePropertyInterface> UnderlyingProperty;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUEnumProperty(){}
-	LuaUEnumProperty(lua_State*inL, FEnumProperty* InProperty):Property(InProperty)
+	virtual ~LuaFEnumProperty(){}
+	LuaFEnumProperty(lua_State*inL, FEnumProperty* InProperty):Property(InProperty)
 	{
 		UnderlyingProperty = CreatePropertyInterface(inL, InProperty->GetUnderlyingProperty());
 	}
@@ -1157,7 +1157,7 @@ struct LuaUEnumProperty :public LuaBasePropertyInterface
 		pop_novirtual(inL, LuaStackIndex, (void*)Property->ContainerPtrToValuePtr<uint8>(ContainerPtr));
 	}
 };
-struct LuaUStructProperty :public LuaBasePropertyInterface
+struct LuaFStructProperty :public LuaBasePropertyInterface
 {
 	FStructProperty* Property;
 	FString TypeName;
@@ -1170,9 +1170,9 @@ struct LuaUStructProperty :public LuaBasePropertyInterface
 // 	const char* name = (ANSICHAR*)temp1.Get();
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUStructProperty(){
+	virtual ~LuaFStructProperty(){
 	}
-	LuaUStructProperty(lua_State*inL, FStructProperty* InProperty):Property(InProperty)
+	LuaFStructProperty(lua_State*inL, FStructProperty* InProperty):Property(InProperty)
 	{
 		FString TempName;
 		if (UUserDefinedStruct* BpStruct = Cast<UUserDefinedStruct>(Property->Struct))
@@ -1283,13 +1283,13 @@ struct LuaUStructProperty :public LuaBasePropertyInterface
 	}
 };
 
-struct LuaUDelegateProperty :public LuaBasePropertyInterface
+struct LuaFDelegateProperty :public LuaBasePropertyInterface
 {
 	FDelegateProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUDelegateProperty(){}
-	LuaUDelegateProperty(lua_State*inL, FDelegateProperty* InProperty):Property(InProperty)
+	virtual ~LuaFDelegateProperty(){}
+	LuaFDelegateProperty(lua_State*inL, FDelegateProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1362,13 +1362,13 @@ struct LuaUDelegateProperty :public LuaBasePropertyInterface
 		check(0);
 	}
 };
-struct LuaUWeakObjectProperty :public LuaBasePropertyInterface
+struct LuaFWeakObjectProperty :public LuaBasePropertyInterface
 {
 	FWeakObjectProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUWeakObjectProperty(){}
-	LuaUWeakObjectProperty(lua_State*inL, FWeakObjectProperty* InProperty):Property(InProperty)
+	virtual ~LuaFWeakObjectProperty(){}
+	LuaFWeakObjectProperty(lua_State*inL, FWeakObjectProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1423,14 +1423,14 @@ struct LuaUWeakObjectProperty :public LuaBasePropertyInterface
 		Property->SetObjectPropertyValue_InContainer((void*)ContainerPtr, value);
 	}
 };
-struct LuaUArrayProperty :public LuaBasePropertyInterface
+struct LuaFArrayProperty :public LuaBasePropertyInterface
 {
 	TSharedPtr<LuaBasePropertyInterface> InnerProperty;
 	FArrayProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUArrayProperty(){}
-	LuaUArrayProperty(lua_State*inL, FArrayProperty* InProperty):Property(InProperty)
+	virtual ~LuaFArrayProperty(){}
+	LuaFArrayProperty(lua_State*inL, FArrayProperty* InProperty):Property(InProperty)
 	{
 		InnerProperty = CreatePropertyInterface(inL, Property->Inner);
 	}
@@ -1548,7 +1548,7 @@ struct LuaUArrayProperty :public LuaBasePropertyInterface
 		pop_novirtual(inL, LuaStackIndex, (void*)Property->ContainerPtrToValuePtr<uint8>(ContainerPtr));
 	}
 };
-struct LuaUMapProperty :public LuaBasePropertyInterface
+struct LuaFMapProperty :public LuaBasePropertyInterface
 {
 	TSharedPtr<LuaBasePropertyInterface> KeyProperty;
 	TSharedPtr<LuaBasePropertyInterface> ValueProperty;
@@ -1557,8 +1557,8 @@ struct LuaUMapProperty :public LuaBasePropertyInterface
 	FMapProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUMapProperty(){}
-	LuaUMapProperty(lua_State*inL, FMapProperty* InProperty):Property(InProperty)
+	virtual ~LuaFMapProperty(){}
+	LuaFMapProperty(lua_State*inL, FMapProperty* InProperty):Property(InProperty)
 	{
 		KeyProperty = CreatePropertyInterface(inL, Property->KeyProp);
 		ValueProperty = CreatePropertyInterface(inL, Property->ValueProp);
@@ -1710,14 +1710,14 @@ struct LuaUMapProperty :public LuaBasePropertyInterface
 		pop_novirtual(inL, LuaStackIndex, (void*)Property->ContainerPtrToValuePtr<uint8>(ContainerPtr));
 	}
 };
-struct LuaUSetProperty :public LuaBasePropertyInterface
+struct LuaFSetProperty :public LuaBasePropertyInterface
 {
 	TSharedPtr<LuaBasePropertyInterface> ElementProp;
 	FSetProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUSetProperty(){}
-	LuaUSetProperty(lua_State*inL, FSetProperty* InProperty):Property(InProperty)
+	virtual ~LuaFSetProperty(){}
+	LuaFSetProperty(lua_State*inL, FSetProperty* InProperty):Property(InProperty)
 	{
 		ElementProp = CreatePropertyInterface(inL, Property->ElementProp);
 	}
@@ -1873,13 +1873,13 @@ struct LuaUSetProperty :public LuaBasePropertyInterface
 		pop_novirtual(inL, LuaStackIndex, (void*)Property->ContainerPtrToValuePtr<uint8>(ContainerPtr));
 	}
 };
-struct LuaUInterfaceProperty :public LuaBasePropertyInterface
+struct LuaFInterfaceProperty :public LuaBasePropertyInterface
 {
 	FInterfaceProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
-	virtual ~LuaUInterfaceProperty(){}
-	LuaUInterfaceProperty(lua_State*inL, FInterfaceProperty* InProperty):Property(InProperty)
+	virtual ~LuaFInterfaceProperty(){}
+	LuaFInterfaceProperty(lua_State*inL, FInterfaceProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1939,13 +1939,13 @@ struct LuaUInterfaceProperty :public LuaBasePropertyInterface
 };
 
 #if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 23)
-struct LuaUMulticastInlineDelegateProperty :public LuaBasePropertyInterface
+struct LuaFMulticastInlineDelegateProperty :public LuaBasePropertyInterface
 {
 	FMulticastInlineDelegateProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty() { return Property; }
-	virtual ~LuaUMulticastInlineDelegateProperty() {}
-	LuaUMulticastInlineDelegateProperty(lua_State*inL, FMulticastInlineDelegateProperty* InProperty) :Property(InProperty)
+	virtual ~LuaFMulticastInlineDelegateProperty() {}
+	LuaFMulticastInlineDelegateProperty(lua_State*inL, FMulticastInlineDelegateProperty* InProperty) :Property(InProperty)
 	{
 	}
 	virtual void push(lua_State* inL, const void* ValuePtr) override
@@ -2020,13 +2020,13 @@ struct LuaUMulticastInlineDelegateProperty :public LuaBasePropertyInterface
 	}
 };
 
-struct LuaUMulticastSparseDelegateProperty :public LuaBasePropertyInterface
+struct LuaFMulticastSparseDelegateProperty :public LuaBasePropertyInterface
 {
 	FMulticastSparseDelegateProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty() { return Property; }
-	virtual ~LuaUMulticastSparseDelegateProperty() {}
-	LuaUMulticastSparseDelegateProperty(lua_State*inL, FMulticastSparseDelegateProperty* InProperty) :Property(InProperty)
+	virtual ~LuaFMulticastSparseDelegateProperty() {}
+	LuaFMulticastSparseDelegateProperty(lua_State*inL, FMulticastSparseDelegateProperty* InProperty) :Property(InProperty)
 	{
 	}
 	virtual void push(lua_State* inL, const void* ValuePtr) override
@@ -2101,13 +2101,13 @@ struct LuaUMulticastSparseDelegateProperty :public LuaBasePropertyInterface
 	}
 };
 #else
-struct LuaUMulticastDelegateProperty : public LuaBasePropertyInterface
+struct LuaFMulticastDelegateProperty : public LuaBasePropertyInterface
 {
 	FMulticastDelegateProperty* Property;
 //Some hook
 virtual FProperty* GetProperty() { return Property; }
-virtual ~LuaUMulticastDelegateProperty() {}
-LuaUMulticastDelegateProperty(lua_State*inL, FMulticastDelegateProperty* InProperty) :Property(InProperty)
+virtual ~LuaFMulticastDelegateProperty() {}
+LuaFMulticastDelegateProperty(lua_State*inL, FMulticastDelegateProperty* InProperty) :Property(InProperty)
 {
 
 }

@@ -27,7 +27,7 @@ void ULuaArrayHelper::Init_ValuePtr(void* _Obj, FArrayProperty* _Property)
 
 ULuaArrayHelper* ULuaArrayHelper::GetHelper(UObject* _Obj, const FName& PropertyName)
 {
-	FArrayProperty* P = Cast<FArrayProperty>(_Obj->GetClass()->FindPropertyByName(PropertyName));
+	FArrayProperty* P = CastField<FArrayProperty>(_Obj->GetClass()->FindPropertyByName(PropertyName));
 	if (P)
 	{
 		return GetHelperCPP(_Obj, P);

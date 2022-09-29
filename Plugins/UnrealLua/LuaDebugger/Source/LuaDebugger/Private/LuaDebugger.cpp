@@ -560,13 +560,15 @@ FString FLuaDebuggerModule::LuaPathToFilePath(FString LuaFilePath)
 {
 	if (LuaFilePath.Find("LuaSource"))
 	{
-		LuaFilePath.Replace(TEXT("\\"), TEXT("/"));
+		// [[nodiscard]]
+		LuaFilePath = LuaFilePath.Replace(TEXT("\\"), TEXT("/"));
 	}
 	else
 	{
 		if (LuaFilePath.Find("."))
 		{
-			LuaFilePath.Replace(TEXT("."), TEXT("/"));
+			// [[nodiscard]]
+			LuaFilePath = LuaFilePath.Replace(TEXT("."), TEXT("/"));
 			LuaFilePath += ".lua";
 			LuaFilePath = GetLuaSourceDir() / LuaFilePath;
 		}
@@ -1197,7 +1199,7 @@ bool FLuaDebuggerModule::FHandleKeyDown::HandleKeyDownEvent(FSlateApplication& S
 	return false;
 }
 
-void SBreakPointWidgetItem::Construct(const FArguments& InArgs, const TSharedRef<STableViewBase>& InOwnerTableView, FBreakPointNode_Ref Node)
+void SBreakPointWidgetItem::Construct(const FArguments& InArgs, const TSharedRef<STableViewBase>& InOwnerTableView, FBreakPointNode_Ref InNode)
 {
 	STableRow<FBreakPointNode_Ref>::Construct(STableRow<FBreakPointNode_Ref>::FArguments(), InOwnerTableView);
 
@@ -1209,7 +1211,7 @@ void SBreakPointWidgetItem::Construct(const FArguments& InArgs, const TSharedRef
 		.VAlign(VAlign_Center)
 		[
 			SNew(STextBlock)
-			.Text(FText::FromString(FString::Printf(TEXT("%s@Line %d"), *Node->FilePath.Mid(LuaSourceDir.Len() + 1), Node->Line)))
+			.Text(FText::FromString(FString::Printf(TEXT("%s@Line %d"), *InNode->FilePath.Mid(LuaSourceDir.Len() + 1), InNode->Line)))
 		]
 	];
 }

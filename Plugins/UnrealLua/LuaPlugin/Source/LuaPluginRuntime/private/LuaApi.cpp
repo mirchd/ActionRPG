@@ -1,5 +1,5 @@
 #include "LuaApi.h"
-#include "AssertionMacros.h"
+#include "Misc/AssertionMacros.h"
 #ifdef USE_LUA53 
 #else
 int ue_lua_gettop(lua_State*L)

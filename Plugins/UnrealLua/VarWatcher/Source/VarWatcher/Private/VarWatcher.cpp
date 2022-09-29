@@ -8,7 +8,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
-#include "SCheckBox.h"
+#include "Widgets/Input/SCheckBox.h"
 
 static const FName VarWatcherTabName("VarWatcher");
 

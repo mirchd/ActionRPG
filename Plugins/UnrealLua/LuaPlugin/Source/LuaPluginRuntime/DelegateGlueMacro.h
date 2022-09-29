@@ -2,7 +2,7 @@
 
 #include "TableUtil.h"
 #include "UserDefineClassMacro.h"
-#include "Delegate.h"
+#include "Delegates/Delegate.h"
 #include "UnrealLuaFunctor.h"
 
 
@@ -10,7 +10,7 @@ template<class T>
 struct DelegateGlueHelper;
 
 template<class Ret, class... Args>
-struct DelegateGlueHelper<TBaseDelegate<Ret, Args...>>
+struct DelegateGlueHelper<TDelegate<Ret, Args...>>
 {
 	static Ret Call(Args... args, TSharedPtr<UnrealLuaFunctor> LuaCallBack)
 	{
@@ -24,14 +24,14 @@ struct DelegateGlueHelper<TBaseDelegate<Ret, Args...>>
 };
 
 template<class... Args>
-struct DelegateGlueHelper<TBaseDelegate<void, Args...>>
+struct DelegateGlueHelper<TDelegate<void, Args...>>
 {
 	static void Call(Args... args, TSharedPtr<UnrealLuaFunctor> LuaCallBack)
 	{
 		LuaCallBack->Call(args...);
 	}
 
-	static void ExecuteIfBound(TBaseDelegate<void, Args...>& Delegate, const Args&... args)
+	static void ExecuteIfBound(TDelegate<void, Args...>& Delegate, const Args&... args)
 	{
 		Delegate.ExecuteIfBound(args...);
 	}
@@ -39,25 +39,25 @@ struct DelegateGlueHelper<TBaseDelegate<void, Args...>>
 
 #define LUA_GLUE_DELEGATE_TRAIT(NAME_AFTER_FIX, INNER_TYPE) 
 	template<class Ret, class... Args>
-	struct CustomTypeToLua<TBaseDelegate<Ret, Args...>>:UnrealLua::DefaultCustomEnum
+	struct CustomTypeToLua<TDelegate<Ret, Args...>>:UnrealLua::DefaultCustomEnum
 	{
 		enum{
 			Value = true,
 			PopFromLuaStackByPointer = true,
 			NeedCreateTempInsWhenPushRet = true,
 		};
-		static void ReadPtrFromLuaStack(TBaseDelegate<Ret, Args...>*& Value, lua_State*inL, int32 Index)
+		static void ReadPtrFromLuaStack(TDelegate<Ret, Args...>*& Value, lua_State*inL, int32 Index)
 		{
-			static TBaseDelegate<Ret, Args...> Temp;
+			static TDelegate<Ret, Args...> Temp;
 			if (ue_lua_isfunction(inL, Index))
 			{
 				TSharedPtr<UnrealLuaFunctor> LuaCallBack = MakeShared<UnrealLuaFunctor>(inL, Index);
-				Temp.BindStatic(DelegateGlueHelper<TBaseDelegate<Ret, Args...> >::Call, LuaCallBack);
+				Temp.BindStatic(DelegateGlueHelper<TDelegate<Ret, Args...> >::Call, LuaCallBack);
 				Value = &Temp;
 			}
 			else 
 			{
-				TBaseDelegate<Ret, Args...>* ptr = (TBaseDelegate<Ret, Args...>*)tovoid(inL, Index);
+				TBaseDelegate<Ret, Args...>* ptr = (TDelegate<Ret, Args...>*)tovoid(inL, Index);
 				if (ptr == nullptr)
 				{
 					Temp = nullptr;
@@ -67,9 +67,9 @@ struct DelegateGlueHelper<TBaseDelegate<void, Args...>>
 					Value = ptr;
 			}
 		}
-		static void ReadValueFromLuaStack(TBaseDelegate<Ret, Args...>& Value, lua_State*inL, int32 Index)
+		static void ReadValueFromLuaStack(TDelegate<Ret, Args...>& Value, lua_State*inL, int32 Index)
 		{
-			TBaseDelegate<Ret, Args...>* ptr;
+			TDelegate<Ret, Args...>* ptr;
 			ReadPtrFromLuaStack(ptr, inL, Index);
 			Value = *ptr;
 		}
@@ -112,10 +112,10 @@ struct DelegateGlueHelper<TBaseDelegate<void, Args...>>
 		LUA_GLUE_DELEGATE_BODY(NAME, DLG_TYPE)
 
 	template<class Ret, class... Args>
-	struct TCheckArgIsFit<TBaseDelegate<Ret, Args...>> {
+	struct TCheckArgIsFit<TDelegate<Ret, Args...>> {
 		static UnrealLua::CheckResult ToCheck(UnrealLua::ArgType _Type, lua_State*inL = nullptr, int32 Index = 0)
 		{
-			if (_Type == GetStructNewType<TBaseDelegate<Ret, Args...>>::GetType())
+			if (_Type == GetStructNewType<TDelegate<Ret, Args...>>::GetType())
 				return true;
 			else
 				return _Type == UnrealLua::Type::TYPE_TFUNCTION;

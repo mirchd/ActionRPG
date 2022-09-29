@@ -12,7 +12,7 @@ class URPGSaveGame;
  * Once you make a blueprint subclass of your native subclass you will want to set it to be the default in project settings
  */
  UCLASS()
- class ACTOINRPG_API URPGGameInstanceBase : public UGameInstance
+ class ACTIONRPG_API URPGGameInstanceBase : public UGameInstance
  {
     GENERATED_BODY()
 

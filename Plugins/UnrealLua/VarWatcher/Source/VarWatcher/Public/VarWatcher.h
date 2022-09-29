@@ -5,8 +5,8 @@
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
 #include "VarNode.h"
-#include "STableRow.h"
-#include "STreeView.h"
+#include "Widgets/Views/STableRow.h"
+#include "Widgets/Views/STreeView.h"
 
 class FToolBarBuilder;
 class FMenuBuilder;

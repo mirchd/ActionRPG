@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "STreeView.h"
+#include "Widgets/Views/STreeView.h"
 #include "LuaDelegateMulti.h"
 #include "DebuggerSetting.generated.h"
 

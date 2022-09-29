@@ -1,8 +1,8 @@
 
 #include "Luautils.h"
 #include "TableUtil.h"
-#include "UserWidget.h"
-#include "WidgetTree.h"
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "UserDefineClassMacro.h"
 
 UWorld* ULuautils::GetWorld1(AActor* obj)

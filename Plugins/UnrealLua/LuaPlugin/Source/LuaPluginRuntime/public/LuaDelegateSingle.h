@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ScriptDelegates.h"
+#include "UObject/ScriptDelegates.h"
 #include "LuaDelegateMulti.h"
 #include "LuaDelegateSingle.generated.h"
 

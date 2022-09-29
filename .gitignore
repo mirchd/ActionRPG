@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+
+# Ignore VS / VS Code settings directory
+.vs
+.vscode
+
+# Ignore intermediate folders
+Intermediate/
+obj/
+
+# Ignore any saved local files
+Saved/
+
+# Exceptions
+/*.sln

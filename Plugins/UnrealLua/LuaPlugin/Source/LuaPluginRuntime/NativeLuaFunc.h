@@ -1,7 +1,7 @@
 ﻿#include "TableUtil.h"
 #include "LuaScript.h"
-#include "Paths.h"
-#include "TextProperty.h"
+#include "Misc/Paths.h"
+#include "UObject/TextProperty.h"
 #include "LuaMapHelper.h"
 #include "../Launch/Resources/Version.h"
 #include "BPAndLuaBridge.h"
@@ -12,8 +12,8 @@
 #include "Editor.h"
 #endif
 #include "GameDelegates.h"
-#include "Platform.h"
-#include "FileHelper.h"
+#include "HAL/Platform.h"
+#include "Misc/FileHelper.h"
 #include "MetaInterface.h"
 #include <list>
 

@@ -3,7 +3,7 @@
 #include "LuaFactory.h"
 #include "Misc/FileHelper.h"
 #include "LuaScript.h"
-#include "Paths.h"
+#include "Misc/Paths.h"
 
 
 ULuaFactory::ULuaFactory()

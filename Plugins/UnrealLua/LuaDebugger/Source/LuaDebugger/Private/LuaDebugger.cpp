@@ -9,16 +9,16 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "EditorStyleSet.h"
-#include "FileManager.h"
-#include "FileHelper.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "DebuggerSetting.h"
-#include "SlateApplication.h"
-#include "SSearchBox.h"
-#include "CoreDelegates.h"
-#include "SEditableTextBox.h"
-#include "SButton.h"
-#include "SCheckBox.h"
-#include "SImage.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/Input/SSearchBox.h"
+#include "Misc/CoreDelegates.h"
+#include "Widgets/Input/SEditableTextBox.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SCheckBox.h"
+#include "Widgets/Images/SImage.h"
 
 static const FName LuaDebuggerTabName("LuaDebugger");
 static const FName DefaultForegroundName("DefaultForeground");
@@ -423,7 +423,7 @@ TSharedRef<SDockTab> FLuaDebuggerModule::OnSpawnPluginTab(const FSpawnTabArgs& S
 
 void FLuaDebuggerModule::PluginButtonClicked()
 {
-	FGlobalTabmanager::Get()->InvokeTab(LuaDebuggerTabName);
+	FGlobalTabmanager::Get()->TryInvokeTab(LuaDebuggerTabName);
 }
 
 

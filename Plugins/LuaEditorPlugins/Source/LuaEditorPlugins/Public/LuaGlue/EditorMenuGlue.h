@@ -3,11 +3,11 @@
 #include "UnrealLua.h"
 #include "BaseEngineLuaGlue.h"
 #include "LuaEditorGlueMacro.h"
-#include "SButton.h"
-#include "SPanel.h"
-#include "SDockTab.h"
-#include "SBox.h"
-#include "SCheckBox.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/SPanel.h"
+#include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Input/SCheckBox.h"
 #include "Runtime/Launch/Resources/Version.h"
 
 LUA_GLUE_ENUM_BEGIN(ESizeRule, FSizeParam::ESizeRule)

@@ -66,4 +66,6 @@ private:
 
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;
+
+	FTSTicker::FDelegateHandle TickHandle;
 };

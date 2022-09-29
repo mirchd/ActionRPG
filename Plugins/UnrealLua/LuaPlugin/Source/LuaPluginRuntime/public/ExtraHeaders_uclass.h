@@ -2,4 +2,4 @@
 
 #pragma once
 #include "PackedNormal.h"
-#include "TextProperty.h"
+#include "UObject/TextProperty.h"

@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "UnrealLuaInterface.h"
-#include "UObjectGlobals.h"
+#include "UObject/UObjectGlobals.h"
 #include "Engine.h"
 #include "GameDelegates.h"
 #include "LuaFunctionInjectHelper.h"

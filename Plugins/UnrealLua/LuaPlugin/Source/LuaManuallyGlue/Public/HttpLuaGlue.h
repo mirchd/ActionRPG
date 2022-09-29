@@ -2,10 +2,10 @@
 #include "CoreMinimal.h"
 #include "JustForLinkGlue.h"
 #include "UnrealLua.h"
-#include "IHttpBase.h"
-#include "IHttpRequest.h"
+#include "Interfaces/IHttpBase.h"
+#include "Interfaces/IHttpRequest.h"
 #include "HttpModule.h"
-#include "IHttpResponse.h"
+#include "Interfaces/IHttpResponse.h"
 #include "BaseEngineLuaGlue.h"
 
 LUA_GLUE_BEGIN_NAME(IHttpBase, IHttpBase)

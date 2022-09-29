@@ -1630,9 +1630,9 @@ struct LuaUMapProperty :public LuaBasePropertyInterface
 				ue_lua_rawset(inL, -4);
 			}
 			ue_lua_remove(inL, -2);
-			for (int32 i = 0; i < result.Num(); ++i)
+			for (int32 j = 0; j < result.Num(); ++j)
 			{
-				uint8* PairPtr = result.GetPairPtr(i);
+				uint8* PairPtr = result.GetPairPtr(j);
 				KeyProperty->push_ret_container(inL, PairPtr + KeyOffset);
 				ValueProperty->push_ret_container(inL, PairPtr);
 				ue_lua_rawset(inL, -3);
@@ -1775,13 +1775,13 @@ struct LuaUSetProperty :public LuaBasePropertyInterface
 			{
 				ue_lua_pop(inL, 1);
 				ElementProp->pop_container(inL, -1, KeyStorageSpace);
-				uint8* keyptr = nullptr;
-				int32 Index = result.FindElementIndexFromHash(KeyStorageSpace);
-				if (Index != INDEX_NONE)
+				uint8* NewKeyptr = nullptr;
+				int32 NewIndex = result.FindElementIndexFromHash(KeyStorageSpace);
+				if (NewIndex != INDEX_NONE)
 				{
-					keyptr = result.GetElementPtr(Index);
+					NewKeyptr = result.GetElementPtr(NewIndex);
 				}
-				if (keyptr == nullptr)
+				if (NewKeyptr == nullptr)
 				{
 					ue_lua_pushvalue(inL, -1);
 					ue_lua_rawseti(inL, -4, i);
@@ -1796,9 +1796,9 @@ struct LuaUSetProperty :public LuaBasePropertyInterface
 			}
 			ue_lua_remove(inL, -2);
 
-			for (int32 i = 0; i < result.Num(); ++i)
+			for (int32 j = 0; j < result.Num(); ++j)
 			{
-				ElementProp->push_ret_container(inL, result.GetElementPtr(i));
+				ElementProp->push_ret_container(inL, result.GetElementPtr(j));
 				ue_lua_pushboolean(inL, true);
 				ue_lua_rawset(inL, -3);
 			}

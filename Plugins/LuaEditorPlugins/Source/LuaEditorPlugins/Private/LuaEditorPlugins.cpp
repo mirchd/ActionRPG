@@ -102,7 +102,7 @@ TSharedRef<SDockTab> FLuaEditorPluginsModule::OnSpawnPluginTab(const FSpawnTabAr
 
 void FLuaEditorPluginsModule::PluginButtonClicked()
 {
-	FGlobalTabmanager::Get()->InvokeTab(LuaEditorPluginsTabName);
+	FGlobalTabmanager::Get()->TryInvokeTab(LuaEditorPluginsTabName);
 }
 
 void FLuaEditorPluginsModule::AddMenuExtension(FMenuBuilder& Builder)

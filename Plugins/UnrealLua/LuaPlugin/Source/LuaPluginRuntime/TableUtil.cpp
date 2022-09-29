@@ -1,8 +1,8 @@
 
 #include "TableUtil.h"
 #include "LuaScript.h"
-#include "Paths.h"
-#include "TextProperty.h"
+#include "Misc/Paths.h"
+#include "UObject/TextProperty.h"
 #include "LuaMapHelper.h"
 #include "../Launch/Resources/Version.h"
 #include "BPAndLuaBridge.h"
@@ -13,14 +13,14 @@
 
 #if WITH_EDITOR
 #include "Editor.h"
-#include "SNotificationList.h"
-#include "NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
+#include "Framework/Notifications/NotificationManager.h"
 #endif
 #include "GameDelegates.h"
-#include "Platform.h"
+#include "HAL/Platform.h"
 #include "NativeLuaFunc.h"
 #include "LuaDelegateSingle.h"
-#include "CoreDelegates.h"
+#include "Misc/CoreDelegates.h"
 
 DEFINE_LOG_CATEGORY(LuaLog);
 #define SetTableFunc(inL, index, FuncName, Func) lua_pushstring(inL, FuncName);\

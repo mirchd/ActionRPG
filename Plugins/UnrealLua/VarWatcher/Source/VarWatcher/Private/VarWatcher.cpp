@@ -82,13 +82,17 @@ void FVarWatcherModule::StartupModule()
 	auto TickDelegate = FTickerDelegate::CreateLambda(
 		[&](float DeltaTime)->bool {this->Tick(DeltaTime); return true; }
 	);
-	FTicker::GetCoreTicker().AddTicker(TickDelegate, 0);
+	TickHandle = FTSTicker::GetCoreTicker().AddTicker(TickDelegate, 0);
 }
 
 void FVarWatcherModule::ShutdownModule()
 {
 	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
 	// we call this function before unloading the module.
+
+
+	FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+
 	FVarWatcherStyle::Shutdown();
 
 	FVarWatcherCommands::Unregister();
@@ -177,7 +181,7 @@ TSharedRef<SDockTab> FVarWatcherModule::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 
 void FVarWatcherModule::PluginButtonClicked()
 {
-	FGlobalTabmanager::Get()->InvokeTab(VarWatcherTabName);
+	FGlobalTabmanager::Get()->TryInvokeTab(VarWatcherTabName);
 }
 
 

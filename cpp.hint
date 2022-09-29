@@ -1,0 +1,18 @@
+// Intellisense cpp.hint file
+//
+// see https://msdn.microsoft.com/en-us/library/dd997977.aspx
+
+#define UCLASS(...)
+#define UINTERFACE(...)
+#define UPROPERTY(...)
+#define UFUNCTION(...)
+#define USTRUCT(...)
+#define UMETA(...)
+#define UPARAM(...)
+#define UENUM(...)
+#define UDELEGATE(...)
+
+#define GENERATED_USTRUCT_BODY(...)
+#define GENERATED_UCLASS_BODY(...)
+#define GENERATED_UINTERFACE_BODY(...)
+#define GENERATED_IINTERFACE_BODY(...)

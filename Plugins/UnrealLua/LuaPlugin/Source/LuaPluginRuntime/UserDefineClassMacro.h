@@ -63,12 +63,12 @@ struct TIsRefType
 template<int N, class... Args>
 struct NthIsRefType
 {
-	using TheOrginalType = typename UE4Tuple_Private::TNthTypeFromParameterPack<N, Args...>::Type;
+	using TheOrginalType = typename TNthTypeFromParameterPack<N, Args...>::Type;
 	enum { Value = TIsRefType<TheOrginalType>::Value };
 };
 
 template<int N, class... Args>
-using NthType = typename UE4Tuple_Private::TNthTypeFromParameterPack<N, Args...>::Type;
+using NthType = typename TNthTypeFromParameterPack<N, Args...>::Type;
 
 template<class T>
 struct PushPointerToStack

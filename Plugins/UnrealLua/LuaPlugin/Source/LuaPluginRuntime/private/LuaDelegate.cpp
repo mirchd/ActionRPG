@@ -19,8 +19,8 @@ void ULuaDelegateMulti::Init(void* Delegate, UFunction* _FunSig)
 	Init(*(TMulticastScriptDelegate<FWeakObjectPtr>*)Delegate, _FunSig);
 }
 
-#if ENGINE_MINOR_VERSION >= 23
-void ULuaDelegateMulti::Init(UMulticastSparseDelegateProperty* Property, UObject* Parent)
+#if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 23)
+void ULuaDelegateMulti::Init(FMulticastSparseDelegateProperty* Property, UObject* Parent)
 {
 	FunSig = Property->SignatureFunction;
 	TheDelegatePtr = MakeShareable(new FSparseDelegateWrapper(Parent, Property));

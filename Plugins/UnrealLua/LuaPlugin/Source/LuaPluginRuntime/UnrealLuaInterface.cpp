@@ -161,7 +161,7 @@ void LuaContext::CreateEditorTick()
 
 void LuaContext::BindEngineDelegate()
 {
-// #if ENGINE_MINOR_VERSION < 18
+// #if (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 18)
 // 	LuaPreGarbageCollectDelegateHandle = FCoreUObjectDelegates::PreGarbageCollect.AddRaw(this, &LuaContext::OnGC);
 // #else
 // 	LuaPreGarbageCollectDelegateHandle = FCoreUObjectDelegates::GetPostGarbageCollect().AddRaw(this, &LuaContext::OnGC);

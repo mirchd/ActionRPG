@@ -35,7 +35,7 @@ LUA_GLUE_ALIAS(FIsActionChecked, FIsActionChecked)
 LUA_GLUE_DELEGATE(FGetActionCheckState, FGetActionCheckState)
 LUA_GLUE_DELEGATE(FIsActionButtonVisible, FIsActionButtonVisible)
 
-#if ENGINE_MINOR_VERSION >= 23 
+#if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 23)
 LUA_GLUE_DELEGATE(FPointerEventHandler, FPointerEventHandler)
 #endif
 
@@ -186,7 +186,7 @@ LUA_SLATE_BEGIN(STextBlock)
 	LUA_SLATE_ATTRIBUTE(float, MinDesiredWidth)
 	LUA_SLATE_ARGUMENT(TOptional<ETextShapingMethod>, TextShapingMethod)
 	LUA_SLATE_ARGUMENT(TOptional<ETextFlowDirection>, TextFlowDirection)
-#if ENGINE_MINOR_VERSION < 23 
+#if (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 23)
 	LUA_SLATE_EVENT_RAW(FOnClicked, OnDoubleClicked)
 #else
 	LUA_SLATE_EVENT_RAW(FPointerEventHandler, OnDoubleClicked)

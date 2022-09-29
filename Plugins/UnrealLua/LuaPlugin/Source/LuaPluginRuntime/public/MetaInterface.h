@@ -34,11 +34,11 @@ static TSharedPtr<LuaBasePropertyInterface> CreatePropertyInterface(lua_State*in
 
 struct LuaUBoolProperty :public LuaBasePropertyInterface
 {
-	UBoolProperty* Property;
+	FBoolProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUBoolProperty(){}
-	LuaUBoolProperty(lua_State*inL, UBoolProperty* InProperty):Property(InProperty)
+	LuaUBoolProperty(lua_State*inL, FBoolProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -95,11 +95,11 @@ struct LuaUBoolProperty :public LuaBasePropertyInterface
 };
 struct LuaUIntProperty :public LuaBasePropertyInterface
 {
-	UIntProperty* Property;
+	FIntProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUIntProperty(){}
-	LuaUIntProperty(lua_State*inL, UIntProperty* InProperty):Property(InProperty)
+	LuaUIntProperty(lua_State*inL, FIntProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -156,11 +156,11 @@ struct LuaUIntProperty :public LuaBasePropertyInterface
 };
 struct LuaUInt8Property :public LuaBasePropertyInterface
 {
-	UInt8Property* Property;
+	FInt8Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty() { return Property; }
 	virtual ~LuaUInt8Property() {}
-	LuaUInt8Property(lua_State*inL, UInt8Property* InProperty) :Property(InProperty)
+	LuaUInt8Property(lua_State*inL, FInt8Property* InProperty) :Property(InProperty)
 	{
 
 	}
@@ -217,11 +217,11 @@ struct LuaUInt8Property :public LuaBasePropertyInterface
 };
 struct LuaUUInt16Property :public LuaBasePropertyInterface
 {
-	UUInt16Property* Property;
+	FUInt16Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUUInt16Property(){}
-	LuaUUInt16Property(lua_State*inL, UUInt16Property* InProperty):Property(InProperty)
+	LuaUUInt16Property(lua_State*inL, FUInt16Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -278,11 +278,11 @@ struct LuaUUInt16Property :public LuaBasePropertyInterface
 };
 struct LuaUInt16Property :public LuaBasePropertyInterface
 {
-	UInt16Property* Property;
+	FInt16Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUInt16Property(){}
-	LuaUInt16Property(lua_State*inL, UInt16Property* InProperty):Property(InProperty)
+	LuaUInt16Property(lua_State*inL, FInt16Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -339,11 +339,11 @@ struct LuaUInt16Property :public LuaBasePropertyInterface
 };
 struct LuaUUInt32Property :public LuaBasePropertyInterface
 {
-	UUInt32Property* Property;
+	FUInt32Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUUInt32Property(){}
-	LuaUUInt32Property(lua_State*inL, UUInt32Property* InProperty):Property(InProperty)
+	LuaUUInt32Property(lua_State*inL, FUInt32Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -400,11 +400,11 @@ struct LuaUUInt32Property :public LuaBasePropertyInterface
 };
 struct LuaUInt64Property :public LuaBasePropertyInterface
 {
-	UInt64Property* Property;
+	FInt64Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUInt64Property(){}
-	LuaUInt64Property(lua_State*inL, UInt64Property* InProperty):Property(InProperty)
+	LuaUInt64Property(lua_State*inL, FInt64Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -461,11 +461,11 @@ struct LuaUInt64Property :public LuaBasePropertyInterface
 };
 struct LuaUUInt64Property :public LuaBasePropertyInterface
 {
-	UUInt64Property* Property;
+	FUInt64Property* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUUInt64Property(){}
-	LuaUUInt64Property(lua_State*inL, UUInt64Property* InProperty):Property(InProperty)
+	LuaUUInt64Property(lua_State*inL, FUInt64Property* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -522,11 +522,11 @@ struct LuaUUInt64Property :public LuaBasePropertyInterface
 };
 struct LuaUFloatProperty :public LuaBasePropertyInterface
 {
-	UFloatProperty* Property;
+	FFloatProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUFloatProperty(){}
-	LuaUFloatProperty(lua_State*inL, UFloatProperty* InProperty):Property(InProperty)
+	LuaUFloatProperty(lua_State*inL, FFloatProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -583,11 +583,11 @@ struct LuaUFloatProperty :public LuaBasePropertyInterface
 };
 struct LuaUDoubleProperty :public LuaBasePropertyInterface
 {
-	UDoubleProperty* Property;
+	FDoubleProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUDoubleProperty(){}
-	LuaUDoubleProperty(lua_State*inL, UDoubleProperty* InProperty):Property(InProperty)
+	LuaUDoubleProperty(lua_State*inL, FDoubleProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -644,11 +644,11 @@ struct LuaUDoubleProperty :public LuaBasePropertyInterface
 };
 struct LuaUObjectPropertyBase :public LuaBasePropertyInterface
 {
-	UObjectPropertyBase* Property;
+	FObjectPropertyBase* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUObjectPropertyBase(){}
-	LuaUObjectPropertyBase(lua_State*inL, UObjectPropertyBase* InProperty):Property(InProperty)
+	LuaUObjectPropertyBase(lua_State*inL, FObjectPropertyBase* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -705,11 +705,11 @@ struct LuaUObjectPropertyBase :public LuaBasePropertyInterface
 };
 struct LuaUObjectProperty :public LuaBasePropertyInterface
 {
-	UObjectProperty* Property;
+	FObjectProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUObjectProperty(){}
-	LuaUObjectProperty(lua_State*inL, UObjectProperty* InProperty):Property(InProperty)
+	LuaUObjectProperty(lua_State*inL, FObjectProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -766,11 +766,11 @@ struct LuaUObjectProperty :public LuaBasePropertyInterface
 };
 struct LuaUClassProperty :public LuaBasePropertyInterface
 {
-	UClassProperty* Property;
+	FClassProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUClassProperty(){}
-	LuaUClassProperty(lua_State*inL, UClassProperty* InProperty):Property(InProperty)
+	LuaUClassProperty(lua_State*inL, FClassProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -827,11 +827,11 @@ struct LuaUClassProperty :public LuaBasePropertyInterface
 };
 struct LuaUStrProperty :public LuaBasePropertyInterface
 {
-	UStrProperty* Property;
+	FStrProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUStrProperty(){}
-	LuaUStrProperty(lua_State*inL, UStrProperty* InProperty):Property(InProperty)
+	LuaUStrProperty(lua_State*inL, FStrProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -888,11 +888,11 @@ struct LuaUStrProperty :public LuaBasePropertyInterface
 };
 struct LuaUNameProperty :public LuaBasePropertyInterface
 {
-	UNameProperty* Property;
+	FNameProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUNameProperty(){}
-	LuaUNameProperty(lua_State*inL, UNameProperty* InProperty):Property(InProperty)
+	LuaUNameProperty(lua_State*inL, FNameProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -955,11 +955,11 @@ struct LuaUNameProperty :public LuaBasePropertyInterface
 };
 struct LuaUTextProperty :public LuaBasePropertyInterface
 {
-	UTextProperty* Property;
+	FTextProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUTextProperty(){}
-	LuaUTextProperty(lua_State*inL, UTextProperty* InProperty):Property(InProperty)
+	LuaUTextProperty(lua_State*inL, FTextProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1038,11 +1038,11 @@ struct LuaUTextProperty :public LuaBasePropertyInterface
 };
 struct LuaUByteProperty :public LuaBasePropertyInterface
 {
-	UByteProperty* Property;
+	FByteProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUByteProperty(){}
-	LuaUByteProperty(lua_State*inL, UByteProperty* InProperty):Property(InProperty)
+	LuaUByteProperty(lua_State*inL, FByteProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1099,12 +1099,12 @@ struct LuaUByteProperty :public LuaBasePropertyInterface
 };
 struct LuaUEnumProperty :public LuaBasePropertyInterface
 {
-	UEnumProperty* Property;
+	FEnumProperty* Property;
 	TSharedPtr<LuaBasePropertyInterface> UnderlyingProperty;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUEnumProperty(){}
-	LuaUEnumProperty(lua_State*inL, UEnumProperty* InProperty):Property(InProperty)
+	LuaUEnumProperty(lua_State*inL, FEnumProperty* InProperty):Property(InProperty)
 	{
 		UnderlyingProperty = CreatePropertyInterface(inL, InProperty->GetUnderlyingProperty());
 	}
@@ -1159,7 +1159,7 @@ struct LuaUEnumProperty :public LuaBasePropertyInterface
 };
 struct LuaUStructProperty :public LuaBasePropertyInterface
 {
-	UStructProperty* Property;
+	FStructProperty* Property;
 	FString TypeName;
 	FString TypeName_nogc;
 	const char* PtrTypeName;
@@ -1172,7 +1172,7 @@ struct LuaUStructProperty :public LuaBasePropertyInterface
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUStructProperty(){
 	}
-	LuaUStructProperty(lua_State*inL, UStructProperty* InProperty):Property(InProperty)
+	LuaUStructProperty(lua_State*inL, FStructProperty* InProperty):Property(InProperty)
 	{
 		FString TempName;
 		if (UUserDefinedStruct* BpStruct = Cast<UUserDefinedStruct>(Property->Struct))
@@ -1285,11 +1285,11 @@ struct LuaUStructProperty :public LuaBasePropertyInterface
 
 struct LuaUDelegateProperty :public LuaBasePropertyInterface
 {
-	UDelegateProperty* Property;
+	FDelegateProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUDelegateProperty(){}
-	LuaUDelegateProperty(lua_State*inL, UDelegateProperty* InProperty):Property(InProperty)
+	LuaUDelegateProperty(lua_State*inL, FDelegateProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1364,11 +1364,11 @@ struct LuaUDelegateProperty :public LuaBasePropertyInterface
 };
 struct LuaUWeakObjectProperty :public LuaBasePropertyInterface
 {
-	UWeakObjectProperty* Property;
+	FWeakObjectProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUWeakObjectProperty(){}
-	LuaUWeakObjectProperty(lua_State*inL, UWeakObjectProperty* InProperty):Property(InProperty)
+	LuaUWeakObjectProperty(lua_State*inL, FWeakObjectProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1875,11 +1875,11 @@ struct LuaUSetProperty :public LuaBasePropertyInterface
 };
 struct LuaUInterfaceProperty :public LuaBasePropertyInterface
 {
-	UInterfaceProperty* Property;
+	FInterfaceProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty(){return Property;}
 	virtual ~LuaUInterfaceProperty(){}
-	LuaUInterfaceProperty(lua_State*inL, UInterfaceProperty* InProperty):Property(InProperty)
+	LuaUInterfaceProperty(lua_State*inL, FInterfaceProperty* InProperty):Property(InProperty)
 	{
 		
 	}
@@ -1938,14 +1938,14 @@ struct LuaUInterfaceProperty :public LuaBasePropertyInterface
 	}
 };
 
-#if ENGINE_MINOR_VERSION >= 23
+#if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 23)
 struct LuaUMulticastInlineDelegateProperty :public LuaBasePropertyInterface
 {
-	UMulticastInlineDelegateProperty* Property;
+	FMulticastInlineDelegateProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty() { return Property; }
 	virtual ~LuaUMulticastInlineDelegateProperty() {}
-	LuaUMulticastInlineDelegateProperty(lua_State*inL, UMulticastInlineDelegateProperty* InProperty) :Property(InProperty)
+	LuaUMulticastInlineDelegateProperty(lua_State*inL, FMulticastInlineDelegateProperty* InProperty) :Property(InProperty)
 	{
 	}
 	virtual void push(lua_State* inL, const void* ValuePtr) override
@@ -2022,11 +2022,11 @@ struct LuaUMulticastInlineDelegateProperty :public LuaBasePropertyInterface
 
 struct LuaUMulticastSparseDelegateProperty :public LuaBasePropertyInterface
 {
-	UMulticastSparseDelegateProperty* Property;
+	FMulticastSparseDelegateProperty* Property;
 	//Some hook
 	virtual FProperty* GetProperty() { return Property; }
 	virtual ~LuaUMulticastSparseDelegateProperty() {}
-	LuaUMulticastSparseDelegateProperty(lua_State*inL, UMulticastSparseDelegateProperty* InProperty) :Property(InProperty)
+	LuaUMulticastSparseDelegateProperty(lua_State*inL, FMulticastSparseDelegateProperty* InProperty) :Property(InProperty)
 	{
 	}
 	virtual void push(lua_State* inL, const void* ValuePtr) override
@@ -2103,11 +2103,11 @@ struct LuaUMulticastSparseDelegateProperty :public LuaBasePropertyInterface
 #else
 struct LuaUMulticastDelegateProperty : public LuaBasePropertyInterface
 {
-	UMulticastDelegateProperty* Property;
+	FMulticastDelegateProperty* Property;
 //Some hook
 virtual FProperty* GetProperty() { return Property; }
 virtual ~LuaUMulticastDelegateProperty() {}
-LuaUMulticastDelegateProperty(lua_State*inL, UMulticastDelegateProperty* InProperty) :Property(InProperty)
+LuaUMulticastDelegateProperty(lua_State*inL, FMulticastDelegateProperty* InProperty) :Property(InProperty)
 {
 
 }
@@ -2191,37 +2191,37 @@ void pop_container_novirtual(lua_State* inL, int32 LuaStackIndex, const void * C
 	}
 
 
-NEWPROPERTY_INTERFACE(UBoolProperty)
-NEWPROPERTY_INTERFACE(UIntProperty)
-NEWPROPERTY_INTERFACE(UInt8Property)
-NEWPROPERTY_INTERFACE(UUInt16Property)
-NEWPROPERTY_INTERFACE(UInt16Property)
-NEWPROPERTY_INTERFACE(UUInt32Property)
-NEWPROPERTY_INTERFACE(UInt64Property)
-NEWPROPERTY_INTERFACE(UUInt64Property)
-NEWPROPERTY_INTERFACE(UFloatProperty)
-NEWPROPERTY_INTERFACE(UDoubleProperty)
-NEWPROPERTY_INTERFACE(UObjectPropertyBase)
-NEWPROPERTY_INTERFACE(UObjectProperty)
-NEWPROPERTY_INTERFACE(UClassProperty)
-NEWPROPERTY_INTERFACE(UStrProperty)
-NEWPROPERTY_INTERFACE(UNameProperty)
-NEWPROPERTY_INTERFACE(UTextProperty)
-NEWPROPERTY_INTERFACE(UByteProperty)
-NEWPROPERTY_INTERFACE(UEnumProperty)
-NEWPROPERTY_INTERFACE(UStructProperty)
-#if ENGINE_MINOR_VERSION >= 23
-NEWPROPERTY_INTERFACE(UMulticastInlineDelegateProperty)
-NEWPROPERTY_INTERFACE(UMulticastSparseDelegateProperty)
+NEWPROPERTY_INTERFACE(FBoolProperty)
+NEWPROPERTY_INTERFACE(FIntProperty)
+NEWPROPERTY_INTERFACE(FInt8Property)
+NEWPROPERTY_INTERFACE(FUInt16Property)
+NEWPROPERTY_INTERFACE(FInt16Property)
+NEWPROPERTY_INTERFACE(FUInt32Property)
+NEWPROPERTY_INTERFACE(FInt64Property)
+NEWPROPERTY_INTERFACE(FUInt64Property)
+NEWPROPERTY_INTERFACE(FFloatProperty)
+NEWPROPERTY_INTERFACE(FDoubleProperty)
+NEWPROPERTY_INTERFACE(FObjectPropertyBase)
+NEWPROPERTY_INTERFACE(FObjectProperty)
+NEWPROPERTY_INTERFACE(FClassProperty)
+NEWPROPERTY_INTERFACE(FStrProperty)
+NEWPROPERTY_INTERFACE(FNameProperty)
+NEWPROPERTY_INTERFACE(FTextProperty)
+NEWPROPERTY_INTERFACE(FByteProperty)
+NEWPROPERTY_INTERFACE(FEnumProperty)
+NEWPROPERTY_INTERFACE(FStructProperty)
+#if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 23)
+NEWPROPERTY_INTERFACE(FMulticastInlineDelegateProperty)
+NEWPROPERTY_INTERFACE(FMulticastSparseDelegateProperty)
 #else
-NEWPROPERTY_INTERFACE(UMulticastDelegateProperty)
+NEWPROPERTY_INTERFACE(FMulticastDelegateProperty)
 #endif
-NEWPROPERTY_INTERFACE(UDelegateProperty)
-NEWPROPERTY_INTERFACE(UWeakObjectProperty)
+NEWPROPERTY_INTERFACE(FDelegateProperty)
+NEWPROPERTY_INTERFACE(FWeakObjectProperty)
 NEWPROPERTY_INTERFACE(FArrayProperty)
 NEWPROPERTY_INTERFACE(FMapProperty)
 NEWPROPERTY_INTERFACE(FSetProperty)
-NEWPROPERTY_INTERFACE(UInterfaceProperty)
+NEWPROPERTY_INTERFACE(FInterfaceProperty)
 
 #define MAP_CREATEFUNC_TOTYPE(Type) TheMap.Add(Type::StaticClass(), NewPropertyInterfaceBy##Type);\
 
@@ -2229,37 +2229,37 @@ static TMap<UClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*
 {
 	TMap <UClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)>> TheMap;
 
-	MAP_CREATEFUNC_TOTYPE(UBoolProperty)
-		MAP_CREATEFUNC_TOTYPE(UIntProperty)
-		MAP_CREATEFUNC_TOTYPE(UInt8Property)
-		MAP_CREATEFUNC_TOTYPE(UUInt16Property)
-		MAP_CREATEFUNC_TOTYPE(UInt16Property)
-		MAP_CREATEFUNC_TOTYPE(UUInt32Property)
-		MAP_CREATEFUNC_TOTYPE(UInt64Property)
-		MAP_CREATEFUNC_TOTYPE(UUInt64Property)
-		MAP_CREATEFUNC_TOTYPE(UFloatProperty)
-		MAP_CREATEFUNC_TOTYPE(UDoubleProperty)
-		MAP_CREATEFUNC_TOTYPE(UObjectPropertyBase)
-		MAP_CREATEFUNC_TOTYPE(UObjectProperty)
-		MAP_CREATEFUNC_TOTYPE(UClassProperty)
-		MAP_CREATEFUNC_TOTYPE(UStrProperty)
-		MAP_CREATEFUNC_TOTYPE(UNameProperty)
-		MAP_CREATEFUNC_TOTYPE(UTextProperty)
-		MAP_CREATEFUNC_TOTYPE(UByteProperty)
-		MAP_CREATEFUNC_TOTYPE(UEnumProperty)
-		MAP_CREATEFUNC_TOTYPE(UStructProperty)
-#if ENGINE_MINOR_VERSION >= 23
- 		MAP_CREATEFUNC_TOTYPE(UMulticastInlineDelegateProperty)
-		MAP_CREATEFUNC_TOTYPE(UMulticastSparseDelegateProperty)
+	MAP_CREATEFUNC_TOTYPE(FBoolProperty)
+		MAP_CREATEFUNC_TOTYPE(FIntProperty)
+		MAP_CREATEFUNC_TOTYPE(FInt8Property)
+		MAP_CREATEFUNC_TOTYPE(FUInt16Property)
+		MAP_CREATEFUNC_TOTYPE(FInt16Property)
+		MAP_CREATEFUNC_TOTYPE(FUInt32Property)
+		MAP_CREATEFUNC_TOTYPE(FInt64Property)
+		MAP_CREATEFUNC_TOTYPE(FUInt64Property)
+		MAP_CREATEFUNC_TOTYPE(FFloatProperty)
+		MAP_CREATEFUNC_TOTYPE(FDoubleProperty)
+		MAP_CREATEFUNC_TOTYPE(FObjectPropertyBase)
+		MAP_CREATEFUNC_TOTYPE(FObjectProperty)
+		MAP_CREATEFUNC_TOTYPE(FClassProperty)
+		MAP_CREATEFUNC_TOTYPE(FStrProperty)
+		MAP_CREATEFUNC_TOTYPE(FNameProperty)
+		MAP_CREATEFUNC_TOTYPE(FTextProperty)
+		MAP_CREATEFUNC_TOTYPE(FByteProperty)
+		MAP_CREATEFUNC_TOTYPE(FEnumProperty)
+		MAP_CREATEFUNC_TOTYPE(FStructProperty)
+#if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 23)
+ 		MAP_CREATEFUNC_TOTYPE(FMulticastInlineDelegateProperty)
+		MAP_CREATEFUNC_TOTYPE(FMulticastSparseDelegateProperty)
 #else
-		MAP_CREATEFUNC_TOTYPE(UMulticastDelegateProperty)
+		MAP_CREATEFUNC_TOTYPE(FMulticastDelegateProperty)
 #endif
-		MAP_CREATEFUNC_TOTYPE(UDelegateProperty)
-		MAP_CREATEFUNC_TOTYPE(UWeakObjectProperty)
+		MAP_CREATEFUNC_TOTYPE(FDelegateProperty)
+		MAP_CREATEFUNC_TOTYPE(FWeakObjectProperty)
 		MAP_CREATEFUNC_TOTYPE(FArrayProperty)
 		MAP_CREATEFUNC_TOTYPE(FMapProperty)
 		MAP_CREATEFUNC_TOTYPE(FSetProperty)
-		MAP_CREATEFUNC_TOTYPE(UInterfaceProperty)
+		MAP_CREATEFUNC_TOTYPE(FInterfaceProperty)
 
 		return TheMap;
 }
@@ -2273,12 +2273,12 @@ static LuaBasePropertyInterface* CreatePropertyInterfaceRaw(lua_State*inL, FProp
 	}
 	else
 	{
-		if (UStructProperty* p = Cast<UStructProperty>(Property))
+		if (FStructProperty* p = Cast<FStructProperty>(Property))
 		{
 			return NewPropertyInterfaceByUStructProperty(inL, p);
 		}
 
-		else if (UObjectPropertyBase* p = Cast<UObjectPropertyBase>(Property))
+		else if (FObjectPropertyBase* p = Cast<FObjectPropertyBase>(Property))
 		{
 			return NewPropertyInterfaceByUObjectPropertyBase(inL, p);
 		}

@@ -26,7 +26,7 @@ public:
 	inline static void push_and_call(int32 ParamCount, int32 ReturnCount, FFrame& Stack)
 	{
 		P_GET_OBJECT(UObject, Z_Param_Ins);
-		P_GET_PROPERTY(UStrProperty, Z_Param_FunctionName);
+		P_GET_PROPERTY(FStrProperty, Z_Param_FunctionName);
 
 		P_NATIVE_BEGIN;
 		// lua_State* L = UTableUtil::GetTheOnlyLuaState();

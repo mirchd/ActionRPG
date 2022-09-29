@@ -13,11 +13,11 @@ class LUAPLUGINRUNTIME_API ULuaStructHelper : public UObject
 	GENERATED_BODY()
 
 // 	UObject* Obj;
-// 	UStructProperty* Property
+// 	FStructProperty* Property
 // 	uint8* Buffer;
 // 	UScriptStruct* Struct;
 public:
-// 	void Init(UStructProperty* InProperty, UObject *InObj);
+// 	void Init(FStructProperty* InProperty, UObject *InObj);
 // 	
 // 	UFUNCTION()
 // 		static TMap<FString, UObject*> GetStructPropertys(UObject *p);

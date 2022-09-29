@@ -7,7 +7,7 @@
 #include "SetGlueMacro.h"
 #include "SharePtrGlueMacro.h"
 #include "ShareRefGlueMacro.h"
-#include "StringTableCoreFwd.h"
+#include "Internationalization/StringTableCoreFwd.h"
 #include "UnrealLuaFunctor.h"
 #include "DelegateGlueMacro.h"
 #include "UnrealLuaInterface.h"

@@ -119,7 +119,7 @@ int32 ULuaSetHelper::Get(lua_State* inL)
 	void* KeyStorageSpace = FMemory_Alloca(KeyPropertySize);
 	CurrKeyProp->InitializeValue(KeyStorageSpace);
 	UTableUtil::popproperty(inL, 2, CurrKeyProp, KeyStorageSpace);
-#if ENGINE_MINOR_VERSION < 18
+#if (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 18)
 	uint8* keyptr = result.FindElementFromHash(KeyStorageSpace);
 #else
 	uint8* keyptr = nullptr;
@@ -155,7 +155,7 @@ void ULuaSetHelper::Set(lua_State* inL)
 	void* KeyStorageSpace = FMemory_Alloca(KeyPropertySize);
 	CurrKeyProp->InitializeValue(KeyStorageSpace);
 	UTableUtil::popproperty(inL, 2, CurrKeyProp, KeyStorageSpace);
-#if ENGINE_MINOR_VERSION < 18
+#if (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 18)
 	uint8* keyptr = result.FindElementFromHash(KeyStorageSpace);
 #else
 	uint8* keyptr = nullptr;

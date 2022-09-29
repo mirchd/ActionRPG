@@ -121,7 +121,7 @@ static ISocketSubsystem* ISocketSubsystem_Get()
 LUA_GLUE_BEGIN( ISocketSubsystem)
 LUA_GLUE_FUNCTION_OUT(Get, ISocketSubsystem_Get)
 LUA_GLUE_OVERLOAD(CreateSocket, FSocket* (ISocketSubsystem::*)(const FName&, const FString&, bool bForceUDP), false)
-#if ENGINE_MINOR_VERSION < 23
+#if (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 23)
 LUA_GLUE_FUNCTION(CreateInternetAddr)
 #else
 LUA_GLUE_OVERLOAD(CreateInternetAddr, TSharedRef<FInternetAddr>(TheClassType::*)())

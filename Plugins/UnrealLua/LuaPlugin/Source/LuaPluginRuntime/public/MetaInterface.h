@@ -2225,9 +2225,9 @@ NEWPROPERTY_INTERFACE(FInterfaceProperty)
 
 #define MAP_CREATEFUNC_TOTYPE(Type) TheMap.Add(Type::StaticClass(), NewPropertyInterfaceBy##Type);\
 
-static TMap<UClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)> > GetCreateFuncMap()
+static TMap<FFieldClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)> > GetCreateFuncMap()
 {
-	TMap <UClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)>> TheMap;
+	TMap <FFieldClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)>> TheMap;
 
 	MAP_CREATEFUNC_TOTYPE(FBoolProperty)
 		MAP_CREATEFUNC_TOTYPE(FIntProperty)
@@ -2266,7 +2266,7 @@ static TMap<UClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*
 
 static LuaBasePropertyInterface* CreatePropertyInterfaceRaw(lua_State*inL, FProperty* Property)
 {
-	static TMap<UClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)>> CreateFuncs = GetCreateFuncMap();
+	static TMap<FFieldClass*, TFunction< LuaBasePropertyInterface*(lua_State*, FProperty*)>> CreateFuncs = GetCreateFuncMap();
 	if (auto* ProcessFunc = CreateFuncs.Find(Property->GetClass()))
 	{
 		return (*ProcessFunc)(inL, Property);

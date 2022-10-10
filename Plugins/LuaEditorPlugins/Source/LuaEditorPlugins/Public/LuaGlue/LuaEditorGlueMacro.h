@@ -3,7 +3,7 @@
 #include "UnrealLua.h"
 #include "BaseEngineLuaGlue.h"
 #include "UserDefineClassMacro.h"
-#include "IToolTip.h"
+#include "Widgets/IToolTip.h"
 
 LUA_GLUE_INTERFACE(ISlateStyle, ISlateStyle)
 LUA_GLUE_END()

@@ -10,7 +10,7 @@ template<class T>
 struct DelegateGlueHelper;
 
 template<class Ret, class... Args>
-struct DelegateGlueHelper<TDelegate<Ret, Args...>>
+struct DelegateGlueHelper<TDelegate<Ret(Args...)>>
 {
 	static Ret Call(Args... args, TSharedPtr<UnrealLuaFunctor> LuaCallBack)
 	{
@@ -24,14 +24,14 @@ struct DelegateGlueHelper<TDelegate<Ret, Args...>>
 };
 
 template<class... Args>
-struct DelegateGlueHelper<TDelegate<void, Args...>>
+struct DelegateGlueHelper<TDelegate<void(Args...)>>
 {
 	static void Call(Args... args, TSharedPtr<UnrealLuaFunctor> LuaCallBack)
 	{
 		LuaCallBack->Call(args...);
 	}
 
-	static void ExecuteIfBound(TDelegate<void, Args...>& Delegate, const Args&... args)
+	static void ExecuteIfBound(TDelegate<void(Args...)>& Delegate, const Args&... args)
 	{
 		Delegate.ExecuteIfBound(args...);
 	}

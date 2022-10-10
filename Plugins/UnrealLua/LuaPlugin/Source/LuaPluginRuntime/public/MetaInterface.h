@@ -2275,12 +2275,12 @@ static LuaBasePropertyInterface* CreatePropertyInterfaceRaw(lua_State*inL, FProp
 	{
 		if (FStructProperty* p = Cast<FStructProperty>(Property))
 		{
-			return NewPropertyInterfaceByUStructProperty(inL, p);
+			return NewPropertyInterfaceByFStructProperty(inL, p);
 		}
 
-		else if (FObjectPropertyBase* p = Cast<FObjectPropertyBase>(Property))
+		else if (FObjectPropertyBase* Ptr = Cast<FObjectPropertyBase>(Property))
 		{
-			return NewPropertyInterfaceByUObjectPropertyBase(inL, p);
+			return NewPropertyInterfaceByFObjectPropertyBase(inL, Ptr);
 		}
 		else
 		{

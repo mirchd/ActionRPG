@@ -1,4 +1,4 @@
-﻿#include "TableUtil.h"
+#include "TableUtil.h"
 #include "LuaScript.h"
 #include "Misc/Paths.h"
 #include "UObject/TextProperty.h"
@@ -850,7 +850,7 @@ int32 UObject_IsPendingKill(lua_State* inL)
 		return 0;
 	}
 #endif
-	UTableUtil::push(inL, Obj->IsPendingKill());
+	UTableUtil::push(inL, IsValidChecked(Obj));
 	return 1;
 }
 
@@ -867,7 +867,7 @@ int32 UObject_MarkPendingKill(lua_State* inL)
 		return 0;
 	}
 #endif
-	Obj->MarkPendingKill();
+	Obj->MarkAsGarbage();
 	return 0;
 }
 

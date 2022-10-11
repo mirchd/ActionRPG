@@ -34,8 +34,7 @@ DEFINE_LOG_CATEGORY(LuaLog);
 
 FORCEINLINE uint64 GetPropertyFlag(FProperty* Property)
 {
-	UClass* PropertyClass = Property->GetClass();
-	uint64 CastFlag = uint64(PropertyClass->ClassCastFlags);
+	uint64 CastFlag = Property->GetCastFlags();
 	CastFlag = CastFlag & (CASTCLASS_FByteProperty | CASTCLASS_FIntProperty | CASTCLASS_FInt8Property
 		| CASTCLASS_FUInt64Property | CASTCLASS_FUInt32Property | CASTCLASS_FUInt16Property
 		| CASTCLASS_FInt64Property | CASTCLASS_FInt16Property | CASTCLASS_FBoolProperty

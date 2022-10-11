@@ -12,5 +12,6 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 
 # Special Thanks
 - [HotPatcher](https://github.com/hxhb/HotPatcher.git)
-- [unreal.lua](https://github.com/asqbtcupid/unreal.lua.git)
+- [UnLua](https://github.com/Tencent/UnLua.git)
+- [ActionRPG](https://docs.unrealengine.com/4.27/zh-CN/Resources/SampleGames/ARPG/)
 - [UE5]

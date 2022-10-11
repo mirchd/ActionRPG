@@ -10,20 +10,12 @@ rd /s/q %~dp0DerivedDataCache
 rd /s/q %~dp0Saved
 rd /s/q %~dp0Plugins\HotPatcher\Binaries
 rd /s/q %~dp0Plugins\HotPatcher\Intermediate
-rd /s/q %~dp0Plugins\LuaEditorPlugins\Binaries
-rd /s/q %~dp0Plugins\LuaEditorPlugins\Intermediate
-rd /s/q %~dp0Plugins\Lua53\Binaries
-rd /s/q %~dp0Plugins\Lua53\Intermediate
-rd /s/q %~dp0Plugins\UnrealLua\LuaDebugger\Binaries
-rd /s/q %~dp0Plugins\UnrealLua\LuaDebugger\Intermediate
-rd /s/q %~dp0Plugins\UnrealLua\LuaPlugin\Binaries
-rd /s/q %~dp0Plugins\UnrealLua\LuaPlugin\Intermediate
-rd /s/q %~dp0Plugins\UnrealLua\VarWatcher\Binaries
-rd /s/q %~dp0Plugins\UnrealLua\VarWatcher\Intermediate
-rd /s/q %~dp0Plugins\HorizonUIPlugin\Binaries
-rd /s/q %~dp0Plugins\HorizonUIPlugin\Intermediate
-rd /s/q %~dp0Plugins\WebSocket\Binaries
-rd /s/q %~dp0Plugins\WebSocket\Intermediate
+rd /s/q %~dp0Plugins\UnLua\Binaries
+rd /s/q %~dp0Plugins\UnLua\Intermediate
+rd /s/q %~dp0Plugins\UnLuaExtensions\Binaries
+rd /s/q %~dp0Plugins\UnLuaExtensions\Intermediate
+rd /s/q %~dp0Plugins\UnLuaTestSuite\Binaries
+rd /s/q %~dp0Plugins\UnLuaTestSuite\Intermediate
 del %~dp0*.sln
 
 FOR /F "tokens=*" %%G IN ('DIR /B /AD /S bin') DO RMDIR /S /Q "%%G"

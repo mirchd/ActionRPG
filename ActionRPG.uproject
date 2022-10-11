@@ -25,7 +25,15 @@
 			"Enabled": true
 		},
 		{
-			"Name": "LuaPlugin",
+			"Name": "UnLua",
+			"Enabled": true
+		},
+		{
+			"Name": "UnLuaExtensions",
+			"Enabled": true
+		},
+		{
+			"Name": "UnLuaTestSuite",
 			"Enabled": true
 		},
 		{

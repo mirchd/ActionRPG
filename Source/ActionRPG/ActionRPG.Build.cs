@@ -11,9 +11,12 @@ public class ActionRPG : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
-		PublicDependencyModuleNames.Add("LuaPluginRuntime");
-        PublicDependencyModuleNames.Add("LuaManuallyGlue");
-        PublicDependencyModuleNames.Add("Lua53");
+		
+		PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            "UnLua",
+            "Lua",
+        });
 
         // using Slate UI
         PrivateDependencyModuleNames.AddRange(

@@ -15,4 +15,14 @@ Saved/
 
 # Ignore Binaries directory
 Binaries/
-Plugins/HotPatcher/Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Content/Collections/
+Content/Developers/
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+WindowsNoEditor/
+MacNoEditor/
+Android_*/
+IOS/

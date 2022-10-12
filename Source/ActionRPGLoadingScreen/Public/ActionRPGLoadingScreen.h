@@ -3,6 +3,8 @@
 #include "Modules/ModuleInterface.h"
 #include "Modules/ModuleManager.h"
 
+// 一个简单的C++加载屏幕，用于在首次加载游戏或转换地图时显示纹理。由于需要在加载主要ARPG游戏模块之前先加载，它是一个单独的模块。
+
 /** Module interface for this game's loading screens */
 class IActionRPGLoadingScreenModule : public IModuleInterface
 {

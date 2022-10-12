@@ -7,7 +7,7 @@
 #include "GameFramework/SaveGame.h"
 #include "RPGSaveGame.generated.h"
 
-// 此类用于在磁盘上存储物品栏/经验值信息，下文将详细介绍。
+// 此类用于在磁盘上存储物品栏/经验值（包括灵魂/经验）信息，下文将详细介绍。
 
 /** List of versions, native code will handle fixups for any old versions */
 namespace ERPGSaveGameVersion

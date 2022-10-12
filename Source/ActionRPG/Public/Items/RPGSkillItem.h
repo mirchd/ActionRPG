@@ -2,6 +2,8 @@
 
 #pragma once
 
+// 技能（Skills）：是指特殊的攻击（例如火球），玩家可以装备和使用，可造成直接和区域作用伤害。
+
 #include "Items/RPGItem.h"
 #include "RPGSkillItem.generated.h"
 

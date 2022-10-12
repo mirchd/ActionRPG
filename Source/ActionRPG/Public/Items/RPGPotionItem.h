@@ -2,6 +2,8 @@
 
 #pragma once
 
+// 药剂（Potions）：是一种一次性消耗品，用于治疗或补充更多法力。
+
 #include "Items/RPGItem.h"
 #include "RPGPotionItem.generated.h"
 

@@ -2,6 +2,8 @@
 
 #pragma once
 
+// 武器（Weapons）：是一种玩家可以装备的蓝图，可造成近战伤害。
+
 #include "Items/RPGItem.h"
 #include "RPGWeaponItem.generated.h"
 

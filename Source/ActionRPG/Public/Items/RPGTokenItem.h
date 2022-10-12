@@ -2,6 +2,8 @@
 
 #pragma once
 
+// 代币（Tokens）：是一种简单的计数器，记录获得的灵魂值和经验值等。
+
 #include "Items/RPGItem.h"
 #include "RPGTokenItem.generated.h"
 

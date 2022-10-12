@@ -20,10 +20,12 @@ public:
 	ARPGPlayerControllerBase() {}
 	virtual void BeginPlay() override;
 
+	// 第一个贴图是从 URPGItem* 到 FRPGItemData，存储数量和关卡。 
 	/** Map of all items owned by this player, from definition to data */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Inventory)
 	TMap<URPGItem*, FRPGItemData> InventoryData;
 
+	// 第二个贴图是从 FRPGItemSlot 到 URPGItem*，描述某些项目存储在"武器插槽1"中。
 	/** Map of slot, from type/num to item, initialized from ItemSlotsPerType on RPGGameInstanceBase */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Inventory)
 	TMap<FRPGItemSlot, URPGItem*> SlottedItems;

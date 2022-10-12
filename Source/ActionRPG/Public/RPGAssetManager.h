@@ -34,6 +34,7 @@ public:
 	/** Returns the current AssetManager object */
 	static URPGAssetManager& Get();
 
+	// ForceLoadItem 可以同步加载尚未在内存中的项目以从 PrimaryAssetId 转换为 URPGItem（由于上面提到的存储预载，在ARPG中通常需要这样操作）。
 	/**
 	 * Synchronously loads an RPGItem subclass, this can hitch but is useful when you cannot wait for an async load
 	 * This does not maintain a reference to the item so it will garbage collect if not loaded some other way

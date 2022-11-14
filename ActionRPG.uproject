@@ -29,10 +29,6 @@
 			"Enabled": true
 		},
 		{
-			"Name": "UnLuaExtensions",
-			"Enabled": true
-		},
-		{
 			"Name": "UnLuaTestSuite",
 			"Enabled": true
 		},

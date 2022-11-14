@@ -25,6 +25,7 @@
 #include "lua.hpp"
 #include "ObjectReferencer.h"
 #include "HAL/Platform.h"
+#include "LuaDanglingCheck.h"
 #include "LuaDeadLoopCheck.h"
 #include "LuaModuleLocator.h"
 
@@ -40,9 +41,13 @@ namespace UnLua
     public:
         DECLARE_MULTICAST_DELEGATE_OneParam(FOnCreated, FLuaEnv&);
 
+        DECLARE_MULTICAST_DELEGATE_OneParam(FOnDestroyed, FLuaEnv&);
+
         DECLARE_DELEGATE_RetVal_FourParams(bool, FLuaFileLoader, const FLuaEnv& /* Env */, const FString& /* FilePath */, TArray<uint8>&/* Data */, FString&/* RealFilePath */);
 
         static FOnCreated OnCreated;
+
+        static FOnDestroyed OnDestroyed;
 
         FLuaEnv();
 
@@ -99,6 +104,8 @@ namespace UnLua
         FORCEINLINE FContainerRegistry* GetContainerRegistry() const { return ContainerRegistry; }
 
         FORCEINLINE FEnumRegistry* GetEnumRegistry() const { return EnumRegistry; }
+
+        FORCEINLINE FDanglingCheck* GetDanglingCheck() const { return DanglingCheck; }
 
         FORCEINLINE FDeadLoopCheck* GetDeadLoopCheck() const { return DeadLoopCheck; }
 
@@ -163,6 +170,7 @@ namespace UnLua
         FFunctionRegistry* FunctionRegistry;
         FContainerRegistry* ContainerRegistry;
         FEnumRegistry* EnumRegistry;
+        FDanglingCheck* DanglingCheck;
         FDeadLoopCheck* DeadLoopCheck;
         TMap<lua_State*, int32> ThreadToRef;
         TMap<int32, lua_State*> RefToThread;

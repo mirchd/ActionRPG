@@ -49,6 +49,7 @@ namespace UnLua
 #if WITH_EDITOR
             FModuleManager::Get().LoadModule(TEXT("UnLuaEditor"));
 #endif
+
             RegisterSettings();
 
 #if ALLOW_CONSOLE
@@ -103,6 +104,7 @@ namespace UnLua
                 EnvLocator = NewObject<ULuaEnvLocator>(GetTransientPackage(), EnvLocatorClass);
                 EnvLocator->AddToRoot();
                 FDeadLoopCheck::Timeout = Settings.DeadLoopCheck;
+                FDanglingCheck::Enabled = Settings.DanglingCheck;
 
                 for (const auto Class : TObjectRange<UClass>())
                 {

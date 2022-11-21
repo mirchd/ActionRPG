@@ -2,6 +2,7 @@
 # Ignore VS / VS Code settings directory
 .vs
 .vscode
+.vsconfig
 
 # Ignore intermediate folders
 Intermediate/

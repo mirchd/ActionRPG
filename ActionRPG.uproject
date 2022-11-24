@@ -23,18 +23,6 @@
 		{
 			"Name": "GameplayAbilities",
 			"Enabled": true
-		},
-		{
-			"Name": "UnLua",
-			"Enabled": true
-		},
-		{
-			"Name": "UnLuaTestSuite",
-			"Enabled": true
-		},
-		{
-			"Name": "HotPatcher",
-			"Enabled": true
 		}
 	],
 	"TargetPlatforms": [

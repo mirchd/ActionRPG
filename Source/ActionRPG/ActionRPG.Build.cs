@@ -12,11 +12,11 @@ public class ActionRPG : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
 		
-		// PrivateDependencyModuleNames.AddRange(new string[]
-        // {
-        //     "UnLua",
-        //     "Lua",
-        // });
+		PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            "UnLua",
+            "Lua",
+        });
 
         // using Slate UI
         PrivateDependencyModuleNames.AddRange(

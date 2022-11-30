@@ -23,6 +23,10 @@
 		{
 			"Name": "GameplayAbilities",
 			"Enabled": true
+		},
+		{
+			"Name": "HotPatcher",
+			"Enabled": true
 		}
 	],
 	"TargetPlatforms": [

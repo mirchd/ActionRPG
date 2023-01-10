@@ -7,7 +7,7 @@
 #include "CreatePatch/HotPatcherContext.h"
 
 #include "FlibHotPatcherCoreHelper.h"
-#include "ShaderPatch/FlibShaderCodeLibraryHelper.h"
+#include "ShaderLibUtils/FlibShaderCodeLibraryHelper.h"
 #include "Cooker/MultiCooker/FCookShaderCollectionProxy.h"
 
 // engine header
@@ -158,6 +158,7 @@ namespace PatchWorker
 
 void UPatcherProxy::Init(FPatcherEntitySettingBase* InSetting)
 {
+	SCOPED_NAMED_EVENT_TEXT("UPatcherProxy::Init",FColor::Red);
 	Super::Init(InSetting);
 #if WITH_PACKAGE_CONTEXT
 	PlatformSavePackageContexts = UFlibHotPatcherCoreHelper::CreatePlatformsPackageContexts(
@@ -200,6 +201,7 @@ void UPatcherProxy::Shutdown()
 
 bool UPatcherProxy::DoExport()
 {
+	SCOPED_NAMED_EVENT_TEXT("UPatcherProxy::DoExport",FColor::Red);
 	PatchContext = MakeShareable(new FHotPatcherPatchContext);
 	PatchContext->PatchProxy = this;
 	PatchContext->OnPaking.AddLambda([this](const FString& One,const FString& Msg){this->OnPaking.Broadcast(One,Msg);});
@@ -584,9 +586,17 @@ namespace PatchWorker
 						EmptySetting.bConcurrentSave = false;
 						// for current impl arch
 						EmptySetting.bForceCookInOneFrame = true;
+						EmptySetting.NumberOfAssetsPerFrame = 200;
 						EmptySetting.bDisplayConfig = false;
 						EmptySetting.StorageCookedDir = Context.GetSettingObject()->GetStorageCookedDir();//FPaths::Combine(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()),TEXT("Cooked"));
-						EmptySetting.StorageMetadataDir = FPaths::Combine(Context.GetSettingObject()->GetSaveAbsPath(),Context.CurrentVersion.VersionId,TEXT("Metadatas"),Chunk.ChunkName);
+						FReplacePakRegular PakSaveDirRegular{
+							Context.CurrentVersion.VersionId,
+							Context.CurrentVersion.BaseVersionId,
+							Chunk.ChunkName,
+							PlatformName
+						};
+						FString ReplacedPakSaveDirRegular = UFlibHotPatcherCoreHelper::ReplacePakRegular(PakSaveDirRegular,Context.GetSettingObject()->GetPakSaveDirRegular());
+						EmptySetting.StorageMetadataDir = FPaths::Combine(Context.GetSettingObject()->GetSaveAbsPath(),ReplacedPakSaveDirRegular,TEXT("Metadatas"));
 #if WITH_PACKAGE_CONTEXT
 						EmptySetting.bOverrideSavePackageContext = true;
 						EmptySetting.PlatformSavePackageContexts = Context.PatchProxy->GetPlatformSavePackageContexts();
@@ -865,7 +875,14 @@ namespace PatchWorker
 					Context.OnPaking.Broadcast(TEXT("ExportPatch"),*Dialog.ToString());
 					Context.UnrealPakSlowTask->EnterProgressFrame(1.0, Dialog);
 				}
-				FString ChunkSaveBasePath = FPaths::Combine(Context.GetSettingObject()->GetSaveAbsPath(), Context.CurrentVersion.VersionId, PlatformName);
+				FReplacePakRegular PakSaveDirRegular{
+					Context.CurrentVersion.VersionId,
+					Context.CurrentVersion.BaseVersionId,
+					Chunk.ChunkName,
+					PlatformName
+				};
+				FString ReplacedPakSaveDirRegular = UFlibHotPatcherCoreHelper::ReplacePakRegular(PakSaveDirRegular,Context.GetSettingObject()->GetPakSaveDirRegular());
+				FString ChunkSaveBasePath = FPaths::Combine(Context.GetSettingObject()->GetSaveAbsPath(),ReplacedPakSaveDirRegular);
 				
 				TArray<FPakCommand> ChunkPakListCommands;
 				{
@@ -961,8 +978,8 @@ namespace PatchWorker
 					SinglePakForChunk.PakCommands = ChunkPakListCommands;
 					// add extern file to pak(version file)
 					SinglePakForChunk.PakCommands.Append(Context.AdditionalFileToPak);
-					
-					const FString ChunkPakName = UFlibHotPatcherCoreHelper::MakePakShortName(Context.CurrentVersion,Chunk,PlatformName,Context.GetSettingObject()->GetPakNameRegular());
+
+					const FString ChunkPakName = UFlibHotPatcherCoreHelper::ReplacePakRegular(PakSaveDirRegular,Context.GetSettingObject()->GetPakNameRegular());
 					SinglePakForChunk.ChunkStoreName = ChunkPakName;
 					SinglePakForChunk.StorageDirectory = ChunkSaveBasePath;
 					Chunk.GetPakFileProxys().Add(SinglePakForChunk);
@@ -1013,7 +1030,7 @@ namespace PatchWorker
 				
 			// // Update SlowTask Progress
 			{
-				FText Dialog = FText::Format(NSLOCTEXT("ExportPatch", "GeneratedPak", "Generating Pak list of Chunk {0}."), FText::FromString(Chunk.ChunkName));
+				FText Dialog = FText::Format(NSLOCTEXT("ExportPatch_GeneratedPakList", "GeneratedPak", "Generating Pak list of Chunk {0}."), FText::FromString(Chunk.ChunkName));
 				Context.OnPaking.Broadcast(TEXT("GeneratedPak"),*Dialog.ToString());
 				Context.UnrealPakSlowTask->EnterProgressFrame(1.0, Dialog);
 			}
@@ -1077,7 +1094,7 @@ namespace PatchWorker
 									Context.OnPaking.Broadcast(TEXT("SavedPakFile"),Msg);
 								}else
 								{
-									FText Msg = LOCTEXT("SavedPakFileMsg", "Successed to Package the patch as Pak.");
+									FText Msg = LOCTEXT("SavedPakFileMsg_PackageSuccessed", "Successed to Package the patch as Pak.");
 									FHotPatcherDelegates::Get().GetNotifyFileGenerated().Broadcast(Msg,PakSavePath);
 								}
 								FPakFileInfo CurrentPakInfo;
@@ -1131,7 +1148,7 @@ namespace PatchWorker
 				
 			// // Update SlowTask Progress
 			{
-				FText Dialog = FText::Format(NSLOCTEXT("ExportPatch", "GeneratedPak", "Generating Io Store list of Chunk {0}."), FText::FromString(Chunk.ChunkName));
+				FText Dialog = FText::Format(NSLOCTEXT("ExportPatch_GeneratedPak", "GeneratedPak", "Generating Io Store list of Chunk {0}."), FText::FromString(Chunk.ChunkName));
 				Context.OnPaking.Broadcast(TEXT("GeneratedIoStore"),*Dialog.ToString());
 				Context.UnrealPakSlowTask->EnterProgressFrame(1.0, Dialog);
 			}
@@ -1389,7 +1406,7 @@ namespace PatchWorker
 						Context.OnPaking.Broadcast(TEXT("SavedPakFileMsg"),Msg);
 					}else
 					{
-						FText Msg = LOCTEXT("SavedPakFileMsg", "Successed to Export the Pak File info.");
+						FText Msg = LOCTEXT("SavedPakFileMsg_ExportSuccessed", "Successed to Export the Pak File info.");
 						FHotPatcherDelegates::Get().GetNotifyFileGenerated().Broadcast(Msg, SavePakFilesPath);
 					}
 				}

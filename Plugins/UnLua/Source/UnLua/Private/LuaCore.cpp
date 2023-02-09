@@ -311,57 +311,7 @@ void SetUserdataFlags(void* Userdata, uint8 Flags)
  */
 void* GetUserdata(lua_State *L, int32 Index, bool *OutTwoLvlPtr, bool *OutClassMetatable)
 {
-    // Index < LUA_REGISTRYINDEX => upvalues
-    if (Index < 0 && Index > LUA_REGISTRYINDEX)
-    {
-        int32 Top = lua_gettop(L);
-        Index = Top + Index + 1;
-    }
-
-    void *Userdata = nullptr;
-    bool bTwoLvlPtr = false, bClassMetatable = false;
-
-    int32 Type = lua_type(L, Index);
-    switch (Type)
-    {
-    case LUA_TTABLE:
-        {
-            lua_pushstring(L, "Object");
-            Type = lua_rawget(L, Index);
-            if (Type == LUA_TUSERDATA)
-            {
-                Userdata = lua_touserdata(L, -1);           // get the raw UObject
-            }
-            else
-            {
-                lua_pop(L, 1);
-                lua_pushstring(L, "ClassDesc");
-                Type = lua_rawget(L, Index);
-                if (Type == LUA_TLIGHTUSERDATA)
-                {
-                    Userdata = lua_touserdata(L, -1);       // get the 'FClassDesc' pointer
-                    bClassMetatable = true;
-                }
-            }
-            bTwoLvlPtr = true;                              // set two level pointer flag
-            lua_pop(L, 1);
-        }
-        break;
-    case LUA_TUSERDATA:
-        Userdata = GetUserdataFast(L, Index, &bTwoLvlPtr);  // get the userdata pointer
-        break;
-    }
-
-    if (OutTwoLvlPtr)
-    {
-        *OutTwoLvlPtr = bTwoLvlPtr;
-    }
-    if (OutClassMetatable)
-    {
-        *OutClassMetatable = bClassMetatable;
-    }
-
-    return Userdata;
+    return UnLua::LowLevel::GetUserdata(L, Index, OutTwoLvlPtr, OutClassMetatable);
 }
 
 /**
@@ -455,7 +405,7 @@ void* NewUserdataWithPadding(lua_State *L, int32 Size, const char *MetatableName
 void* GetCppInstance(lua_State *L, int32 Index)
 {
     bool bTwoLvlPtr = false;
-    void *Userdata = GetUserdata(L, Index, &bTwoLvlPtr);
+    void *Userdata = UnLua::LowLevel::GetUserdata(L, Index, &bTwoLvlPtr);
     if (Userdata)
     {
         return bTwoLvlPtr ? *((void**)Userdata) : Userdata;         // return instance's address
@@ -1287,28 +1237,38 @@ int32 TraverseTable(lua_State *L, int32 Index, void *Userdata, bool(*TraverseWor
  */
 int32 Enum_Index(lua_State *L)
 {
+    const auto NumParams = lua_gettop(L);
+    if (NumParams < 2)
+        return 0;
+
     // 1: meta table of the Enum; 2: entry name in Enum
-    
+    if (lua_type(L, 1) != LUA_TTABLE)
+        return 0;
+
+    if (lua_type(L, 2) != LUA_TSTRING)
+        return 0;
+
+    lua_pushstring(L, "__name");
+    lua_rawget(L, 1);
     check(lua_isstring(L, -1));
-    lua_pushstring(L, "__name");        // 3
-    lua_rawget(L, 1);                   // 3
-    check(lua_isstring(L, -1));
-    
-    const FEnumDesc *Enum = UnLua::FEnumRegistry::Find(lua_tostring(L, -1));
-	if ((!Enum) 
-        || (!Enum->IsValid()))
-	{
-		lua_pop(L, 1);
-		return 0;
-	}
-    int64 Value = Enum->GetValue(lua_tostring(L, 2));
-    
+
+    const auto Enum = UnLua::FEnumRegistry::Find(lua_tostring(L, -1));
+    if (!Enum)
+    {
+        lua_pop(L, 1);
+        return 0;
+    }
+
+    Enum->Load();
+
+    const auto Value = Enum->GetValue(lua_tostring(L, 2));
+
     lua_pop(L, 1);
     lua_pushvalue(L, 2);
     lua_pushinteger(L, Value);
     lua_rawset(L, 1);
     lua_pushinteger(L, Value);
-    
+
     return 1;
 }
 
@@ -1329,7 +1289,7 @@ int32 Enum_GetMaxValue(lua_State* L)
 		if (Type == LUA_TSTRING)
 		{
 			const char* EnumName = lua_tostring(L, -1);
-			const FEnumDesc* EnumDesc = UnLua::FEnumRegistry::Find(EnumName);
+            const auto EnumDesc = UnLua::FEnumRegistry::Find(EnumName);
 			if (EnumDesc)
 			{
 				UEnum* Enum = EnumDesc->GetEnum();
@@ -1367,7 +1327,7 @@ int32 Enum_GetNameStringByValue(lua_State* L)
         if (Type == LUA_TSTRING)
         {
             const char* EnumName = lua_tostring(L, -1);
-            const FEnumDesc* EnumDesc = UnLua::FEnumRegistry::Find(EnumName);
+            const auto EnumDesc = UnLua::FEnumRegistry::Find(EnumName);
             if (EnumDesc)
             {
                 UEnum* Enum = EnumDesc->GetEnum();
@@ -1406,7 +1366,7 @@ int32 Enum_GetDisplayNameTextByValue(lua_State* L)
         if (Type == LUA_TSTRING)
         {
             const char* EnumName = lua_tostring(L, -1);
-            const FEnumDesc* EnumDesc = UnLua::FEnumRegistry::Find(EnumName);
+            const auto EnumDesc = UnLua::FEnumRegistry::Find(EnumName);
             if (EnumDesc)
             {
                 UEnum* Enum = EnumDesc->GetEnum();
@@ -1450,7 +1410,7 @@ int32 Class_Index(lua_State *L)
     if (!UnLua::LowLevel::CheckPropertyOwner(L, (*Property).Get(), Self))
         return 0;
 
-    (*Property)->Read(L, Self, false);
+    (*Property)->ReadValue_InContainer(L, Self, false);
     lua_remove(L, -2);
     return 1;
 }
@@ -1477,7 +1437,7 @@ int32 Class_NewIndex(lua_State *L)
                 if (!UnLua::LowLevel::CheckPropertyOwner(L, (*Property).Get(), Self))
                     return 0;
 
-                (*Property)->Write(L, Self, 3);
+                (*Property)->WriteValue_InContainer(L, Self, 3);
             }
         }
     }
@@ -1624,7 +1584,7 @@ int32 ScriptStruct_Index(lua_State *L)
     if (!Self)
         return luaL_error(L, TCHAR_TO_UTF8(*FString::Printf(TEXT("attempt to read property '%s' on released struct"), *Property->GetName())));
 
-    Property->Read(L, Self, false);
+    Property->ReadValue_InContainer(L, Self, false);
     lua_remove(L, -2);
     return 1;
 }

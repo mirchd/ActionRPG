@@ -12,6 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
 
+#include "Engine/World.h"
 #include "LowLevel.h"
 #include "UnLuaEx.h"
 #include "LuaCore.h"
@@ -230,7 +231,7 @@ int32 UObject_Identical(lua_State* L)
  */
 int32 UObject_Delete(lua_State* L)
 {
-    int32 NumParams = lua_gettop(L);
+    const auto NumParams = lua_gettop(L);
     if (NumParams != 1)
         return luaL_error(L, "invalid parameters");
 

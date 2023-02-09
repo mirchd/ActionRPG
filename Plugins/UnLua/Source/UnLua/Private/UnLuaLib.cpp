@@ -51,7 +51,10 @@ namespace UnLua
         static int HotReload(lua_State* L)
         {
 #if UNLUA_WITH_HOT_RELOAD
-            luaL_dostring(L, "require('UnLua.HotReload').reload()");
+            if (luaL_dostring(L, "require('UnLua.HotReload').reload()") != 0)
+            {
+                LogError(L);
+            }
 #endif
             return 0;
         }
@@ -110,7 +113,7 @@ namespace UnLua
             if (!LowLevel::CheckPropertyOwner(L, (*Property).Get(), Self))
                 return 0;
 
-            (*Property)->Read(L, Self, false);
+            (*Property)->ReadValue_InContainer(L, Self, false);
             return 1;
         }
 
@@ -131,7 +134,7 @@ namespace UnLua
             if (!LowLevel::CheckPropertyOwner(L, (*Property).Get(), Self))
                 return 0;
 
-            (*Property)->Write(L, Self, 3);
+            (*Property)->WriteValue_InContainer(L, Self, 3);
             return 0;
         }
 

@@ -25,6 +25,12 @@ public class ActionRPG : ModuleRules
 				"AIModule"
 			}
 		);
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            "UnLua",
+            "Lua",
+        });
 		
 		if(Target.Platform == UnrealTargetPlatform.IOS)
 		{

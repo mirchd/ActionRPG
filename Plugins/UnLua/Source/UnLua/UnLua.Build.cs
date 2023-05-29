@@ -25,7 +25,11 @@ public class UnLua : ModuleRules
 {
     public UnLua(ReadOnlyTargetRules Target) : base(Target)
     {
+#if UE_5_2_OR_LATER
+        IWYUSupport = IWYUSupport.None;
+#else
         bEnforceIWYU = false;
+#endif
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
         PublicIncludePaths.AddRange(
@@ -75,20 +79,29 @@ public class UnLua : ModuleRules
                 flag = defaultValue;
             PublicDefinitions.Add(string.Format("{0}={1}", macro, (flag ? "1" : "0")));
         };
+        
+        Action<string, string, string > loadStringConfig = (key, macro, defaultValue) =>
+        {
+            string value;
+            if (!config.GetString(section, key, out value))
+                value = defaultValue;
+            PublicDefinitions.Add(string.Format("{0}={1}", macro, value));
+        };
 
         loadBoolConfig("bAutoStartup", "AUTO_UNLUA_STARTUP", true);
         loadBoolConfig("bEnableDebug", "UNLUA_ENABLE_DEBUG", false);
         loadBoolConfig("bEnablePersistentParamBuffer", "ENABLE_PERSISTENT_PARAM_BUFFER", true);
         loadBoolConfig("bEnableTypeChecking", "ENABLE_TYPE_CHECK", true);
-        loadBoolConfig("bEnableRPCCall", "SUPPORTS_RPC_CALL", true);
         loadBoolConfig("bEnableUnrealInsights", "ENABLE_UNREAL_INSIGHTS", false);
         loadBoolConfig("bEnableCallOverriddenFunction", "ENABLE_CALL_OVERRIDDEN_FUNCTION", true);
+        loadBoolConfig("bEnableFText", "UNLUA_ENABLE_FTEXT", false);
         loadBoolConfig("bLuaCompileAsCpp", "LUA_COMPILE_AS_CPP", false);
         loadBoolConfig("bWithUE4Namespace", "WITH_UE4_NAMESPACE", true);
         loadBoolConfig("bLegacyReturnOrder", "UNLUA_LEGACY_RETURN_ORDER", false);
         loadBoolConfig("bLegacyBlueprintPath", "UNLUA_LEGACY_BLUEPRINT_PATH", false);
         loadBoolConfig("bLegacyAllowUTF8WithBOM", "UNLUA_LEGACY_ALLOW_BOM", false);
         loadBoolConfig("bLegacyArgsPassing", "UNLUA_LEGACY_ARGS_PASSING", true);
+        loadStringConfig("LuaVersion", "UNLUA_LUA_VERSION", "lua-5.4.3");
 
         string hotReloadMode;
         if (!config.GetString(section, "HotReloadMode", out hotReloadMode))
@@ -96,5 +109,24 @@ public class UnLua : ModuleRules
 
         var withHotReload = hotReloadMode != "Never";
         PublicDefinitions.Add("UNLUA_WITH_HOT_RELOAD=" + (withHotReload ? "1" : "0"));
+
+        if (IsPluginEnabled("LuaCompat"))
+            PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/ThirdParty/Lua/lua-compat-5.3/c-api"));
+    }
+
+    private bool IsPluginEnabled(string name)
+    {
+        var engineDir = DirectoryReference.FromString(EngineDirectory);
+        var projectDir = Target.ProjectFile.Directory;
+        var projectDesc = ProjectDescriptor.FromFile(Target.ProjectFile);
+        
+        foreach (var plugin in Plugins.ReadAvailablePlugins(engineDir, projectDir, null))
+        {
+            if (plugin.Name != name)
+                continue;
+            return Plugins.IsPluginEnabledForTarget(plugin, projectDesc, Target.Platform, Target.Configuration, Target.Type);
+        }
+
+        return false;
     }
 }

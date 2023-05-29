@@ -37,7 +37,7 @@ namespace UnLua
 
     TMap<lua_State*, FLuaEnv*> FLuaEnv::AllEnvs;
     FLuaEnv::FOnCreated FLuaEnv::OnCreated;
-    FLuaEnv::FOnCreated FLuaEnv::OnDestroyed;
+    FLuaEnv::FOnDestroyed FLuaEnv::OnDestroyed;
 
 #if ENABLE_UNREAL_INSIGHTS && CPUPROFILERTRACE_ENABLED
     void Hook(lua_State* L, lua_Debug* ar)
@@ -602,9 +602,10 @@ namespace UnLua
 
         auto LoadIt = [&]
         {
-            if (Env.LoadString(L, Data, TCHAR_TO_UTF8(*FullPath)))
+            if (Env.LoadString(L, Data, FullPath))
                 return 1;
-            return luaL_error(L, "file loading from file system error");
+            const auto Msg = FString::Printf(TEXT("file loading from file system error.\nfull path:%s"), *FullPath);
+            return luaL_error(L, TCHAR_TO_UTF8(*Msg));
         };
 
         const auto PackagePath = UnLuaLib::GetPackagePath(L);

@@ -50,10 +50,10 @@ public class ActionRPGEditorTarget : TargetRules
 							string cerPassword = BundleIdPair.Value;
 							string[] Cmds =
 							{
-								string.Format(
+								String.Format(
 									"Install Engine -project {0} -certificate {1} -cerpassword {2} -bundlename {3}",
 									UProjectFile, cerPath, cerPassword, BundleId),
-								string.Format(
+								String.Format(
 									"Install Engine -project {0} -provision {1} -bundlename {2}",
 									UProjectFile, provisionPath, BundleId),
 							};

@@ -12,31 +12,33 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
 
-#include "DefaultParamCollection.h"
-#include "Misc/EngineVersionComparison.h"
-#include "CoreUObject.h"
+#pragma once
 
-TMap<FName, FFunctionCollection> GDefaultParamCollection;
+#include "Issue634Test.generated.h"
 
-#if UE_VERSION_OLDER_THAN(5, 2, 0)
-PRAGMA_DISABLE_OPTIMIZATION
-#else
-UE_DISABLE_OPTIMIZATION
-#endif
-
-void CreateDefaultParamCollection()
+USTRUCT(BlueprintTYpe)
+struct FIssue634Struct : public FTableRowBase
 {
-    static bool CollectionCreated = false;
-    if (!CollectionCreated)
+    GENERATED_BODY()
+
+    FIssue634Struct()
+        : OverTime(0)
     {
-        CollectionCreated = true;
-
-#include "DefaultParamCollection.inl"
     }
-}
 
-#if UE_VERSION_OLDER_THAN(5, 2, 0)
-PRAGMA_ENABLE_OPTIMIZATION
-#else
-UE_ENABLE_OPTIMIZATION
-#endif
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FString BuffID;
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    float OverTime;
+
+    FORCEINLINE bool operator==(const FIssue634Struct& Other) const
+    {
+        return this->BuffID == Other.BuffID;
+    }
+
+    FORCEINLINE bool operator!=(const FIssue634Struct& Other) const
+    {
+        return this->BuffID != Other.BuffID;
+    }
+};

@@ -14,6 +14,7 @@
 
 #include "LuaOverridesClass.h"
 #include "LuaFunction.h"
+#include "Misc/EngineVersionComparison.h"
 
 ULuaOverridesClass* ULuaOverridesClass::Create(UClass* Class)
 {
@@ -48,6 +49,10 @@ void ULuaOverridesClass::SetActive(const bool bActive)
     }
 
     Class->ClearFunctionMapsCaches();
+    if (bActive)
+        AddToOwner();
+    else
+        RemoveFromOwner();
 }
 
 void ULuaOverridesClass::BeginDestroy()
@@ -62,10 +67,25 @@ void ULuaOverridesClass::AddToOwner()
     if (!Class)
         return;
 
-    auto Field = &Class->Children;
+#if UE_VERSION_NEWER_THAN(5, 2, 0)
+    auto ChildrenPtr = Class->Children.Get();
+
+    auto Field = &ChildrenPtr;
+#else
+    auto Field = &(Class->Children);
+#endif
     while (*Field)
+    {
+        if (*Field == this)
+        {
+            Field = nullptr;
+            break;
+        }
         Field = &(*Field)->Next;
-    *Field = this;
+    }
+
+    if (Field)
+        *Field = this;
 
     if (Class->IsRooted() || GUObjectArray.IsDisregardForGC(Class))
         AddToRoot();
@@ -77,7 +97,13 @@ void ULuaOverridesClass::RemoveFromOwner()
     if (!Class)
         return;
 
+#if UE_VERSION_NEWER_THAN(5, 2, 0)
+    auto ChildrenPtr = Class->Children.Get();
+
+    auto Field = &ChildrenPtr;
+#else
     auto Field = &Class->Children;
+#endif
     while (*Field)
     {
         if (*Field == this)

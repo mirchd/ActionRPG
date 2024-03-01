@@ -7,7 +7,7 @@ public class ActionRPGServerTarget : TargetRules
 	public ActionRPGServerTarget( TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Server;
-		DefaultBuildSettings = BuildSettingsVersion.V2;
+		DefaultBuildSettings = BuildSettingsVersion.Latest;
 		ExtraModuleNames.AddRange( new string[] { "ActionRPG" } );
 	}
 }

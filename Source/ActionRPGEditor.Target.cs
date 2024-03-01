@@ -14,7 +14,7 @@ public class ActionRPGEditorTarget : TargetRules
 	{
 		Type = TargetType.Editor;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
-		DefaultBuildSettings = BuildSettingsVersion.V2;
+		DefaultBuildSettings = BuildSettingsVersion.Latest;
 		ExtraModuleNames.AddRange( new string[] { "ActionRPG" } );
 
 		// Build\BatchFiles\Build.bat -Target="GameEditor Win64 Development" -Project="G:\Client\Game.uproject" -WaitMutex -importcer

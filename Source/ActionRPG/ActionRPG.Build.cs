@@ -30,6 +30,7 @@ public class ActionRPG : ModuleRules
         {
             "UnLua",
             "Lua",
+			"ChunkDownloader",
         });
 		
 		if(Target.Platform == UnrealTargetPlatform.IOS)

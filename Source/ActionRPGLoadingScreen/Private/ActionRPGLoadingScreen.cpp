@@ -22,6 +22,11 @@ struct FRPGLoadingScreenBrush : public FSlateDynamicImageBrush, public FGCObject
 			Collector.AddReferencedObject(CachedResourceObject);
 		}
 	}
+
+	virtual FString GetReferencerName() const override
+	{
+		return TEXT("FRPGLoadingScreenBrush");
+	}
 };
 
 class SRPGLoadingScreen : public SCompoundWidget

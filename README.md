@@ -11,7 +11,11 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 "D:\program\Unreal\UnrealEngine\Engine\Binaries\Win64\UnrealHeaderTool.exe" "D:\program\Unreal\ActionRPG\ActionRPG.uproject" "D:\program\Unreal\ActionRPG\Intermediate\Build\Win64\ActionRPGEditor\Debug\ActionRPGEditor.uhtmanifest" -LogCmds="loginit warning, logexit warning, logdatabase error" -Unattended -WarningsAsErrors -abslog="D:\program\Unreal\UnrealEngine\Engine\Programs\UnrealBuildTool\Log_UHT.txt"
 
 # Special Thanks
-- [HotPatcher](https://github.com/hxhb/HotPatcher.git)
+- [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent.git)
 - [UnLua](https://github.com/Tencent/UnLua.git)
 - [ActionRPG](https://docs.unrealengine.com/4.27/zh-CN/Resources/SampleGames/ARPG/)
-- [UE5]
+- [UE5](https://www.unrealengine.com/zh-CN/unreal-engine-5)
+- [vc-ue-extensions](https://github.com/microsoft/vc-ue-extensions.git)
+- [StreetMap](https://github.com/ue4plugins/StreetMap)
+
+

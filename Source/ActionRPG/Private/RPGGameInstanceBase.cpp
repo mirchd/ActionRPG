@@ -128,8 +128,42 @@ void URPGGameInstanceBase::OnManifestUpdateComplete(bool bSuccess)
 	bIsDownloadManifestUpToDate = bSuccess;
 }
 
+// 当打包文件已成功下载到用户的设备上时，它将运行。
 void URPGGameInstanceBase::OnDownloadComplete(bool bSuccess)
 {
+	if (bSuccess)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Download Complete"));
+
+		// 获取文件块下载器
+		TSharedRef<FChunkDownloader> Downloader = FChunkDownloader::GetChecked();
+		// 用于发出的请求
+		FJsonSerializableArrayInt DownloadedChunks;
+
+		for (int32 ChunkID : ChunkDownloadList)
+		{
+			DownloadedChunks.Add(ChunkID);
+		}
+
+		// 挂载文件块
+		// 输出是否已成功应用补丁
+		TFunction<void(bool bSuccess)> MountCompleteCallback = [&](bool bSuccess) {
+			OnMountComplete(bSuccess);
+		};
+		// 开始挂载已下载文件块
+		Downloader->MountChunks(Downloader, MountCompleteCallback);
+
+		// 如果下载成功，则该函数激活值为true的 OnPatchComplete 委托
+		OnPatchComplete.Broadcast(true);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("Load process failed"));
+
+		// 调用委托
+		// 如果失败，则会以 false 值激活
+		OnPatchComplete.Broadcast(false);
+	}
 }
 
 void URPGGameInstanceBase::OnLoadingModeComplete(bool bSuccess)

@@ -6,6 +6,7 @@
 #include "ChunkDownloader.h"
 #include "Misc/CoreDelegates.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Serialization/JsonSerializerMacros.h"
 
 #include "RPGAssetManager.h"
 #include "RPGSaveGame.h"

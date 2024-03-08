@@ -152,7 +152,7 @@ void URPGGameInstanceBase::OnDownloadComplete(bool bSuccess)
 			OnMountComplete(bSuccess);
 		};
 		// 开始挂载已下载文件块
-		Downloader->MountChunks(Downloader, MountCompleteCallback);
+		Downloader->MountChunks(DownloadedChunks, MountCompleteCallback);
 
 		// 如果下载成功，则该函数激活值为true的 OnPatchComplete 委托
 		OnPatchComplete.Broadcast(true);

@@ -5,7 +5,7 @@
 /** 访问ChunkDownloader，以及一些用于管理资产和委托的有用工具 */
 #include "ChunkDownloader.h"
 #include "Misc/CoreDelegates.h"
-#include "AssetRegistryModule.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 
 #include "RPGAssetManager.h"
 #include "RPGSaveGame.h"

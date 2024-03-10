@@ -13,7 +13,12 @@
 			"Name": "ActionRPGLoadingScreen",
 			"Type": "ClientOnly",
 			"LoadingPhase": "PreLoadingScreen"
-		}
+		},
+		{
+	      "Name": "PlatformUtils",
+	      "Type": "Runtime",
+	      "LoadingPhase": "PostConfigInit"
+	    }
 	],
 	"Plugins": [
 		{

@@ -7,7 +7,7 @@ public class PlatformUtils : ModuleRules
 {
 	public PlatformUtils(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		
 		PublicIncludePaths.AddRange(
 			new string[] {
@@ -86,7 +86,7 @@ public class PlatformUtils : ModuleRules
         if(Target.Platform == UnrealTargetPlatform.Android)
         {
             PrivateDependencyModuleNames.AddRange(new string[] { "Launch" });
-            AdditionalPropertiesForReceipt.Add(new ReceiptProperty("AndroidPlugin", Path.Combine(ThirdPartyPath, "Android/PlatformUtils_UPL_Android.xml")));
+            AdditionalPropertiesForReceipt.Add("AndroidPlugin", Path.Combine(ThirdPartyPath, "Android/PlatformUtils_UPL_Android.xml"));
         }
 	}
 }

@@ -2,7 +2,7 @@
 
 #include "HAL/Platform.h"
 
-#if ENGINE_MINOR_VERSION > 22
+#if ENGINE_MAJOR_VERSION > 4 || (ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION > 22)
 	#include COMPILED_PLATFORM_HEADER(PlatformUtils.h)
 #else
 	#if PLATFORM_ANDROID

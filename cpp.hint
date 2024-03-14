@@ -23,6 +23,9 @@
 #define THIRD_PARTY_INCLUDES_END
 
 #define UE_DEPRECATED(...)
+
+#define FUNC_DECLARE_DELEGATE(...)
+#define DECLARE_DELEGATE_OneParam(...)
 #define DECLARE_DELEGATE_ThreeParams(...)
 
 #define PRAGMA_DISABLE_BUFFER_OVERRUN_WARNING

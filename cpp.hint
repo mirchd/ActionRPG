@@ -22,7 +22,30 @@
 #define THIRD_PARTY_INCLUDES_START
 #define THIRD_PARTY_INCLUDES_END
 
+#define ON_SCOPE_EXIT
+
 #define UE_DEPRECATED(...)
+
+#define LLM_SCOPE(...)
+#define CSV_CUSTOM_STAT(...)
+#define SCOPE_TIME_GUARD(...)
+#define SCOPED_NAMED_EVENT(...)
+#define SCOPE_CYCLE_COUNTER(...)
+#define STAT_ADD_CUSTOMMESSAGE_NAME(...)
+#define DECLARE_SCOPE_CYCLE_COUNTER(...)
+#define CSV_SCOPED_TIMING_STAT_EXCLUSIVE(...)
+#define CSV_EVENT_GLOBAL(...)
+#define TRACE_CPUPROFILER_EVENT_SCOPE(...)
+#define TRACE_CPUPROFILER_EVENT_SCOPE_TEXT(...)
+#define check(...)
+#define checkf(...)
+#define checkSlow(...)
+#define checkCode(...)
+#define verify(...)
+#define ensureMsgf(...)
+
+#define TEXT(...)
+#define UE_LOG(...)
 
 #define ENUM_CLASS_FLAGS(...)
 

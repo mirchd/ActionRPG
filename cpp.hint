@@ -24,6 +24,8 @@
 
 #define UE_DEPRECATED(...)
 
+#define ENUM_CLASS_FLAGS(...)
+
 #define FUNC_DECLARE_DELEGATE(...)
 #define DECLARE_DELEGATE_OneParam(...)
 #define DECLARE_DELEGATE_ThreeParams(...)

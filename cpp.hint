@@ -41,6 +41,7 @@
 #define checkf(...)
 #define checkSlow(...)
 #define checkCode(...)
+#define checkThreadGraph(...)
 #define verify(...)
 #define ensureMsgf(...)
 

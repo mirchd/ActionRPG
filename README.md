@@ -20,11 +20,12 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug.exe" "D:\ActionRPG\ActionRPG.uproject" -skipcompile
 
 # Special Thanks
-- [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent.git)
-- [UnLua](https://github.com/Tencent/UnLua.git)
+- [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent)
+- [UnLua](https://github.com/Tencent/UnLua)
 - [ActionRPG](https://docs.unrealengine.com/4.27/zh-CN/Resources/SampleGames/ARPG/)
 - [UE5](https://www.unrealengine.com/zh-CN/unreal-engine-5)
-- [vc-ue-extensions](https://github.com/microsoft/vc-ue-extensions.git)
+- [vc-ue-extensions](https://github.com/microsoft/vc-ue-extensions)
 - [StreetMap](https://github.com/ue4plugins/StreetMap)
+- [HotPatcher](https://github.com/hxhb/HotPatcher)
 
 

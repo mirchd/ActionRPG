@@ -332,7 +332,14 @@ namespace UnLuaDefaultParamCollectorUbtPlugin
             else if (property is UhtBoolProperty)
             {
                 PreAddProperty(classObj, function);
-                GeneratedContentBuilder.AppendFormat("PC->Parameters.Add(TEXT(\"{0}\"), SharedBool_{1});\r\n", property.SourceName, valueStr.ToUpper());
+				if (string.IsNullOrEmpty(valueStr))
+				{
+					GeneratedContentBuilder.AppendFormat("PC->Parameters.Add(TEXT(\"{0}\"), SharedBool_FALSE);\r\n", property.SourceName);
+				}
+				else
+				{
+					GeneratedContentBuilder.AppendFormat("PC->Parameters.Add(TEXT(\"{0}\"), SharedBool_{1});\r\n", property.SourceName, valueStr.ToUpper());
+				}
             }
             else if (property is UhtNameProperty)
             {

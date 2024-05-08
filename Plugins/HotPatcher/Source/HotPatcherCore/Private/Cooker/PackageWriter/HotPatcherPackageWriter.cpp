@@ -3,6 +3,7 @@
 
 #if WITH_PACKAGE_CONTEXT && ENGINE_MAJOR_VERSION > 4
 #include "AssetRegistry/IAssetRegistry.h"
+#include "AssetRegistry/AssetRegistryState.h"
 #include "Async/Async.h"
 #include "Serialization/LargeMemoryWriter.h"
 #include "UObject/SavePackage.h"
@@ -58,6 +59,10 @@ void FHotPatcherPackageWriter::RemoveCookedPackages()
 }
 
 void FHotPatcherPackageWriter::MarkPackagesUpToDate(TArrayView<const FName> UpToDatePackages)
+{
+}
+
+void FHotPatcherPackageWriter::UpdatePackageModificationStatus(FName PackageName, bool bIterativelyUnmodified, bool& bInOutShouldIterativelySkip)
 {
 }
 

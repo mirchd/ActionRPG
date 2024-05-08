@@ -638,7 +638,7 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 			PackageArgs.TargetPlatform = Platform.Value;
 			PackageArgs.bSlowTask = false;
 			PackageArgs.FinalTimeStamp = FDateTime::MinValue();
-			FArchiveCookContext ArchiveCookContext(Package, FArchiveCookContext::ECookType::ECookByTheBook, FArchiveCookContext::ECookingDLC::ECookingDLCNo);
+			FArchiveCookContext ArchiveCookContext(Package, UE::Cook::ECookType::ByTheBook, UE::Cook::ECookingDLC::No);
 			FArchiveCookData CookData(*Platform.Value, ArchiveCookContext);
 			PackageArgs.ArchiveCookData = &CookData;
 			

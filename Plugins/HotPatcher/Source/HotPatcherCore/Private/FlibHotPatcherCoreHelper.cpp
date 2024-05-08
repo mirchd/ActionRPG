@@ -40,6 +40,7 @@
 #include "Internationalization/PackageLocalizationManager.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/EngineVersionComparison.h"
+#include "AssetCompilingManager.h"
 
 DEFINE_LOG_CATEGORY(LogHotPatcherCoreHelper);
 
@@ -944,25 +945,23 @@ FString UFlibHotPatcherCoreHelper::GetUnrealPakBinary()
 	return FPaths::Combine(
         FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
         TEXT("Binaries"),
-#if PLATFORM_64BITS	
+	#if PLATFORM_64BITS	
         TEXT("Win64"),
-#else
+	#else
         TEXT("Win32"),
-#endif
+	#endif
         TEXT("UnrealPak.exe")
     );
-#endif
-
-#if PLATFORM_MAC
+#elif PLATFORM_MAC
 	return FPaths::Combine(
             FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
             TEXT("Binaries"),
             TEXT("Mac"),
             TEXT("UnrealPak")
     );
-#endif
-
+#else
 	return TEXT("");
+#endif
 }
 
 FString UFlibHotPatcherCoreHelper::GetUECmdBinary()
@@ -988,24 +987,23 @@ FString UFlibHotPatcherCoreHelper::GetUECmdBinary()
 	return FPaths::Combine(
         FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
         TEXT("Binaries"),PlatformName,FString::Printf(TEXT("%s%s-Cmd.exe"),*Binary,bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-%s-%s"),*PlatformName,*ConfigutationName)));
-#endif
-	
-#if PLATFORM_MAC
-#if ENGINE_MAJOR_VERSION < 5 && ENGINE_MINOR_VERSION <= 21
-	return FPaths::Combine(
-			FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
-			TEXT("Binaries"),TEXT("Mac"),TEXT("UE4Editor.app/Contents/MacOS"),
-			FString::Printf(TEXT("%s%s"),*Binary,
-				bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
+#elif PLATFORM_MAC
+	#if ENGINE_MAJOR_VERSION < 5 && ENGINE_MINOR_VERSION <= 21
+		return FPaths::Combine(
+				FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
+				TEXT("Binaries"),TEXT("Mac"),TEXT("UE4Editor.app/Contents/MacOS"),
+				FString::Printf(TEXT("%s%s"),*Binary,
+					bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
+	#else
+		return FPaths::Combine(
+				FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
+				TEXT("Binaries"),TEXT("Mac"),
+				FString::Printf(TEXT("%s%s-Cmd"),*Binary,
+					bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
+	#endif
 #else
-	return FPaths::Combine(
-			FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
-			TEXT("Binaries"),TEXT("Mac"),
-			FString::Printf(TEXT("%s%s-Cmd"),*Binary,
-				bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
-#endif
-#endif
 	return TEXT("");
+#endif
 }
 
 

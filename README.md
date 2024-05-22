@@ -18,6 +18,8 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 
 **start**
 "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug.exe" "D:\ActionRPG\ActionRPG.uproject" -skipcompile
+**attach**
+-waitforattach/-WaitForDebugger
 
 # Special Thanks
 - [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent)

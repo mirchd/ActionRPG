@@ -338,7 +338,7 @@ local function match_upvalues(value_info_map, old_upvalues)
                         if not ret[id] then
                             local replaced_upvalue = nil
                             if old_upvalues[name] ~= nil then
-                                replaced_upvalue = new_upvalue
+                                replaced_upvalue = old_upvalues[name]
                             else
                                 -- 新增的upvalue
                                 print("ADD NEW UPVALUE : ", tostring(new), name, tostring(new_upvalue))

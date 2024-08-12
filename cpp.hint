@@ -11,6 +11,7 @@
 #define UPARAM(...)
 #define UENUM(...)
 #define UDELEGATE(...)
+#deinfe GENERATED_BODY(...)
 
 #define GENERATED_USTRUCT_BODY(...)
 #define GENERATED_UCLASS_BODY(...)
@@ -48,7 +49,14 @@
 #define TEXT(...)
 #define UE_LOG(...)
 
-# HotPatcher Plugins
+// GameplayAbilities
+#define ATTRIBUTE_ACCESSORS(...)
+#define GAMEPLAYATTRIBUTE_PROPERTY_GETTER(...)
+#define GAMEPLAYATTRIBUTE_VALUE_GETTER(...)
+#define GAMEPLAYATTRIBUTE_VALUE_SETTER(...)
+#define GAMEPLAYATTRIBUTE_VALUE_INITTER(...)
+
+// HotPatcher Plugins
 #define DECL_HACK_PRIVATE_DATA(...)
 #define DECL_HACK_PRIVATE_STATIC_DATA(...)
 #define DECL_HACK_PRIVATE_STATIC_FUNCTION(...)

@@ -7,3 +7,6 @@
 [submodule "Plugins/vc-ue-extensions"]
 	path = Plugins/vc-ue-extensions
 	url = https://github.com/microsoft/vc-ue-extensions.git
+[submodule "Plugins/HoudiniEngineForUnreal"]
+	path = Plugins/HoudiniEngineForUnreal
+	url = https://github.com/sideeffects/HoudiniEngineForUnreal.git

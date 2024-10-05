@@ -29,5 +29,6 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 - [vc-ue-extensions](https://github.com/microsoft/vc-ue-extensions)
 - [StreetMap](https://github.com/ue4plugins/StreetMap)
 - [HotPatcher](https://github.com/hxhb/HotPatcher)
+- [HoudiniEngineForUnreal](https://github.com/sideeffects/HoudiniEngineForUnreal)
 
 

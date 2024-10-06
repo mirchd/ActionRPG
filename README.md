@@ -21,6 +21,9 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 **attach**
 -waitforattach/-WaitForDebugger
 
+**start engine**
+"D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug.exe"
+
 # Special Thanks
 - [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent)
 - [UnLua](https://github.com/Tencent/UnLua)

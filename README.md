@@ -21,6 +21,9 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 **attach**
 -waitforattach/-WaitForDebugger
 
+**Refresh platform status**
+"D:/UnrealEngine/Engine/Build/BatchFiles/RunUAT.bat"  -ScriptsForProject="D:/ActionRPG/ActionRPG.uproject" Turnkey -utf8output -WaitForUATMutex -command=VerifySdk -ReportFilename="D:/ActionRPG/Intermediate/TurnkeyReport_4.log" -log="D:/ActionRPG/Intermediate/TurnkeyLog_4.log" -project="D:/ActionRPG/ActionRPG.uproject"  -platform=all
+
 **start engine**
 "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug.exe"
 

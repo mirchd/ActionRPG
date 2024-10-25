@@ -111,7 +111,7 @@ struct FCookCluster
     bool bCacheDDCOnly = false;
 
     UPROPERTY()
-    ECookClusterType ClusterType = ECookClusterType::Normal;
+    ECookClusterType ClusterType;
 public: // for advanced cook
     UPROPERTY()
     bool bShaderCluster = false;

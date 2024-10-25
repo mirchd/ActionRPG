@@ -40,7 +40,9 @@
 #include "Internationalization/PackageLocalizationManager.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/EngineVersionComparison.h"
+#if !UE_VERSION_OLDER_THAN(5,4,0)
 #include "AssetCompilingManager.h"
+#endif
 
 DEFINE_LOG_CATEGORY(LogHotPatcherCoreHelper);
 
@@ -308,7 +310,11 @@ FString UFlibHotPatcherCoreHelper::GetProjectCookedDir()
 #include "CookOnTheSide/CookOnTheFlyServer.h"
 #include "HACK_PRIVATE_MEMBER_UTILS.hpp"
 DECL_HACK_PRIVATE_NOCONST_FUNCTION(UCookOnTheFlyServer, FindOrCreatePackageWriter, ICookedPackageWriter&, const ITargetPlatform* TargetPlatform)
-DECL_HACK_PRIVATE_DATA(UCookOnTheFlyServer, TUniquePtr<UE::Cook::FCookSandbox>, SandboxFile)
+	#if UE_VERSION_OLDER_THAN(5,4,0)
+		DECL_HACK_PRIVATE_DATA(UCookOnTheFlyServer, TUniquePtr<class FSandboxPlatformFile>, SandboxFile)
+	#else
+		DECL_HACK_PRIVATE_DATA(UCookOnTheFlyServer, TUniquePtr<class UE::Cook::FCookSandbox>, SandboxFile)
+	#endif
 #endif
 
 FSavePackageContext* UFlibHotPatcherCoreHelper::CreateSaveContext(const ITargetPlatform* TargetPlatform,
@@ -639,7 +645,11 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 			PackageArgs.TargetPlatform = Platform.Value;
 			PackageArgs.bSlowTask = false;
 			PackageArgs.FinalTimeStamp = FDateTime::MinValue();
+			#if UE_VERSION_OLDER_THAN(5,4,0)
+			FArchiveCookContext ArchiveCookContext(Package, FArchiveCookContext::ECookType::ECookByTheBook, FArchiveCookContext::ECookingDLC::ECookingDLCNo);
+			#else
 			FArchiveCookContext ArchiveCookContext(Package, UE::Cook::ECookType::ByTheBook, UE::Cook::ECookingDLC::No);
+			#endif
 			FArchiveCookData CookData(*Platform.Value, ArchiveCookContext);
 			PackageArgs.ArchiveCookData = &CookData;
 			
@@ -945,11 +955,11 @@ FString UFlibHotPatcherCoreHelper::GetUnrealPakBinary()
 	return FPaths::Combine(
         FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
         TEXT("Binaries"),
-	#if PLATFORM_64BITS	
+#if PLATFORM_64BITS	
         TEXT("Win64"),
-	#else
+#else
         TEXT("Win32"),
-	#endif
+#endif
         TEXT("UnrealPak.exe")
     );
 #elif PLATFORM_MAC
@@ -960,6 +970,7 @@ FString UFlibHotPatcherCoreHelper::GetUnrealPakBinary()
             TEXT("UnrealPak")
     );
 #else
+
 	return TEXT("");
 #endif
 }
@@ -988,19 +999,19 @@ FString UFlibHotPatcherCoreHelper::GetUECmdBinary()
         FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
         TEXT("Binaries"),PlatformName,FString::Printf(TEXT("%s%s-Cmd.exe"),*Binary,bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-%s-%s"),*PlatformName,*ConfigutationName)));
 #elif PLATFORM_MAC
-	#if ENGINE_MAJOR_VERSION < 5 && ENGINE_MINOR_VERSION <= 21
-		return FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
-				TEXT("Binaries"),TEXT("Mac"),TEXT("UE4Editor.app/Contents/MacOS"),
-				FString::Printf(TEXT("%s%s"),*Binary,
-					bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
-	#else
-		return FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
-				TEXT("Binaries"),TEXT("Mac"),
-				FString::Printf(TEXT("%s%s-Cmd"),*Binary,
-					bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
-	#endif
+#if ENGINE_MAJOR_VERSION < 5 && ENGINE_MINOR_VERSION <= 21
+	return FPaths::Combine(
+			FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
+			TEXT("Binaries"),TEXT("Mac"),TEXT("UE4Editor.app/Contents/MacOS"),
+			FString::Printf(TEXT("%s%s"),*Binary,
+				bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
+#else
+	return FPaths::Combine(
+			FPaths::ConvertRelativePathToFull(FPaths::EngineDir()),
+			TEXT("Binaries"),TEXT("Mac"),
+			FString::Printf(TEXT("%s%s-Cmd"),*Binary,
+				bIsDevelopment ? TEXT("") : *FString::Printf(TEXT("-Mac-%s"),*ConfigutationName)));
+#endif
 #else
 	return TEXT("");
 #endif

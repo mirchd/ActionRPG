@@ -27,6 +27,12 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 **start engine**
 "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug.exe"
 
+**pack Android**
+"D:/UnrealEngine/Engine/Build/BatchFiles/RunUAT.bat"  -ScriptsForProject="D:/ActionRPG/ActionRPG.uproject" Turnkey -command=VerifySdk -platform=Android -UpdateIfNeeded -EditorIO -EditorIOPort=62599  -project="D:/ActionRPG/ActionRPG.uproject" BuildCookRun -nop4 -utf8output -nocompileeditor -skipbuildeditor -cook  -project="D:/ActionRPG/ActionRPG.uproject" -target=ActionRPG  -unrealexe="D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" -platform=Android  -cookflavor=ASTC -SkipCookingEditorContent -stage -archive -package -build -pak -iostore -compressed -archivedirectory="D:/ActionRPG/Build/apk" -manifests -CrashReporter -clientconfig=Development -nocompile -nocompileuat
+dotnet  AutomationTool.dll -ScriptsForProject="D:/ActionRPG/ActionRPG.uproject" Turnkey -command=VerifySdk -platform=Android -UpdateIfNeeded -EditorIO -EditorIOPort=62599  -project="D:/ActionRPG/ActionRPG.uproject" BuildCookRun -nop4 -utf8output -nocompileeditor -skipbuildeditor -cook  -project="D:/ActionRPG/ActionRPG.uproject" -target=ActionRPG  -unrealexe="D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" -platform=Android  -cookflavor=ASTC -SkipCookingEditorContent -stage -archive -package -build -pak -iostore -compressed -archivedirectory="D:/ActionRPG/Build/apk" -manifests -CrashReporter -clientconfig=Development -nocompile -nocompileuat
+"D:\UnrealEngine\Engine\Binaries\ThirdParty\DotNet\6.0.302\windows\dotnet.exe" "D:\UnrealEngine\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Target="UnrealPak Win64 Development -Project=D:\ActionRPG\ActionRPG.uproject -Manifest=D:\UnrealEngine\Engine\Intermediate\Build\Manifest-1-UnrealPak-Win64-Development.xml" -Target="ActionRPG Android Development -Project=D:\ActionRPG\ActionRPG.uproject -Manifest=D:\UnrealEngine\Engine\Intermediate\Build\Manifest-2-ActionRPG-Android-Development.xml  -remoteini=\"D:\ActionRPG\"  -skipdeploy " -log="D:\UnrealEngine\Engine\Programs\AutomationTool\Saved\Logs\UBA-UnrealPak-Win64-Development.txt"
+
+
 # Special Thanks
 - [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent)
 - [UnLua](https://github.com/Tencent/UnLua)

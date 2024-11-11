@@ -26,3 +26,5 @@ Plugins/*/Intermediate/
 WindowsNoEditor/
 MacNoEditor/
 Android_*/
+Build/apk/*
+Build/ipa/*

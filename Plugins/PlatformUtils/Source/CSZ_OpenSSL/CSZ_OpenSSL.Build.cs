@@ -28,15 +28,15 @@ public class CSZ_OpenSSL : ModuleRules
             PublicAdditionalLibraries.Add(Path.Combine(LibPath, "libcrypto.a"));
             PublicAdditionalLibraries.Add("z");
         }
-        else if (Target.Platform == UnrealTargetPlatform.PS4)
+        /*else if (Target.Platform == UnrealTargetPlatform.PS4)
         {
             string IncludePath = Target.UEThirdPartySourceDirectory + "OpenSSL/1.0.2g" + "/" + "include/PS4";
             string LibraryPath = Target.UEThirdPartySourceDirectory + "OpenSSL/1.0.2g" + "/" + "lib/PS4/release";
             PublicIncludePaths.Add(IncludePath);
             PublicAdditionalLibraries.Add(LibraryPath + "/" + "libssl.a");
             PublicAdditionalLibraries.Add(LibraryPath + "/" + "libcrypto.a");
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Win64 || Target.Platform == UnrealTargetPlatform.Win32)
+        }*/
+        else if (Target.Platform == UnrealTargetPlatform.Win64/* || Target.Platform == UnrealTargetPlatform.Win32*/)
         {
             // Our OpenSSL 1.1.1 libraries are built with zlib compression support
             PrivateDependencyModuleNames.Add("zlib");
@@ -48,7 +48,7 @@ public class CSZ_OpenSSL : ModuleRules
 
             // Add Libs
             string LibPath = Path.Combine(OpenSSL111kPath, "lib", PlatformSubdir, VSVersion, ConfigFolder);
-            PublicLibraryPaths.Add(LibPath);
+            //PublicLibraryPaths.Add(LibPath);
 
             PublicAdditionalLibraries.Add(Path.Combine(LibPath, "libssl.lib"));
             PublicAdditionalLibraries.Add(Path.Combine(LibPath, "libcrypto.lib"));
@@ -61,7 +61,7 @@ public class CSZ_OpenSSL : ModuleRules
             string LibraryPath = OpenSSL111kPath + "/lib" + platform;
 
             PublicIncludePaths.Add(IncludePath);
-            PublicLibraryPaths.Add(LibraryPath);
+            //PublicLibraryPaths.Add(LibraryPath);
             PublicAdditionalLibraries.Add(LibraryPath + "/libssl.a");
             PublicAdditionalLibraries.Add(LibraryPath + "/libcrypto.a");
 

@@ -1,6 +1,3 @@
-#pragma once
-
-
 #include "Android/AndroidPlatformUtils.h"
 #include "Android/AndroidPlatform.h"
 #include "Android/AndroidJNI.h"

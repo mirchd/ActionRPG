@@ -41,6 +41,7 @@ dotnet  AutomationTool.dll -ScriptsForProject="D:/ActionRPG/ActionRPG.uproject" 
 - [vc-ue-extensions](https://github.com/microsoft/vc-ue-extensions)
 - [StreetMap](https://github.com/ue4plugins/StreetMap)
 - [HotPatcher](https://github.com/hxhb/HotPatcher)
+- [PlatformUtils](https://github.com/hxhb/PlatformUtils)
 - [HoudiniEngineForUnreal](https://github.com/sideeffects/HoudiniEngineForUnreal)
 
 

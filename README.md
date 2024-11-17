@@ -5,8 +5,8 @@ ActionRPG (not just ARPG) for ue5.
 
 ### generate sln
 - "D:\program\Unreal\Epic Games\Launcher\Engine\Binaries\Win64\UnrealVersionSelector.exe" /projectfiles "D:\ActionRPG\ActionRPG.uproject"
--- "D:/UnrealEngine/Engine/Build/BatchFiles/Build.bat"  -projectfiles -project="D:/ActionRPG/ActionRPG.uproject" -game -engine -progress -log="D:/ActionRPG/Saved/Logs/UnrealVersionSelector-2024.03.08-08.48.16.log"
---- dotnet  "D:\UnrealEngine\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -projectfiles -project="D:/ActionRPG/ActionRPG.uproject" -game -engine -progress -log="D:/ActionRPG/Saved/Logs/UnrealVersionSelector-2024.03.08-08.56.50.log"
+-- C:\WINDOWS\system32\cmd.exe /c ""D:/UnrealEngine/Engine/Build/BatchFiles/Build.bat"  -projectfiles -project="D:/ActionRPG/ActionRPG.uproject" -game -engine -progress -log="D:\ActionRPG/Saved/Logs/UnrealVersionSelector-2024.11.17-08.15.46.log""
+--- dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -projectfiles -project="D:/ActionRPG/ActionRPG.uproject" -game -engine -progress -log="D:\ActionRPG/Saved/Logs/UnrealVersionSelector-2024.11.17-08.15.46.log"
 
 
 **Running UnrealBuildTool**

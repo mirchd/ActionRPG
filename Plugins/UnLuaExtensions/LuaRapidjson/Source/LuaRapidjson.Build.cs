@@ -27,7 +27,7 @@ public class LuaRapidjson : ModuleRules
 #endif
         bUseUnity = false;
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        bEnableUndefinedIdentifierWarnings = false;
+        UndefinedIdentifierWarningLevel = WarningLevel.Off;
         bEnableExceptions = true;
 
         PublicDependencyModuleNames.AddRange(

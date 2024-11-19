@@ -1030,7 +1030,7 @@ namespace UnLua
     void TExportedClass<bIsReflected, ClassType, CtorArgType...>::AddDefaultFunctions(FFalse NotReflected)
     {
         AddConstructor(std::conditional_t<TIsConstructible<ClassType, CtorArgType...>::Value, FTrue, FFalse>());
-        AddDestructor(std::conditional_t<TAnd<TIsDestructible<ClassType>, TNot<TIsTriviallyDestructible<ClassType>>>::Value, FFalse, FTrue>());
+        AddDestructor(std::conditional_t<TAnd<TIsDestructible<ClassType>, TNot<std::is_trivially_destructible_v<ClassType>>>::Value, FFalse, FTrue>());
     }
 
     template <bool bIsReflected, typename ClassType, typename... CtorArgType>

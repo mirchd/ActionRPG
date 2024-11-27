@@ -10,3 +10,6 @@
 [submodule "Plugins/HoudiniEngineForUnreal"]
 	path = Plugins/HoudiniEngineForUnreal
 	url = https://github.com/sideeffects/HoudiniEngineForUnreal.git
+[submodule "Plugins/LuaMachine"]
+	path = Plugins/LuaMachine
+	url = https://github.com/rdeioris/LuaMachine.git

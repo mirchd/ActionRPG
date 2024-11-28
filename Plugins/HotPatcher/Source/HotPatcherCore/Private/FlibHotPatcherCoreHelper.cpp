@@ -1618,7 +1618,7 @@ bool UFlibHotPatcherCoreHelper::SerializeAssetRegistry(IAssetRegistry* AssetRegi
 	AssetRegistry->InitializeTemporaryAssetRegistryState(State, SaveOptions, true);
 	for(const auto& AssetPackagePath:PackagePaths)
 	{
-		if (State.GetAssetByObjectPath(FName(*AssetPackagePath)))
+		if (State.GetAssetByObjectPath(FSoftObjectPath(AssetPackagePath)))
 		{
 			UE_LOG(LogHotPatcherCoreHelper, Warning, TEXT("%s already add to AssetRegistryState!"), *AssetPackagePath);
 			continue;

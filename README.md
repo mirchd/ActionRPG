@@ -36,9 +36,9 @@ dotnet  "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Targ
 
 # Special Thanks
 - [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent)
-- [UnLua](https://github.com/Tencent/UnLua)
+- [LuaMachine](https://github.com/rdeioris/LuaMachine)
 - [ActionRPG](https://docs.unrealengine.com/4.27/zh-CN/Resources/SampleGames/ARPG/)
-- [UE5.4](https://www.unrealengine.com/zh-CN/unreal-engine-5)
+- [UE5.5](https://www.unrealengine.com/zh-CN/unreal-engine-5)
 - [vc-ue-extensions](https://github.com/microsoft/vc-ue-extensions)
 - [StreetMap](https://github.com/ue4plugins/StreetMap)
 - [HotPatcher](https://github.com/hxhb/HotPatcher)

@@ -1,9 +1,12 @@
 #include "Cooker/MultiCooker/FCookShaderCollectionProxy.h"
 #include "FlibHotPatcherCoreHelper.h"
 #include "Cooker/MultiCooker/FlibHotCookerHelper.h"
-#include "ShaderLibUtils//FlibShaderCodeLibraryHelper.h"
+#include "ShaderLibUtils/FlibShaderCodeLibraryHelper.h"
 #include "Interfaces/ITargetPlatform.h"
 #include "Resources/Version.h"
+#include "LayeredCookArtifactReader.h"
+#include "ZenCookArtifactReader.h"
+
 
 FCookShaderCollectionProxy::FCookShaderCollectionProxy(const TArray<FString>& InPlatformNames,const FString& InLibraryName,bool bInShareShader,bool InIsNative,bool bInMaster,const FString& InSaveBaseDir)
 :PlatformNames(InPlatformNames),LibraryName(InLibraryName),bShareShader(bInShareShader),bIsNative(InIsNative),bMaster(bInMaster),SaveBaseDir(InSaveBaseDir){}
@@ -14,7 +17,22 @@ void FCookShaderCollectionProxy::Init()
 {
 	if(bShareShader)
 	{
-		SHADER_COOKER_CLASS::InitForCooking(bIsNative);
+		TUniquePtr<FLayeredCookArtifactReader> AllContextArtifactReader = MakeUnique<FLayeredCookArtifactReader>();
+
+		FString OverrideCookedDir = FPaths::Combine(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()), TEXT("Cooked"));
+		for (const auto& PlatformName : PlatformNames)
+		{
+			ITargetPlatform* TargetPlatform = UFlibHotPatcherCoreHelper::GetPlatformByName(PlatformName);
+			
+			const FString ResolvedProjectPath = FPaths::Combine(OverrideCookedDir, FString::Printf(TEXT("%s/%s"), *TargetPlatform->PlatformName(), FApp::GetProjectName()));
+			const FString ResolvedMetadataPath = FPaths::Combine(ResolvedProjectPath, TEXT("Mededata"));
+
+			TSharedRef<FZenCookArtifactReader> ZenReader = MakeShared<FZenCookArtifactReader>(ResolvedProjectPath, ResolvedMetadataPath, TargetPlatform);
+			AllContextArtifactReader->AddLayer(ZenReader);
+		}
+
+		SHADER_COOKER_CLASS::InitForCooking(bIsNative, AllContextArtifactReader.Get());
+
 		for(const auto& PlatformName:PlatformNames)
 		{
 			ITargetPlatform* TargetPlatform = UFlibHotPatcherCoreHelper::GetPlatformByName(PlatformName);

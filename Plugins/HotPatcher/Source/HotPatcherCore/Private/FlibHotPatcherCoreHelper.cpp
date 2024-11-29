@@ -39,9 +39,9 @@
 #include "HotPatcherRuntime.h"
 #include "Internationalization/PackageLocalizationManager.h"
 #include "Misc/ScopeExit.h"
-#include "Misc/EngineVersionComparison.h"
 #if !UE_VERSION_OLDER_THAN(5,4,0)
 #include "AssetCompilingManager.h"
+#include "ZenCookArtifactReader.h"
 #endif
 
 DEFINE_LOG_CATEGORY(LogHotPatcherCoreHelper);

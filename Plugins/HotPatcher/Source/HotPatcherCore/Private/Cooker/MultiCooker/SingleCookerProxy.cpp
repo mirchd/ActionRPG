@@ -261,7 +261,7 @@ void USingleCookerProxy::PreGeneratePlatformData(const FCookCluster& CookCluster
 						ExportObj->ConditionalPostLoad();
 					}
 				});
-			PreCachePackages.RemoveAtSwap(Index,1,false);
+			PreCachePackages.RemoveAtSwap(Index, 1, EAllowShrinking::No);
 			if(GShaderCompilingManager->IsCompiling())
 			{
 				SCOPED_NAMED_EVENT_TEXT("GShaderCompilingManager::ProcessAsyncResults",FColor::Red);

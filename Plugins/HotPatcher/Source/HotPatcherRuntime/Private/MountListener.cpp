@@ -15,7 +15,7 @@ void UMountListener::Init()
     if(!HasAnyFlags(RF_ClassDefaultObject))
     {
 #if ENGINE_MAJOR_VERSION >4 || ENGINE_MINOR_VERSION >=26
-    	FCoreDelegates::OnPakFileMounted2.AddLambda([this](const IPakFile& PakFile){this->OnMountPak(*PakFile.PakGetPakFilename(),0);});
+    	FCoreDelegates::GetOnPakFileMounted2().AddLambda([this](const IPakFile& PakFile){this->OnMountPak(*PakFile.PakGetPakFilename(),0);});
 #endif
 
 #if ENGINE_MINOR_VERSION <=25 && ENGINE_MINOR_VERSION > 24

@@ -321,7 +321,7 @@ namespace THotPatcherTemplateHelper
 				result.Add(SrcArray[Index]);
 				if(RemoveFromSrc)
 				{
-					SrcArray.RemoveAtSwap(Index,1,false);
+					SrcArray.RemoveAtSwap(Index, 1, EAllowShrinking::No);
 				}
 			}
 		}

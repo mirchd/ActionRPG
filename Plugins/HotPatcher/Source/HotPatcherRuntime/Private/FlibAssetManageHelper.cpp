@@ -410,7 +410,7 @@ FAssetDetail UFlibAssetManageHelper::GetAssetDetailByPackageName(const FString& 
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetDetailByPackageName",FColor::Red);
 	FAssetDetail AssetDetail;
 	UAssetManager& AssetManager = UAssetManager::Get();
-	if (AssetManager.IsValid())
+	if (AssetManager.IsInitialized())
 	{
 		FString PackagePath = UFlibAssetManageHelper::LongPackageNameToPackagePath(InPackageName);
 		{

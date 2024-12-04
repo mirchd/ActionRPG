@@ -271,7 +271,7 @@ FAssetDependenciesInfo UFlibAssetManageHelper::CombineAssetDependencies(const FA
 
 
 bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& LongPackageName,
-	const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
+	const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	bool bStatus = false;
 	{
@@ -323,7 +323,7 @@ bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& L
 }
 
 
-bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
+bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetReference",FColor::Red);
 	FString LongPackageName = UFlibAssetManageHelper::PackagePathToLongPackageName(InAsset.PackagePath.ToString());
@@ -331,7 +331,7 @@ bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, cons
 }
 
 void UFlibAssetManageHelper::GetAssetReferenceRecursively(const FAssetDetail& InAsset,
-                                                          const TArray<EAssetRegistryDependencyType::Type>&
+                                                          const TArray<UE::AssetRegistry::EDependencyCategory>&
                                                           SearchAssetDepTypes,
                                                           const TArray<FString>& SearchAssetsTypes,
                                                           TArray<FAssetDetail>& OutRefAsset, bool bRecursive)
@@ -380,7 +380,7 @@ void UFlibAssetManageHelper::GetAssetReferenceRecursively(const FAssetDetail& In
 bool UFlibAssetManageHelper::GetAssetReferenceEx(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyTypeEx>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetReferenceEx",FColor::Red);
-	TArray<EAssetRegistryDependencyType::Type> local_SearchAssetDepTypes;
+	TArray<UE::AssetRegistry::EDependencyCategory> local_SearchAssetDepTypes;
 	for (const auto& type : SearchAssetDepTypes)
 	{
 		local_SearchAssetDepTypes.AddUnique(UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(type));
@@ -1220,9 +1220,9 @@ FString UFlibAssetManageHelper::ParserModuleAssetsNumMap(const TMap<FString, uin
 	return result;
 }
 
-EAssetRegistryDependencyType::Type UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType)
+UE::AssetRegistry::EDependencyCategory UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType)
 {
-	return static_cast<EAssetRegistryDependencyType::Type>((uint8)(InType));
+	return static_cast<UE::AssetRegistry::EDependencyCategory>((uint8)(InType));
 }
 
 void UFlibAssetManageHelper::GetAssetDataInPaths(const TArray<FString>& Paths, TArray<FAssetData>& OutAssetData)

@@ -220,7 +220,7 @@ TSet<FName> FAssetDependenciesParser::GatherAssetDependicesInfoRecursively(
 	UFlibAssetManageHelper::GetAssetsDataByPackageName(InLongPackageName.ToString(),CurrentAssetData);
 
 	bool bGetDependenciesSuccess = false;
-	EAssetRegistryDependencyType::Type TotalType = EAssetRegistryDependencyType::None;
+	UE::AssetRegistry::EDependencyCategory TotalType = UE::AssetRegistry::EDependencyCategory::None;
 
 	for (const auto& DepType : InAssetDependencyTypes)
 	{

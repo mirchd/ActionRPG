@@ -1449,7 +1449,7 @@ TArray<FAssetDetail> UFlibHotPatcherCoreHelper::GetReferenceRecursivelyByClassNa
 	TArray<FAssetDetail> Results;
 	
 	TArray<EAssetRegistryDependencyTypeEx> AssetRegistryDepTypes {EAssetRegistryDependencyTypeEx::Hard};
-	TArray<EAssetRegistryDependencyType::Type> SearchTypes;
+	TArray<UE::AssetRegistry::EDependencyCategory> SearchTypes;
 	for(auto TypeEx:AssetRegistryDepTypes)
 	{
 		SearchTypes.AddUnique(UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(TypeEx));

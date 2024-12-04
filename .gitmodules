@@ -1,9 +1,9 @@
 [submodule "Plugins/StreetMap"]
 	path = Plugins/StreetMap
-	url = https://github.com/ue4plugins/StreetMap.git
+	url = https://github.com/mirchd/StreetMap.git
 [submodule "Plugins/RealtimeMeshComponent"]
 	path = Plugins/RealtimeMeshComponent
-	url = https://github.com/TriAxis-Games/RealtimeMeshComponent.git
+	url = https://github.com/mirchd/RealtimeMeshComponent.git
 [submodule "Plugins/vc-ue-extensions"]
 	path = Plugins/vc-ue-extensions
 	url = https://github.com/microsoft/vc-ue-extensions.git

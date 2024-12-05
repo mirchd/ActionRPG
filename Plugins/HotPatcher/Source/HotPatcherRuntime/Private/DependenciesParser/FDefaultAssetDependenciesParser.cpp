@@ -252,7 +252,8 @@ TSet<FName> FAssetDependenciesParser::GatherAssetDependicesInfoRecursively(
 		{
 #if WITH_EDITOR
 			FString DisplayStr = FString::Printf(TEXT("LoadWorld %s"),*CurrentAssetData.GetFullName());
-			FScopedNamedEvent CacheClassEvent(FColor::Red,*DisplayStr);
+			SCOPED_NAMED_EVENT_FSTRING(DisplayStr, (FColor::Red))
+			
 			UWorld* World = UWorld::FindWorldInPackage(CurrentAssetData.GetAsset()->GetOutermost());
 			if (World)
 			{

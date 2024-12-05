@@ -233,7 +233,8 @@ void UPatcherProxy::Shutdown()
 
 bool UPatcherProxy::DoExport()
 {
-	FScopedNamedEventStatic DoExportTag(FColor::Red,*FString::Printf(TEXT("DoExport_%s"),*GetSettingObject()->VersionId));
+	SCOPED_NAMED_EVENT_F( TEXT("DoExport_%s"), (FColor::Red),(*GetSettingObject()->VersionId) )
+	
 	PatchContext = MakeShareable(new FHotPatcherPatchContext);
 	PatchContext->PatchProxy = this;
 	PatchContext->OnPaking.AddLambda([this](const FString& One,const FString& Msg){this->OnPaking.Broadcast(One,Msg);});

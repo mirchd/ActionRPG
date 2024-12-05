@@ -1411,18 +1411,16 @@ void UFlibAssetManageHelper::LoadPackageAsync(FSoftObjectPath ObjectPath,TFuncti
 UPackage* UFlibAssetManageHelper::LoadPackage(UPackage* InOuter, const TCHAR* InLongPackageName, uint32 LoadFlags,
 	FArchive* InReaderOverride)
 {
-#if ENGINE_MINOR_VERSION < 26
-	FScopedNamedEvent CookPackageEvent(FColor::Red,*FString::Printf(TEXT("LoadPackage %s"),InLongPackageName));
-#endif
+	SCOPED_NAMED_EVENT_F(TEXT("LoadPackage %s"), (FColor::Red), InLongPackageName)
+	
 	UE_LOG(LogHotPatcher,Verbose,TEXT("Load %s"),InLongPackageName);
 	return ::LoadPackage(InOuter,InLongPackageName,LoadFlags,InReaderOverride);
 }
 
 UPackage* UFlibAssetManageHelper::GetPackage(FName PackageName)
 {
-#if ENGINE_MINOR_VERSION < 26
-	FScopedNamedEvent CookPackageEvent(FColor::Red,*FString::Printf(TEXT("GetPackage %s"),*PackageName.ToString()));
-#endif
+	SCOPED_NAMED_EVENT_F(TEXT("GetPackage %s"), (FColor::Red), (*PackageName.ToString()))
+
 	if (PackageName == NAME_None)
 	{
 		return NULL;

@@ -32,7 +32,6 @@ void SHotPatcherCookMaps::Construct(const FArguments& InArgs, TSharedPtr<FHotPat
 					.DefaultLabel(LOCTEXT("MapListMapNameColumnHeader", "Map"))
 					.FillWidth(1.0f)
 				)
-				.ItemHeight(16.0f)
 				.ListItemsSource(&MapList)
 				.OnGenerateRow(this, &SHotPatcherCookMaps::HandleMapListViewGenerateRow)
 				.SelectionMode(ESelectionMode::None)

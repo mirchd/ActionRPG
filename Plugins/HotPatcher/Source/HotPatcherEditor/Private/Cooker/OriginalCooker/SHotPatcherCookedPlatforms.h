@@ -20,7 +20,7 @@ class SHotPatcherCookedPlatforms
 public:
 
 	SLATE_BEGIN_ARGS(SHotPatcherCookedPlatforms) { }
-	SLATE_END_ARGS()
+	SLATE_END_ARGS();
 
 public:
 

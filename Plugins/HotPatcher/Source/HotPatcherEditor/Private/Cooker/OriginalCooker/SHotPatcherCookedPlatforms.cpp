@@ -30,7 +30,6 @@ void SHotPatcherCookedPlatforms::Construct(const FArguments& InArgs, TSharedPtr<
 				.DefaultLabel(LOCTEXT("PlatformListPlatformNameColumnHeader", "Platform"))
 				.FillWidth(1.0f)
 				)
-				.ItemHeight(16.0f)
 				.ListItemsSource(&PlatformList)
 				.OnGenerateRow(this, &SHotPatcherCookedPlatforms::HandlePlatformListViewGenerateRow)
 				.SelectionMode(ESelectionMode::None)

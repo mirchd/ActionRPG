@@ -157,7 +157,7 @@ bool UFlibAssetManageHelper::GetWPWorldGUID(FAssetDetail& AssetDetail)
 	bool bIsWPMap = false;
 	if(AssetDetail.AssetType.IsEqual(TEXT("World")))
 	{
-		FSoftObjectPath WorldPath(AssetDetail.PackagePath);
+		FSoftObjectPath WorldPath(AssetDetail.PackagePath.ToString());
 		FString Filename = FPackageName::LongPackageNameToFilename(WorldPath.GetLongPackageName(),FPackageName::GetMapPackageExtension());
 		if(FPaths::FileExists(Filename))
 		{

@@ -643,7 +643,9 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 			PackageArgs.SaveFlags = SaveFlags;
 			PackageArgs.Error = GError;
 			PackageArgs.SavePackageContext = CurrentPlatformPackageContext;
-			PackageArgs.TargetPlatform = Platform.Value;
+			const ITargetPlatform* CookedTargetPlatform = PackageArgs.GetTargetPlatform();
+			if(CookedTargetPlatform != nullptr)
+				CookedTargetPlatform = Platform.Value;
 			PackageArgs.bSlowTask = false;
 			PackageArgs.FinalTimeStamp = FDateTime::MinValue();
 			#if UE_VERSION_OLDER_THAN(5,4,0)

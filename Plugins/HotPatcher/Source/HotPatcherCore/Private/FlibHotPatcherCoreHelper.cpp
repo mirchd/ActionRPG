@@ -682,16 +682,13 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 #endif
 				Info.PackageName = Package->GetFName();
 				// PRAGMA_DISABLE_DEPRECATION_WARNINGS
-				Info.PackageGuid = FGuid::NewGuid(); //AssetPackageData ? AssetPackageData->PackageGuid : FGuid::NewGuid();
+				Info.PackageHash = FIoHash();
 				// PRAGMA_ENABLE_DEPRECATION_WARNINGS
 				// Info.Attachments.Add({ "Dependencies", TargetDomainDependencies });
 				// TODO: Reenable BuildDefinitionList once FCbPackage support for empty FCbObjects is in
 				//Info.Attachments.Add({ "BuildDefinitionList", BuildDefinitionList });
 				Info.WriteOptions = IPackageWriter::EWriteOptions::Write;
-				if (!!(SaveFlags & SAVE_ComputeHash))
-				{
-					Info.WriteOptions |= IPackageWriter::EWriteOptions::ComputeHash;
-				}
+				Info.WriteOptions |= IPackageWriter::EWriteOptions::ComputeHash;
 				CurrentPlatformPackageContext->PackageWriter->CommitPackage(MoveTemp(Info));
 			}
 		#endif
@@ -732,7 +729,7 @@ bool UFlibHotPatcherCoreHelper::RunCmdlet(const FString& CmdletName,const FStrin
 		CmdletNameStr.Append(TEXT("Commandlet"));
 	}
 	UCommandlet* CmdletCDO = nullptr;
-	UClass* SPCTCmdletClass = FindObject<UClass>(ANY_PACKAGE, *CmdletNameStr, false);
+	UClass* SPCTCmdletClass = FindFirstObject<UClass>(*CmdletNameStr, EFindFirstObjectOptions::NativeFirst);
 	if(SPCTCmdletClass && SPCTCmdletClass->IsChildOf(UCommandlet::StaticClass()))
 	{
 		// CmdletCDO = Cast<UCommandlet>(SPCTCmdletClass->GetDefaultObject());
@@ -2319,7 +2316,7 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
 {
 	SCOPED_NAMED_EVENT_TEXT("CacheForCookedPlatformData",FColor::Red);
 	
-	TMap<UWorld*, bool> WorldsToPostSaveRoot;
+	TMap<UWorld*, FObjectPostSaveRootContext> WorldsToPostSaveRoot;
 	WorldsToPostSaveRoot.Reserve(1024);
 	
 	for(auto Package:Packages)
@@ -2386,8 +2383,12 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
 #endif
     				}
     				{
-    					bool bCleanupIsRequired = World->PreSaveRoot(TEXT(""));
-    					WorldsToPostSaveRoot.Add(World, bCleanupIsRequired);
+						FObjectSaveContextData PostContextData;
+						PostContextData.SaveFlags = SaveFlags;
+						FObjectPostSaveRootContext PostContext(PostContextData);
+						GEditor->OnPostSaveWorld(World, PostContext);
+
+    					WorldsToPostSaveRoot.Add(World, PostContext);
     				}
     				GIsCookerLoadingPackage = false;
     			}
@@ -2422,7 +2423,10 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
     					SCOPED_NAMED_EVENT_TEXT("Export PreSave",FColor::Red);
     					GIsCookerLoadingPackage = true;
     					{
-    						ExportObj->PreSave(Platform);
+							FObjectSaveContextData ContextData;
+							ContextData.TargetPlatform = Platform;
+							FObjectPreSaveContext Context(ContextData);
+    						ExportObj->PreSave(Context);
     					}
     					GIsCookerLoadingPackage = false;
     				}
@@ -2572,7 +2576,7 @@ void UFlibHotPatcherCoreHelper::WaitObjectsCachePlatformDataComplete(TSet<UObjec
 uint32 UFlibHotPatcherCoreHelper::GetCookSaveFlag(UPackage* Package, bool bUnversioned, bool bStorageConcurrent,
                                                   bool CookLinkerDiff)
 {
-	uint32 SaveFlags = SAVE_KeepGUID | SAVE_Async| SAVE_ComputeHash | (bUnversioned ? SAVE_Unversioned : 0);
+	uint32 SaveFlags = SAVE_KeepGUID | SAVE_Async | (bUnversioned ? SAVE_Unversioned : 0);
 
 #if ENGINE_MAJOR_VERSION >4 || ENGINE_MINOR_VERSION >25
 	// bool CookLinkerDiff = false;
@@ -2659,11 +2663,6 @@ FString UFlibHotPatcherCoreHelper::GetSavePackageResultStr(ESavePackageResult Re
 	case ESavePackageResult::Error:
 		{
 			Str = TEXT("Error");
-			break;
-		}
-	case ESavePackageResult::DifferentContent:
-		{
-			Str = TEXT("DifferentContent");
 			break;
 		}
 	case ESavePackageResult::GenerateStub:

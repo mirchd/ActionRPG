@@ -4,6 +4,13 @@
 .vscode
 .vsconfig
 
+# Visual Studio 2015 database file
+*.VC.db
+
+# Precompiled Headers
+*.gch
+*.pch
+
 # Ignore intermediate folders
 Intermediate/
 obj/
@@ -13,6 +20,9 @@ Saved/
 
 # Exceptions
 /*.sln
+
+# Built data for maps
+*_BuiltData.uasset
 
 # Ignore Binaries directory
 Binaries/

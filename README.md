@@ -27,11 +27,15 @@ ActionRPG (not just ARPG) for ue5.
 **start engine**<br>
 "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug.exe"<br>
 
-**pack Android**
+**pack Android**<br>
 - "D:/UnrealEngine/Engine/Build/BatchFiles/RunUAT.bat"  -ScriptsForProject="D:/ActionRPG/ActionRPG.uproject" Turnkey -command=VerifySdk -platform=Android -UpdateIfNeeded -EditorIO -EditorIOPort=54770  -project="D:/ActionRPG/ActionRPG.uproject" BuildCookRun -nop4 -utf8output -nocompileeditor -skipbuildeditor -cook  -project="D:/ActionRPG/ActionRPG.uproject" -target=ActionRPG  -unrealexe="D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" -platform=Android  -cookflavor=ASTC -SkipCookingEditorContent -stage -archive -package -build -pak -iostore -compressed -archivedirectory="D:/ActionRPG/Build/apk" -manifests -CrashReporter -clientconfig=Shipping -nocompile -nocompileuat<br>
 - dotnet  AutomationTool.dll -ScriptsForProject="D:/ActionRPG/ActionRPG.uproject" Turnkey -command=VerifySdk -platform=Android -UpdateIfNeeded -EditorIO -EditorIOPort=54770  -project="D:/ActionRPG/ActionRPG.uproject" BuildCookRun -nop4 -utf8output -nocompileeditor -skipbuildeditor -cook  -project="D:/ActionRPG/ActionRPG.uproject" -target=ActionRPG  -unrealexe="D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" -platform=Android  -cookflavor=ASTC -SkipCookingEditorContent -stage -archive -package -build -pak -iostore -compressed -archivedirectory="D:/ActionRPG/Build/apk" -manifests -CrashReporter -clientconfig=Shipping -nocompile -nocompileuat<br>
 - "D:\UnrealEngine\Engine\Binaries\ThirdParty\DotNet\6.0.302\windows\dotnet.exe" "D:\UnrealEngine\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Target="UnrealPak Win64 Development -Project=D:\ActionRPG\ActionRPG.uproject -Manifest=D:\UnrealEngine\Engine\Intermediate\Build\Manifest-1-UnrealPak-Win64-Development.xml" -Target="ActionRPG Android Shipping -Project=D:\ActionRPG\ActionRPG.uproject -Manifest=D:\UnrealEngine\Engine\Intermediate\Build\Manifest-2-ActionRPG-Android-Shipping.xml  -remoteini=\"D:\ActionRPG\"  -skipdeploy " -log="D:\UnrealEngine\Engine\Programs\AutomationTool\Saved\Logs\UBA-UnrealPak-Win64-Development.txt"<br>
 - "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" "D:\ActionRPG\ActionRPG.uproject" -run=Cook  -TargetPlatform=Android_ASTC  -unversioned -skipeditorcontent -fileopenlog -manifests -abslog="D:\UnrealEngine\Engine\Programs\AutomationTool\Saved\Cook-2024.11.12-15.02.24.txt" -stdout -CrashForUAT -unattended -NoLogTimes  -UTF8Output<br>
+
+
+**cook**<br>
+"D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" "D:\ActionRPG\ActionRPG.uproject" -run=Cook  -TargetPlatform=Android_ASTC  -unversioned -skipeditorcontent -fileopenlog -manifests -abslog="D:\UnrealEngine\Engine\Programs\AutomationTool\Saved\Cook-2024.12.09-11.10.43.txt" -stdout -CrashForUAT -unattended -NoLogTimes  -UTF8Output<br>
 
 
 # Special Thanks

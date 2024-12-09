@@ -34,10 +34,6 @@ ActionRPG (not just ARPG) for ue5.
 - "D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" "D:\ActionRPG\ActionRPG.uproject" -run=Cook  -TargetPlatform=Android_ASTC  -unversioned -skipeditorcontent -fileopenlog -manifests -abslog="D:\UnrealEngine\Engine\Programs\AutomationTool\Saved\Cook-2024.11.12-15.02.24.txt" -stdout -CrashForUAT -unattended -NoLogTimes  -UTF8Output<br>
 
 
-**cook**<br>
-"D:\UnrealEngine\Engine\Binaries\Win64\UnrealEditor-Win64-Debug-Cmd.exe" "D:\ActionRPG\ActionRPG.uproject" -run=Cook  -TargetPlatform=Android_ASTC  -unversioned -skipeditorcontent -fileopenlog -manifests -abslog="D:\UnrealEngine\Engine\Programs\AutomationTool\Saved\Cook-2024.12.09-11.10.43.txt" -stdout -CrashForUAT -unattended -NoLogTimes  -UTF8Output<br>
-
-
 # Special Thanks
 - [RealtimeMeshComponent](https://github.com/TriAxis-Games/RealtimeMeshComponent)
 - [LuaMachine](https://github.com/rdeioris/LuaMachine)

@@ -38,3 +38,4 @@ MacNoEditor/
 Android_*/
 Build/apk/*
 Build/ipa/*
+Build/Android/src

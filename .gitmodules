@@ -1,6 +1,3 @@
-[submodule "Plugins/StreetMap"]
-	path = Plugins/StreetMap
-	url = https://github.com/mirchd/StreetMap.git
 [submodule "Plugins/vc-ue-extensions"]
 	path = Plugins/vc-ue-extensions
 	url = https://github.com/microsoft/vc-ue-extensions.git

@@ -8,6 +8,10 @@ rd /s/q %~dp0PersistentDownloadDir
 rd /s/q %~dp0Debug
 rd /s/q %~dp0DerivedDataCache
 rd /s/q %~dp0Saved
+rd /s/q %~dp0Build\Android_ASTC
+rd /s/q %~dp0Build\Apk
+rd /s/q %~dp0Build\Android\src
+del %~dp0Build\Android\project.properties
 del %~dp0*.sln
 
 FOR /F "tokens=*" %%G IN ('DIR /B /AD /S bin') DO RMDIR /S /Q "%%G"

@@ -11,6 +11,8 @@ rd /s/q %~dp0Saved
 rd /s/q %~dp0Build\Android_ASTC
 rd /s/q %~dp0Build\Apk
 rd /s/q %~dp0Build\Android\src
+rd /s/q %~dp0Content\Collections
+rd /s/q %~dp0Content\Developers
 del %~dp0Build\Android\project.properties
 del %~dp0*.sln
 

@@ -222,7 +222,9 @@ namespace RealtimeMesh
 						MeshBatch.bDitheredLODTransition &= bAnyMaterialUsesDithering && !IsMovable() && LODMask.IsDithered() &&
 							MaterialMap.GetMaterialSupportsDither(Section->GetMaterialSlot());
 						MeshBatch.CastShadow &= bCastDynamicShadow;
+#if RHI_RAYTRACING
 						MeshBatch.CastRayTracedShadow &= bCastDynamicShadow;
+#endif
 
 						auto& BatchElement = MeshBatch.Elements[0];
 
@@ -324,7 +326,9 @@ namespace RealtimeMesh
 									MeshBatch.bDitheredLODTransition &= bAnyMaterialUsesDithering && !IsMovable() && LODMask.IsDithered() &&
 										MaterialMap.GetMaterialSupportsDither(Section->GetMaterialSlot());
 									MeshBatch.CastShadow &= bCastDynamicShadow;
+#if RHI_RAYTRACING
 									MeshBatch.CastRayTracedShadow &= bCastDynamicShadow;
+#endif
 
 									auto& BatchElement = MeshBatch.Elements[0];
 

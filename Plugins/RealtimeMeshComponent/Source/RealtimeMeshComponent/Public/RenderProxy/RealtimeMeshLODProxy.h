@@ -68,12 +68,12 @@ namespace RealtimeMesh
 		TArray<FRealtimeMeshSectionGroupProxyRef> SectionGroups;
 		TMap<FRealtimeMeshSectionGroupKey, uint32> SectionGroupMap;
 		FRealtimeMeshSectionGroupMask ActiveSectionGroupMask;
-		TOptional<FRealtimeMeshSectionGroupKey> OverrideStaticRayTracingGroup;
 
 		FRealtimeMeshLODConfig Config;
 		FRealtimeMeshDrawMask DrawMask;
+		
 #if RHI_RAYTRACING
-		FRealtimeMeshSectionGroupProxyPtr StaticRaytracingSectionGroup;
+		int32 StaticRayTraceSectionGroup;
 #endif
 		
 
@@ -86,10 +86,6 @@ namespace RealtimeMesh
 		FRealtimeMeshDrawMask GetDrawMask() const { return DrawMask; }
 		FRealtimeMeshActiveSectionGroupIterator GetActiveSectionGroupMaskIter() const { return FRealtimeMeshActiveSectionGroupIterator(*this, ActiveSectionGroupMask); }
 		float GetScreenSize() const { return Config.ScreenSize; }
-
-#if RHI_RAYTRACING
-		FRealtimeMeshSectionGroupProxyPtr GetStaticRayTracedSectionGroup() const { return StaticRaytracingSectionGroup; }
-#endif
 
 		FRealtimeMeshSectionGroupProxyPtr GetSectionGroup(const FRealtimeMeshSectionGroupKey& SectionGroupKey) const;
 

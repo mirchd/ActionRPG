@@ -144,5 +144,9 @@ namespace RealtimeMesh
 
 		Config = FRealtimeMeshLODConfig();
 		DrawMask = FRealtimeMeshDrawMask();
+		
+#if RHI_RAYTRACING
+		StaticRayTraceSectionGroup = INDEX_NONE;
+#endif
 	}
 }

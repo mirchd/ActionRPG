@@ -976,6 +976,8 @@ FHoudiniEngine::SessionSyncConnect(
 	bEnableSessionSync = true;
 	SetSessionStatus(EHoudiniSessionStatus::Connected);
 
+	OnSessionConnected();
+
 	// Update this session's license type
 	HOUDINI_CHECK_ERROR(FHoudiniApi::GetSessionEnvInt(
 		GetSession(), HAPI_SESSIONENVINT_LICENSE, (int32*)&LicenseType));
@@ -1195,6 +1197,8 @@ FHoudiniEngine::RestartSession()
 		}
 	}
 
+	OnSessionConnected();
+
 	// Start ticking only if we successfully started the session
 	if (bSuccess)
 	{
@@ -1205,6 +1209,23 @@ FHoudiniEngine::RestartSession()
 	{
 		StopTicking();
 		return false;
+	}
+}
+
+void 
+FHoudiniEngine::OnSessionConnected()
+{
+	// This function is called whenever the plugin connects to a new session. Its exists
+	// because Houdini Asset Components need to know when this happens so they can invalidate
+	// their HAPI info, eg. node ids, left over from previous sessions.
+
+	for (int Index = 0; Index < FHoudiniEngineRuntime::Get().GetRegisteredHoudiniComponentCount(); Index++)
+	{
+		UHoudiniAssetComponent* HAC = FHoudiniEngineRuntime::Get().GetRegisteredHoudiniComponentAt(Index);
+		if (HAC && IsValid(HAC))
+		{
+			HAC->OnSessionConnected();
+		}
 	}
 }
 
@@ -1248,6 +1269,9 @@ FHoudiniEngine::CreateSession(const EHoudiniRuntimeSettingsSessionType& SessionT
 			SetSessionStatus(EHoudiniSessionStatus::Connected);
 		}
 	}
+
+	// Notify our objects that we've connected to a new session.
+	OnSessionConnected();
 
 	// Start ticking only if we successfully started the session
 	if (bSuccess)
@@ -1301,6 +1325,9 @@ FHoudiniEngine::ConnectSession(const EHoudiniRuntimeSettingsSessionType& Session
 			SetSessionStatus(EHoudiniSessionStatus::Connected);
 		}
 	}
+
+	// Notify our objects that we've connected to a new session.
+	OnSessionConnected();
 
 	// Start ticking only if we successfully started the session
 	if (bSuccess)

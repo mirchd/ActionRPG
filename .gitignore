@@ -39,3 +39,4 @@ Android_*/
 Build/apk/*
 Build/ipa/*
 Build/Android/src
+Build/Android/project.properties

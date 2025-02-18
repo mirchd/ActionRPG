@@ -282,8 +282,8 @@ UHoudiniAssetComponent::~UHoudiniAssetComponent()
 
 	// This gets called in UnRegisterHoudiniComponent, with appropriate checks. Don't call it here.
 	//FHoudiniEngineRuntime::Get().MarkNodeIdAsPendingDelete(AssetId, true);
-
-	FHoudiniEngineRuntime::Get().UnRegisterHoudiniComponent(this);
+	
+	// FHoudiniEngineRuntime::Get().UnRegisterHoudiniComponent(this);
 }
 
 void UHoudiniAssetComponent::PostInitProperties()

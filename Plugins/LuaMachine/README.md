@@ -358,7 +358,7 @@ https://github.com/rdeioris/LuaMachine/blob/master/Docs/ReflectionAPI.md
 
 ## Commercial Support
 
-Commercial support is offered by Unbit (based in Rome, Italy), just contact info at unbit dot it or follow/direct message @unbit on twitter
+Commercial support is offered by Blitter (based in Rome, Italy), just contact info at blitter.studio or send a private message to rdeioris on the LuaMachine Discord server.
 
 ## Sponsors
 

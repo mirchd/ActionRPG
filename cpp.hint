@@ -11,8 +11,8 @@
 #define UPARAM(...)
 #define UENUM(...)
 #define UDELEGATE(...)
-#deinfe GENERATED_BODY(...)
 
+#define GENERATED_BODY(...)
 #define GENERATED_USTRUCT_BODY(...)
 #define GENERATED_UCLASS_BODY(...)
 #define GENERATED_UINTERFACE_BODY(...)
@@ -74,6 +74,8 @@
 #define DECLARE_DELEGATE_OneParam(...)
 #define DECLARE_DELEGATE_ThreeParams(...)
 
+#define ENQUEUE_RENDER_COMMAND(...)
+
 #define PRAGMA_DISABLE_BUFFER_OVERRUN_WARNING
 #define PRAGMA_DISABLE_DEPRECATION_WARNINGS
 #define PRAGMA_DISABLE_MISSING_BRACES_WARNINGS
@@ -94,8 +96,19 @@
 #define PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #define PRAGMA_ENABLE_UNINITIALIZED_CONST_REFERENCE_WARNINGS
 
+// Keyword replacement macros
+#define FORCEINLINE
+#define UE_COLD
+#define UE_DEPRECATED(...)
+#define UE_LIFETIMEBOUND
+
 // Various API defines
 #define CORE_API
 #define COREUOBJECT_API
 #define ENGINE_API
+#define IRISCORE_API
+#define REPLICATIONGRAPH_API
 #define UNREALED_API
+
+// Utility macros
+#define PURE_VIRTUAL(...)

@@ -10,3 +10,7 @@
 
 *.bat eol=crlf
 *.sh eol=lf
+
+# Enable github syntax highlighting for shader files.
+*.usf linguist-language=HLSL
+*.ush linguist-language=HLSL

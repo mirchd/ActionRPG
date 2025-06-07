@@ -32,8 +32,9 @@ TSharedRef<IDetailCustomization> FStreetMapComponentDetails::MakeInstance()
 void FStreetMapComponentDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
 {
 	LastDetailBuilderPtr = &DetailBuilder;
-
-	TArray <TWeakObjectPtr<UObject>> SelectedObjects = DetailBuilder.GetDetailsView()->GetSelectedObjects();
+	
+	TSharedPtr<IDetailsView> DetailsView = DetailBuilder.GetDetailsViewSharedPtr();
+	TArray <TWeakObjectPtr<UObject>> SelectedObjects = DetailsView->GetSelectedObjects();
 
 	for (const TWeakObjectPtr<UObject>& Object : SelectedObjects)
 	{
@@ -48,7 +49,7 @@ void FStreetMapComponentDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBu
 
 	if (SelectedStreetMapComponent == nullptr)
 	{
-		TArray<TWeakObjectPtr<AActor>> SelectedActors = DetailBuilder.GetDetailsView()->GetSelectedActors();
+		TArray<TWeakObjectPtr<AActor>> SelectedActors = DetailsView->GetSelectedActors();
 
 		for (const TWeakObjectPtr<UObject>& Object : SelectedObjects)
 		{
@@ -154,7 +155,7 @@ void FStreetMapComponentDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBu
 			.VAlign(VAlign_Center)
 			[
 				SNew(STextBlock)
-				.Font(FSlateFontInfo("Verdana", 8))
+				.Font(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 8, "Verdana"))
 			.Text(FText::FromString(NumVerticesToString))
 			]
 			+ SHorizontalBox::Slot()
@@ -162,7 +163,7 @@ void FStreetMapComponentDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBu
 			.VAlign(VAlign_Center)
 			[
 				SNew(STextBlock)
-				.Font(FSlateFontInfo("Verdana", 8))
+				.Font(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 8, "Verdana"))
 			.Text(FText::FromString(NumTrianglesToString))
 			]
 			+ SHorizontalBox::Slot()
@@ -170,7 +171,7 @@ void FStreetMapComponentDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBu
 				.VAlign(VAlign_Center)
 				[
 					SNew(STextBlock)
-					.Font(FSlateFontInfo("Verdana", 8))
+					.Font(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 8, "Verdana"))
 				.Text(FText::FromString(CollisionStatusToString))
 				]
 			];

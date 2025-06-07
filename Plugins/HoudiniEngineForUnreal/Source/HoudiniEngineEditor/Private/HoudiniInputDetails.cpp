@@ -40,6 +40,7 @@
 #include "HoudiniEngineRuntimeUtils.h"
 #include "HoudiniEngineStyle.h"
 #include "HoudiniEngineUtils.h"
+#include "HoudiniInputTranslator.h"
 #include "HoudiniPackageParams.h"
 #include "HoudiniSplineComponentVisualizer.h"
 #include "UnrealObjectInputRuntimeUtils.h"
@@ -642,6 +643,15 @@ FHoudiniInputDetails::AddExportCheckboxes(TSharedRef< SVerticalBox > VerticalBox
 	if (!IsValidWeakPointer(MainInput))
 		return;
 
+	// Lambda returning a CheckState from the input's current ExportMainGeoemtry state
+	auto IsCheckedExportMainGeo = [](const TWeakObjectPtr<UHoudiniInput>& InInput)
+	{
+		if (!IsValidWeakPointer(InInput))
+			return ECheckBoxState::Unchecked;
+
+		return InInput->GetExportMainGeometry() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+	};
+
 	// Lambda returning a CheckState from the input's current ExportLODs state
 	auto IsCheckedExportLODs = [](const TWeakObjectPtr<UHoudiniInput>& InInput)
 	{
@@ -691,6 +701,39 @@ FHoudiniInputDetails::AddExportCheckboxes(TSharedRef< SVerticalBox > VerticalBox
 			return ECheckBoxState::Unchecked;
 
 		return InInput->GetExportMaterialParameters() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+	};
+
+	// Lambda for changing ExportMainGeometry state
+	auto CheckStateChangedExportMainGeo = [MainInput](const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputsToUpdate, ECheckBoxState NewState)
+	{
+		if (!IsValidWeakPointer(MainInput))
+			return;
+
+		bool bNewState = (NewState == ECheckBoxState::Checked);
+
+		if (MainInput->GetExportMainGeometry() == bNewState)
+			return;
+
+		// Record a transaction for undo/redo
+		FScopedTransaction Transaction(
+			TEXT(HOUDINI_MODULE_EDITOR),
+			LOCTEXT("HoudiniInputChange", "Houdini Input: Changed Export Main Geometry"),
+			MainInput->GetOuter());
+
+		for (auto CurInput : InInputsToUpdate)
+		{
+			if (!IsValidWeakPointer(CurInput))
+				continue;
+
+			if (CurInput->GetExportMainGeometry() == bNewState)
+				continue;
+
+			CurInput->Modify();
+
+			CurInput->SetExportMainGeometry(bNewState);
+			CurInput->MarkChanged(true);
+			CurInput->MarkAllInputObjectsChanged(true);
+		}
 	};
 
 	// Lambda for changing ExportLODs state
@@ -889,85 +932,103 @@ FHoudiniInputDetails::AddExportCheckboxes(TSharedRef< SVerticalBox > VerticalBox
 		}
 	};
 
-	TSharedPtr<SCheckBox> CheckBoxExportLODs;
-	TSharedPtr<SCheckBox> CheckBoxExportSockets;
-	TSharedPtr<SCheckBox> CheckBoxExportColliders;
-	TSharedPtr<SCheckBox> CheckBoxExportMaterialParameters;
-	TSharedPtr<SCheckBox> CheckBoxMergeSplineMeshComponents;
-	TSharedPtr<SCheckBox> CheckBoxPreferNaniteFallback;
+
+
+	TSharedPtr<SCheckBox> CheckBoxExportMainGeo;
 	VerticalBox->AddSlot()
 	.Padding( 2, 2, 5, 2 )
 	.AutoHeight()
 	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.Padding(1.0f)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
+		SAssignNew(CheckBoxExportMainGeo, SCheckBox )
+		.Content()
 		[
-			SAssignNew(CheckBoxExportLODs, SCheckBox )
-			.Content()
-			[
-				SNew( STextBlock )
-				.Text( LOCTEXT( "ExportAllLOD", "Export LODs" ) )
-				.ToolTipText( LOCTEXT( "ExportAllLODCheckboxTip", "If enabled, all LOD Meshes in this static mesh will be sent to Houdini." ) )
-				.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
-			]
-			.IsChecked_Lambda([=]()
-			{
-				return IsCheckedExportLODs(MainInput);
-			})
-			.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
-			{
-				return CheckStateChangedExportLODs(InInputs, NewState);
-			})
+			SNew( STextBlock )
+			.Text( LOCTEXT( "ExportMainGeo", "Export Main Geometry" ) )
+			.ToolTipText( LOCTEXT( "ExportMainGeoCheckboxTip", "If enabled, the Main Geometry will be sent to Houdini. Turn this off if you only want to send Collider data, or LOD data to Houdini." ) )
+			.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
 		]
-		+ SHorizontalBox::Slot()
-		.Padding( 1.0f )
-		.VAlign( VAlign_Center )
-		.AutoWidth()
-		[
-			SAssignNew( CheckBoxExportSockets, SCheckBox )
-			.Content()
-			[
-				SNew( STextBlock )
-				.Text( LOCTEXT( "ExportSockets", "Export Sockets" ) )
-				.ToolTipText( LOCTEXT( "ExportSocketsTip", "If enabled, all Mesh Sockets in this static mesh will be sent to Houdini." ) )
-				.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
-			]
-			.IsChecked_Lambda([=]()
-			{
-				return IsCheckedExportSockets(MainInput);
-			})
-			.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
-			{
-				return CheckStateChangedExportSockets(InInputs, NewState);
-			})
-		]
-		+ SHorizontalBox::Slot()
-		.Padding( 1.0f )
-		.VAlign( VAlign_Center )
-		.AutoWidth()
-		[
-			SAssignNew( CheckBoxExportColliders, SCheckBox )
-			.Content()
-			[
-				SNew( STextBlock )
-				.Text( LOCTEXT( "ExportColliders", "Export Colliders" ) )
-				.ToolTipText( LOCTEXT( "ExportCollidersTip", "If enabled, collision geometry for this static mesh will be sent to Houdini." ) )
-				.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
-			]
-			.IsChecked_Lambda([=]()
-			{
-				return IsCheckedExportColliders(MainInput);
-			})
-			.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
-			{
-				return CheckStateChangedExportColliders(InInputs, NewState);
-			})
-		]
+		.IsChecked_Lambda([=]()
+		{
+			return IsCheckedExportMainGeo(MainInput);
+		})
+		.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
+		{
+			return CheckStateChangedExportMainGeo(InInputs, NewState);
+		})
 	];
 
+	TSharedPtr<SCheckBox> CheckBoxExportLODs;
+	VerticalBox->AddSlot()
+	.Padding( 2, 2, 5, 2 )
+	.AutoHeight()
+	[
+		SAssignNew(CheckBoxExportLODs, SCheckBox )
+		.Content()
+		[
+			SNew( STextBlock )
+			.Text( LOCTEXT( "ExportAllLOD", "Export LODs" ) )
+			.ToolTipText( LOCTEXT( "ExportAllLODCheckboxTip", "If enabled, all LOD Meshes in this static mesh will be sent to Houdini." ) )
+			.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
+		]
+		.IsChecked_Lambda([=]()
+		{
+			return IsCheckedExportLODs(MainInput);
+		})
+		.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
+		{
+			return CheckStateChangedExportLODs(InInputs, NewState);
+		})
+	];
+
+	TSharedPtr<SCheckBox> CheckBoxExportSockets;
+	VerticalBox->AddSlot()
+	.Padding(2, 2, 5, 2)
+	.AutoHeight()
+	[
+		SAssignNew( CheckBoxExportSockets, SCheckBox )
+		.Content()
+		[
+			SNew( STextBlock )
+			.Text( LOCTEXT( "ExportSockets", "Export Sockets" ) )
+			.ToolTipText( LOCTEXT( "ExportSocketsTip", "If enabled, all Mesh Sockets in this static mesh will be sent to Houdini." ) )
+			.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
+		]
+		.IsChecked_Lambda([=]()
+		{
+			return IsCheckedExportSockets(MainInput);
+		})
+		.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
+		{
+			return CheckStateChangedExportSockets(InInputs, NewState);
+		})
+	];
+
+
+	TSharedPtr<SCheckBox> CheckBoxExportColliders;
+	VerticalBox->AddSlot()
+	.Padding(2, 2, 5, 2)
+	.AutoHeight()
+	[
+		SAssignNew( CheckBoxExportColliders, SCheckBox )
+		.Content()
+		[
+			SNew( STextBlock )
+			.Text( LOCTEXT( "ExportColliders", "Export Colliders" ) )
+			.ToolTipText( LOCTEXT( "ExportCollidersTip", "If enabled, collision geometry for this static mesh will be sent to Houdini." ) )
+			.Font(_GetEditorStyle().GetFontStyle( TEXT( "PropertyWindow.NormalFont" ) ) )
+		]
+		.IsChecked_Lambda([=]()
+		{
+			return IsCheckedExportColliders(MainInput);
+		})
+		.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
+		{
+			return CheckStateChangedExportColliders(InInputs, NewState);
+		})
+	];
+
+
+	TSharedPtr<SCheckBox> CheckBoxExportMaterialParameters;
 	VerticalBox->AddSlot()
 	.Padding(2, 2, 5, 2)
 	.AutoHeight()
@@ -997,6 +1058,39 @@ FHoudiniInputDetails::AddExportCheckboxes(TSharedRef< SVerticalBox > VerticalBox
 		]
 	];
 
+
+	TSharedPtr<SCheckBox> CheckBoxPreferNaniteFallback;
+	VerticalBox->AddSlot()
+	.Padding(2, 2, 5, 2)
+	.AutoHeight()
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
+		.Padding(1.0f)
+		.VAlign(VAlign_Center)
+		.AutoWidth()
+		[
+			SAssignNew(CheckBoxPreferNaniteFallback, SCheckBox)
+			.Content()
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("PreferNaniteFallbackMesh", "Prefer Nanite Fallback Mesh"))
+				.ToolTipText(LOCTEXT("PreferNaniteFallbackMeshTip", "If enabled, when a Nanite asset is used as input, Houdini will use the fallback mesh if available."))
+				.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+			]
+			.IsChecked_Lambda([=]()
+			{
+				return IsCheckedPreferNanite(MainInput);
+			})
+			.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
+			{
+				return CheckStateChangedPreferNanite(InInputs, NewState);
+			})
+		]
+	];
+
+
+	TSharedPtr<SCheckBox> CheckBoxMergeSplineMeshComponents;
 	VerticalBox->AddSlot()
 	.Padding(2, 2, 5, 2)
 	.AutoHeight()
@@ -1023,35 +1117,6 @@ FHoudiniInputDetails::AddExportCheckboxes(TSharedRef< SVerticalBox > VerticalBox
 			.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
 			{
 				return CheckStateChangedMergeSplineMeshComponents(InInputs, NewState);
-			})
-		]
-	];
-
-	VerticalBox->AddSlot()
-	.Padding(2, 2, 5, 2)
-	.AutoHeight()
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.Padding(1.0f)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SAssignNew(CheckBoxPreferNaniteFallback, SCheckBox)
-			.Content()
-			[
-				SNew(STextBlock)
-				.Text(LOCTEXT("PreferNaniteFallbackMesh", "Prefer Nanite Fallback Mesh"))
-				.ToolTipText(LOCTEXT("PreferNaniteFallbackMeshTip", "If enabled, when a Nanite asset is used as input, Houdini will use the fallback mesh if available."))
-				.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-			]
-			.IsChecked_Lambda([=]()
-			{
-				return IsCheckedPreferNanite(MainInput);
-			})
-			.OnCheckStateChanged_Lambda([=](ECheckBoxState NewState)
-			{
-				return CheckStateChangedPreferNanite(InInputs, NewState);
 			})
 		]
 	];
@@ -5869,11 +5934,31 @@ FHoudiniInputDetails::AddGeometryInputUI(
 		return MainInput->GetGeometryInputsMenuExpanded() ? EVisibility::Visible : EVisibility::Collapsed;
 	});
 
-	InVerticalBox->AddSlot().Padding(2, 2, 5, 2).AutoHeight()[Inputs_Expandable];
-	InVerticalBox->AddSlot().Padding(5, 5, 5, 5).AutoHeight()[InputsCollapsed_VerticalBox];
-	InVerticalBox->AddSlot().Padding(3, 1, 5, 2).AutoHeight()[InputsExpanded_VerticalBox];
+	InVerticalBox->AddSlot()
+	.Padding(2, 2, 5, 2)
+	.AutoHeight()
+	[
+		Inputs_Expandable
+	];
 
-	InputsExpanded_VerticalBox->AddSlot().Padding(2, 0, 5, 2).AutoHeight()
+	InVerticalBox->AddSlot()
+	.Padding(5, 5, 5, 5)
+	.AutoHeight()
+	[
+		InputsCollapsed_VerticalBox
+	];
+
+	InVerticalBox->AddSlot()
+	.Padding(3, 1, 5, 2)
+	.AutoHeight()
+	[
+		InputsExpanded_VerticalBox
+	];
+
+
+	InputsExpanded_VerticalBox->AddSlot()
+	.Padding(2, 0, 5, 2)
+	.AutoHeight()
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot()
@@ -6122,19 +6207,18 @@ FHoudiniInputDetails::AddWorldInputUI(
 				CategoryBuilder.GetParentLayout().ForceRefreshDetails();
 		})
 	];
-
-	// Update Bound Selection Automatically CheckBox
+	
+	// Update Selection Automatically CheckBox
 	Inputs_VerticalBox->AddSlot()
-	.Padding(10, 2, 5, 2)
+	.Padding(2, 2, 5, 2)
 	.AutoHeight()
 	[
 		SNew(SCheckBox)
-		.Visibility(MainInput->IsWorldInputBoundSelector() ? EVisibility::Visible : EVisibility::Collapsed)
 		.Content()
 		[
 			SNew(STextBlock)
-			.Text(LOCTEXT("BoundAutoUpdate", "Update Bound Selection Automatically"))
-			.ToolTipText(LOCTEXT("BoundAutoUpdateTip", "If enabled and if this world input is set as a bound selector, the objects selected by the bounds will update automatically."))
+			.Text(LOCTEXT("AutoUpdate", "Update Automatically"))
+			.ToolTipText(LOCTEXT("AutoUpdateTip", "If enabled, this input will automatically update if its selected objects/actors are changed."))
 			.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
 		]
 		.IsChecked_Lambda([MainInput]()
@@ -6142,7 +6226,7 @@ FHoudiniInputDetails::AddWorldInputUI(
 			if (!IsValidWeakPointer(MainInput))
 				return ECheckBoxState::Unchecked;
 
-			return MainInput->GetWorldInputBoundSelectorAutoUpdates() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+			return MainInput->GetWorldInputAutoUpdates() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 		})
 		.OnCheckStateChanged_Lambda([MainInput, InInputs](ECheckBoxState NewState)
 		{
@@ -6151,21 +6235,20 @@ FHoudiniInputDetails::AddWorldInputUI(
 
 			FScopedTransaction Transaction(
 				TEXT(HOUDINI_MODULE_EDITOR),
-				LOCTEXT("HoudiniInputChange", "Houdini Input: Changed Update Bound Selection Automatically"),
+				LOCTEXT("HoudiniAutoUpdateChange", "Houdini Input: Changed Update Automatically"),
 				MainInput->GetOuter());
 
 			bool bNewState = (NewState == ECheckBoxState::Checked);
-
 			for (auto CurInput : InInputs)
 			{
 				if (!IsValidWeakPointer(CurInput))
 					continue;
 
-				if (CurInput->GetWorldInputBoundSelectorAutoUpdates() == bNewState)
+				if (CurInput->GetWorldInputAutoUpdates() == bNewState)
 					continue;
 
 				CurInput->Modify();
-				CurInput->SetWorldInputBoundSelectorAutoUpdates(bNewState);
+				CurInput->SetWorldInputAutoUpdates(bNewState);
 				CurInput->MarkChanged(true);
 			}
 		})
@@ -6183,16 +6266,22 @@ FHoudiniInputDetails::AddWorldInputUI(
 		LOCTEXT("WorldInputUseCurrentSelectionTip", "Unlock details panel and use currently selected objects.") :
 		LOCTEXT("WorldInputStartSelectionTip", "Lock details panel and select world objects to use as input.");
 
+	FName SelectButtonImage = bDetailsLocked ?
+		FName("Icons.ArrowDown") :
+		FName("Icons.Plus");
+
 	Inputs_VerticalBox->AddSlot()
 	.Padding(2, 2, 5, 2)
 	.AutoHeight()
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot()
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Center)
+		.AutoWidth()
 		[
 			SNew(SButton)
-			.VAlign(VAlign_Center)
-			.HAlign(HAlign_Center)
+			.ToolTipText(SelectButtonTip)
 			.OnClicked_Lambda([MainInput, InInputs, DetailsPanelName, &CategoryBuilder]()
 			{
 				return MainInput->IsWorldInputBoundSelector() ?
@@ -6203,13 +6292,13 @@ FHoudiniInputDetails::AddWorldInputUI(
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot()
-				.Padding(1)
+				.Padding(1.0f)
 				.HAlign(HAlign_Center)
 				.VAlign(VAlign_Center)
 				.AutoWidth()
 				[
 					SNew(SImage)
-					.Image(_GetEditorStyle().GetBrush("Icons.Plus"))
+					.Image(_GetEditorStyle().GetBrush(SelectButtonImage))
 					.ColorAndOpacity(FStyleColors::AccentGreen)
 				]
 				+ SHorizontalBox::Slot()
@@ -6220,10 +6309,10 @@ FHoudiniInputDetails::AddWorldInputUI(
 					SNew(STextBlock)
 					.Text(SelectButtonText)
 					.TextStyle(_GetEditorStyle(), "SmallButtonText")
-					.ToolTipText(SelectButtonTip)
 				]
 			]
 		]
+
 		+ SHorizontalBox::Slot()
 		.HAlign(HAlign_Center)
 		.VAlign(VAlign_Center)
@@ -6231,6 +6320,7 @@ FHoudiniInputDetails::AddWorldInputUI(
 		.AutoWidth()
 		[
 			SNew(SButton)
+			.ToolTipText(LOCTEXT("ClearSelectionButtonTip", "Clear Selection - All inputs will be removed from the current selection."))
 			.OnClicked_Lambda([InInputs, MainInput, &CategoryBuilder]()
 			{
 				if (!IsValidWeakPointer(MainInput))
@@ -6253,7 +6343,7 @@ FHoudiniInputDetails::AddWorldInputUI(
 
 					CurInput->Modify();
 
-					if (CurInput->IsWorldInputBoundSelector())
+					if (bMainInputBoundSelection)
 					{
 						CurInput->SetBoundSelectorObjectsNumber(0);
 						CurInput->UpdateWorldSelectionFromBoundSelectors();
@@ -6274,7 +6364,7 @@ FHoudiniInputDetails::AddWorldInputUI(
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot()
-				.Padding(1)
+				.Padding(1.0f)
 				.HAlign(HAlign_Center)
 				.VAlign(VAlign_Center)
 				.AutoWidth()
@@ -6283,8 +6373,8 @@ FHoudiniInputDetails::AddWorldInputUI(
 					.Image(_GetEditorStyle().GetBrush("Icons.Delete"))
 					.ColorAndOpacity(FStyleColors::AccentRed)
 				]
-				+ SHorizontalBox::Slot()
-				.Padding(1)
+				/* + SHorizontalBox::Slot()
+				.Padding(FMargin(3, 0, 0, 0))
 				.VAlign(VAlign_Center)
 				.AutoWidth()
 				[
@@ -6292,7 +6382,50 @@ FHoudiniInputDetails::AddWorldInputUI(
 					.Text(LOCTEXT("ClearSelectionButtonText", "Clear Selection"))
 					.TextStyle(_GetEditorStyle(), "SmallButtonText")
 					.ToolTipText(LOCTEXT("ClearSelectionButtonTip", "Clears all inputs."))
-				]
+				]*/
+			]
+		]
+
+		+ SHorizontalBox::Slot()
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Center)
+		.Padding(FMargin(3, 0, 0, 0))
+		.AutoWidth()
+		[
+			SNew(SButton)
+			.ToolTipText(LOCTEXT("RefreshSelectionButtonTextTip", "Refresh Selection - Refresh the current selection and updates them in Houdini if needed."))
+			.OnClicked_Lambda([MainInput, InInputs, DetailsPanelName, &CategoryBuilder]()
+			{
+				return Helper_OnButtonClickSelectActors(
+					CategoryBuilder,
+					InInputs,
+					DetailsPanelName,
+					MainInput->IsWorldInputBoundSelector(),
+					true);
+			})
+			.Content()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+				.Padding(1.0f)
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				.AutoWidth()
+				[
+					SNew(SImage)
+					.Image(_GetEditorStyle().GetBrush("Icons.Refresh"))
+					.ColorAndOpacity(FStyleColors::AccentBlue)
+				]/*
+				+ SHorizontalBox::Slot()
+				.Padding(FMargin(3, 0, 0, 0))
+				.VAlign(VAlign_Center)
+				.AutoWidth()
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("RefreshSelectionButtonText", "Refresh Selection"))
+					.TextStyle(_GetEditorStyle(), "SmallButtonText")
+					.ToolTipText(LOCTEXT("RefreshSelectionButtonTextTip", "Refresh the current selection and updates them in Houdini if needed."))
+				]*/
 			]
 		]
 	];
@@ -7302,19 +7435,30 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 }
 
 FReply
-FHoudiniInputDetails::Helper_OnButtonClickSelectActors(IDetailCategoryBuilder& CategoryBuilder, const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, const FName& DetailsPanelName)
+FHoudiniInputDetails::Helper_OnButtonClickSelectActors(
+	IDetailCategoryBuilder& CategoryBuilder, 
+	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+	const FName& DetailsPanelName)
 {
-	return Helper_OnButtonClickSelectActors(CategoryBuilder, InInputs, DetailsPanelName, false);
+	return Helper_OnButtonClickSelectActors(CategoryBuilder, InInputs, DetailsPanelName, false, false);
 }
 
 FReply
-FHoudiniInputDetails::Helper_OnButtonClickUseSelectionAsBoundSelector(IDetailCategoryBuilder& CategoryBuilder, const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, const FName& DetailsPanelName)
+FHoudiniInputDetails::Helper_OnButtonClickUseSelectionAsBoundSelector(
+	IDetailCategoryBuilder& CategoryBuilder,
+	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+	const FName& DetailsPanelName)
 {
-	return Helper_OnButtonClickSelectActors(CategoryBuilder, InInputs, DetailsPanelName, true);
+	return Helper_OnButtonClickSelectActors(CategoryBuilder, InInputs, DetailsPanelName, true, false);
 }
 
 FReply
-FHoudiniInputDetails::Helper_OnButtonClickSelectActors(IDetailCategoryBuilder& CategoryBuilder, const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, const FName& DetailsPanelName, const bool& bUseWorldInAsWorldSelector)
+FHoudiniInputDetails::Helper_OnButtonClickSelectActors(
+	IDetailCategoryBuilder& CategoryBuilder,
+	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
+	const FName& DetailsPanelName, 
+	bool bUseWorldInAsWorldSelector,
+	bool bForceUpdate)
 {
 	if (InInputs.Num() <= 0)
 		return FReply::Handled();
@@ -7342,7 +7486,18 @@ FHoudiniInputDetails::Helper_OnButtonClickSelectActors(IDetailCategoryBuilder& C
 	};
 	auto* LocalDetailsView = static_cast<SLocalDetailsView*>(DetailsView.Get());
 
-	if (!DetailsView->IsLocked())
+	// When forcing the update (refresh)
+	// Restart the selection AND update it immediately.
+	// This ensures that everything is properly taken care of
+	bool bDoStartSelection = !DetailsView->IsLocked();
+	bool bDoUpdateSelection = DetailsView->IsLocked();
+	if (bForceUpdate)
+	{
+		bDoStartSelection = true;
+		bDoUpdateSelection = true;
+	}
+		
+	if (bDoStartSelection)
 	{
 		//
 		// START SELECTION
@@ -7411,10 +7566,9 @@ FHoudiniInputDetails::Helper_OnButtonClickSelectActors(IDetailCategoryBuilder& C
 				GEditor->SelectActor(Actor, true, true);
 			}
 		}
-
-		return FReply::Handled();
 	}
-	else
+	
+	if(bDoUpdateSelection)
 	{
 		//
 		// UPDATE SELECTION
@@ -7569,6 +7723,10 @@ FHoudiniInputDetails::Helper_OnButtonClickSelectActors(IDetailCategoryBuilder& C
 			// If we didnt change the selection, cancel the transaction
 			if (!bHasChanged)
 				Transaction.Cancel();
+
+			// This will allow a one time update of the inputs if auto-update is disabled
+			if (!CurrentInput->GetWorldInputAutoUpdates())
+				bForceUpdate = true;
 		}
 
 		// We can now unlock the details view...
@@ -7594,6 +7752,18 @@ FHoudiniInputDetails::Helper_OnButtonClickSelectActors(IDetailCategoryBuilder& C
 		// Update the input details layout.
 		// if (CategoryBuilder.IsParentLayoutValid())
 		//   CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+	}
+
+	if (bForceUpdate)
+	{
+		for (auto CurrentInput : InInputs)
+		{
+			// Manually update the world input if auto update is disabled
+			bool bPrevious = CurrentInput->GetWorldInputAutoUpdates();
+			CurrentInput->SetWorldInputAutoUpdates(true);
+			FHoudiniInputTranslator::UpdateWorldInput(CurrentInput.Get());
+			CurrentInput->SetWorldInputAutoUpdates(bPrevious);
+		}
 	}
 
 	return FReply::Handled();

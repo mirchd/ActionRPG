@@ -366,6 +366,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniInput* A, const 
 	Result &= TestExpressionError(A->bPackBeforeMerge == B->bPackBeforeMerge, Header, "bPackBeforeMerge");
 	Result &= TestExpressionError(InputSettingsA.bImportAsReference == InputSettingsB.bImportAsReference, Header, "bImportAsReference");
 	Result &= TestExpressionError(InputSettingsA.bImportAsReferenceRotScaleEnabled == InputSettingsB.bImportAsReferenceRotScaleEnabled, Header, "bImportAsReferenceRotScaleEnabled");
+	Result &= TestExpressionError(InputSettingsA.bExportMainGeometry == InputSettingsB.bExportMainGeometry, Header, "bExportMainGeometry");
 	Result &= TestExpressionError(InputSettingsA.bExportLODs == InputSettingsB.bExportLODs, Header, "bExportLODs");
 	Result &= TestExpressionError(InputSettingsA.bExportSockets == InputSettingsB.bExportSockets, Header, "bExportSockets");
 	Result &= TestExpressionError(InputSettingsA.bPreferNaniteFallbackMesh == InputSettingsB.bPreferNaniteFallbackMesh, Header, "bPreferNaniteFallbackMesh");
@@ -411,6 +412,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniInput* A, const 
 
 	Result &= TestExpressionError(A->bIsWorldInputBoundSelector == B->bIsWorldInputBoundSelector, Header, "bIsWorldInputBoundSelector");
 	Result &= TestExpressionError(A->bWorldInputBoundSelectorAutoUpdate == B->bWorldInputBoundSelectorAutoUpdate, Header, "bWorldInputBoundSelectorAutoUpdate");
+	Result &= TestExpressionError(A->bWorldInputAutoUpdate == B->bWorldInputAutoUpdate, Header, "bWorldInputAutoUpdate");
 	Result &= TestExpressionError(FMath::IsNearlyEqual(InputSettingsA.UnrealSplineResolution, InputSettingsB.UnrealSplineResolution, FLOAT_TOLERANCE), Header, "UnrealSplineResolution");
 
 	// Skip LastInsertedInputs

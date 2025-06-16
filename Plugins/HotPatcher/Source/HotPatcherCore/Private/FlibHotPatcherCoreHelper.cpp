@@ -14,7 +14,6 @@
 #include "Interfaces/ITargetPlatform.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Interfaces/ITargetPlatformManagerModule.h"
-#include "GameDelegates.h"
 #include "GameMapsSettings.h"
 #include "INetworkFileSystemModule.h"
 #include "IPlatformFileSandboxWrapper.h"
@@ -41,6 +40,7 @@
 #include "Misc/ScopeExit.h"
 #include "Misc/EngineVersionComparison.h"
 #include "ZenCookArtifactReader.h"
+
 #if !UE_VERSION_OLDER_THAN(5,4,0)
 #include "AssetCompilingManager.h"
 #endif
@@ -1845,17 +1845,19 @@ FProjectPackageAssetCollection UFlibHotPatcherCoreHelper::ImportProjectSettingsP
 	
 	{
 		// allow the game to fill out the asset registry, as well as get a list of objects to always cook
-		TArray<FString> FilesInPathStrings;
-		PRAGMA_DISABLE_DEPRECATION_WARNINGS;
-		if (FGameDelegates::Get().GetCookedEditorPackageManagerFactoryDelegate().IsBound())
+		TArray<FName> FilesInPathStrings;
+
+		ITargetPlatformManagerModule* TPM = GetTargetPlatformManager();
+		const TArray<ITargetPlatform*>& Platforms = TPM->GetActiveTargetPlatforms();
+		for (const ITargetPlatform* TargetPlatform : Platforms)
 		{
-			FGameDelegates::Get().GetCookedEditorPackageManagerFactoryDelegate().Execute();
+			TargetPlatform->GetExtraPackagesToCook(FilesInPathStrings);
 		}
-		PRAGMA_ENABLE_DEPRECATION_WARNINGS;
+		
 		for(const auto& BuildFilename:FilesInPathStrings)
 		{
 			FString OutPackageName;
-			if (FPackageName::TryConvertFilenameToLongPackageName(FPaths::ConvertRelativePathToFull(BuildFilename), OutPackageName))
+			if (FPackageName::TryConvertFilenameToLongPackageName(FPaths::ConvertRelativePathToFull(BuildFilename.ToString()), OutPackageName))
 			{
 				AddSoftObjectPath(OutPackageName);
 			}

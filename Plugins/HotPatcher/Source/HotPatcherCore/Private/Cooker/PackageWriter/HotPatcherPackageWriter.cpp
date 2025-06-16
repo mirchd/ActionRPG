@@ -64,10 +64,10 @@ void FHotPatcherPackageWriter::GetOplogAttachments(TArrayView<FName> PackageName
 	}
 }
 
-ECommitStatus FHotPatcherPackageWriter::GetCommitStatus(FName PackageName)
+IPackageWriter::ECommitStatus FHotPatcherPackageWriter::GetCommitStatus(FName PackageName)
 {
 	// GetCommitStatus is not implemented by FLooseCookedPackageWriter
-	return ECommitStatus::NotCommitted;
+	return IPackageWriter::ECommitStatus::NotCommitted;
 }
 
 void FHotPatcherPackageWriter::RemoveCookedPackages(TArrayView<const FName> PackageNamesToRemove)

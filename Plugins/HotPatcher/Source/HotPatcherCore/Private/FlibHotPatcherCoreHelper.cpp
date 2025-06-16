@@ -649,8 +649,8 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 			#if UE_VERSION_OLDER_THAN(5,4,0)
 			FArchiveCookContext ArchiveCookContext(Package, FArchiveCookContext::ECookType::ECookByTheBook, FArchiveCookContext::ECookingDLC::ECookingDLCNo);
 			#else
-			ICookInfo* CookInfo = nullptr;
-			FArchiveCookContext ArchiveCookContext(Package, UE::Cook::ECookType::ByTheBook, UE::Cook::ECookingDLC::No, CookInfo);
+			UE::Cook::ICookInfo* CookInfo = nullptr;
+			FArchiveCookContext ArchiveCookContext(Package, UE::Cook::ECookType::ByTheBook, UE::Cook::ECookingDLC::No, Platform.Value, CookInfo);
 			#endif
 			FArchiveCookData CookData(*Platform.Value, ArchiveCookContext);
 			PackageArgs.ArchiveCookData = &CookData;

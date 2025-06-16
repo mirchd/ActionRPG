@@ -39,7 +39,7 @@ public:
 	virtual void GetOplogAttachments(TArrayView<FName> PackageNames,
 		TArrayView<FUtf8StringView> AttachmentKeys,
 		TUniqueFunction<void(FName PackageName, FUtf8StringView AttachmentKey, FCbObject&& Attachment)>&& Callback) override;
-	virtual ECommitStatus GetCommitStatus(FName PackageName) override;
+	virtual IPackageWriter::ECommitStatus GetCommitStatus(FName PackageName) override;
 	virtual void RemoveCookedPackages(TArrayView<const FName> PackageNamesToRemove) override;
 	virtual void RemoveCookedPackages() override;
 #if UE_VERSION_OLDER_THAN(5,4,0)

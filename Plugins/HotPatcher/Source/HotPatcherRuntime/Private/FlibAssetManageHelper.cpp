@@ -1482,8 +1482,10 @@ TArray<UPackage*> UFlibAssetManageHelper::LoadPackagesForCooking(const TArray<FS
 	{
 		if(!bStorageConcurrent && Package->IsFullyLoaded())
 		{
+#if WITH_METADATA
 			FMetaData& MetaData = Package->GetMetaData();
 			MetaData.RemoveMetaDataOutsidePackage(Package);
+#endif
 		}
 		// Precache the metadata so we don't risk rehashing the map in the parallelfor below
 		if(bStorageConcurrent)
@@ -1492,7 +1494,9 @@ TArray<UPackage*> UFlibAssetManageHelper::LoadPackagesForCooking(const TArray<FS
 			{
 				Package->FullyLoad();
 			}
+#if WITH_METADATA
 			Package->GetMetaData();
+#endif
 		}
 	}
 	GIsCookerLoadingPackage = false;

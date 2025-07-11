@@ -1,6 +1,7 @@
 // Copyright 2018-2023 - Roberto De Ioris
 
 using UnrealBuildTool;
+
 public class LuaMachine : ModuleRules
 {
     public LuaMachine(ReadOnlyTargetRules Target) : base(Target)

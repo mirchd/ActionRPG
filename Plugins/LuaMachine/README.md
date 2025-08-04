@@ -9,7 +9,7 @@ If you want modders to customize your game/project, or you need to allow game de
 
 Note: The master branch is focused on Unreal Engine 5, if you need Unreal Engine 4 support use the ue4 branch.
 
-Experimental LuaU (https://luau.org/) support is available (for Windows) in the "luau" branch.
+The Plugin can be built with lua 5.3 (default), 5.4, Luau and LuaJIT.
 
 ## How it works
 

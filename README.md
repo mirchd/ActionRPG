@@ -53,6 +53,7 @@ Current directory: D:\UnrealEngine\<br>
 - [HotPatcher](https://github.com/hxhb/HotPatcher)
 - [PlatformUtils](https://github.com/hxhb/PlatformUtils)
 - [LuaMachine](https://github.com/rdeioris/LuaMachine)
+- [LuaMachineUMG](https://github.com/rdeioris/LuaMachineUMG)
 - [StreetMap](https://github.com/ue4plugins/StreetMap)
 - [HoudiniEngineForUnreal](https://github.com/sideeffects/HoudiniEngineForUnreal)
 

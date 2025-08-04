@@ -1,10 +1,10 @@
-// Copyright 2018-2023 - Roberto De Ioris
+// Copyright 2018-2025 - Roberto De Ioris
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/Blueprint.h"
-#include "ThirdParty/lua/lua.hpp"
+#include "LuaVMIncludes.h"
 #include "LuaValue.h"
 #include "LuaCode.h"
 #include "Runtime/Core/Public/Containers/Queue.h"
@@ -32,11 +32,14 @@ struct FLuaUserData
 	// meaningful only for multicast delegates broadcasting
 	FMulticastScriptDelegate* MulticastScriptDelegate;
 
+	TSharedPtr<TFunction<FLuaValueOrError(TArray<FLuaValue>)>> Lambda;
+
 	FLuaUserData(UObject* InObject)
 	{
 		Type = ELuaValueType::UObject;
 		Context = InObject;
 		MulticastScriptDelegate = nullptr;
+		Lambda = nullptr;
 	}
 
 	FLuaUserData(UObject* InObject, UFunction* InFunction)
@@ -45,6 +48,15 @@ struct FLuaUserData
 		Context = InObject;
 		Function = InFunction;
 		MulticastScriptDelegate = nullptr;
+		Lambda = nullptr;
+	}
+
+	FLuaUserData(TSharedPtr<TFunction<FLuaValueOrError(TArray<FLuaValue>)>> InLambda)
+	{
+		Type = ELuaValueType::Lambda;
+		Context = nullptr;
+		MulticastScriptDelegate = nullptr;
+		Lambda = InLambda;
 	}
 };
 
@@ -99,7 +111,8 @@ struct FLuaLibsLoader
 		, bLoadMath(true)
 		, bLoadUTF8(true)
 		, bLoadDebug(false)
-	{}
+	{
+	}
 
 };
 
@@ -123,12 +136,78 @@ struct FLuaDebug
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
 	FString What;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	FString ShortSource;
+
 	FLuaDebug()
 		: CurrentLine(0)
 	{
 
 	}
 };
+
+USTRUCT(BlueprintType)
+struct FLuaProfiledCall
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	FString Source;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	int32 Line = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	FString Call;
+
+	bool operator==(const FLuaProfiledCall& Other) const
+	{
+		return Source == Other.Source && Line == Other.Line && Call == Other.Call;
+	}
+};
+
+USTRUCT(BlueprintType)
+struct FLuaProfiledStack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	TArray<FLuaProfiledCall> CallStack;
+
+	bool operator==(const FLuaProfiledStack& Other) const
+	{
+		return CallStack == Other.CallStack;
+	}
+};
+
+USTRUCT(BlueprintType)
+struct FLuaProfiledData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	TArray<FLuaProfiledCall> CallStack;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	double Duration = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lua")
+	int64 Count = 0;
+};
+
+FORCEINLINE uint32 GetTypeHash(const FLuaProfiledStack& LuaProfiledStack)
+{
+	uint32 Hash = 0;
+
+	for (const FLuaProfiledCall& Call : LuaProfiledStack.CallStack)
+	{
+		Hash = HashCombine(Hash, GetTypeHash(Call.Source));
+		Hash = HashCombine(Hash, GetTypeHash(Call.Line));
+		Hash = HashCombine(Hash, GetTypeHash(Call.Call));
+	}
+
+	return Hash;
+}
 
 USTRUCT(BlueprintType)
 struct FLuaDelegateGroup
@@ -208,13 +287,16 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "Lua", meta = (DisplayName = "Lua Return Hook"))
 	void ReceiveLuaReturnHook(const FLuaDebug& LuaDebug);
 
+	UFUNCTION(BlueprintNativeEvent, Category = "Lua", meta = (DisplayName = "Lua SingleStep Hook"))
+	void ReceiveLuaSingleStepHook(const FLuaDebug& LuaDebug);
+
 	// Not BlueprintNativeEvent, as throwing a luaL_error from an RTTI call results in leaving the VM in an unexpected
 	// state and will result in exceptions
 	UFUNCTION(Category = "Lua", meta = (DisplayName = "Lua Count Hook"))
 	virtual void ReceiveLuaCountHook(const FLuaDebug& LuaDebug);
 
 	UFUNCTION(BlueprintCallable, Category = "Lua")
-	FLuaValue NewLuaUserDataObject(TSubclassOf<ULuaUserDataObject> LuaUserDataObjectClass, bool bTrackObject=true);
+	FLuaValue NewLuaUserDataObject(TSubclassOf<ULuaUserDataObject> LuaUserDataObjectClass, bool bTrackObject = true);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
 	FLuaDebug LuaGetInfo(const int32 Level);
@@ -243,7 +325,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lua")
 	bool SetPropertyFromLuaValue(UObject* InObject, const FString& PropertyName, FLuaValue Value);
 
-	UFUNCTION(BlueprintCallable, BlueprintPure,  Category = "Lua")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
 	FLuaValue GetLuaBlueprintPackageTable(const FString& PackageName);
 
 	void FromLuaValue(FLuaValue& LuaValue, UObject* CallContext = nullptr, lua_State* State = nullptr);
@@ -295,7 +377,7 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent, Category = "Lua", meta = (DisplayName = "Lua State Pre Initialization"))
 	void ReceiveLuaStatePreInitialized();
-	
+
 	UFUNCTION(BlueprintNativeEvent, Category = "Lua", meta = (DisplayName = "Lua State Initialized"))
 	void ReceiveLuaStateInitialized();
 
@@ -373,10 +455,15 @@ public:
 
 	FLuaValue CreateLuaLazyTable();
 
-	bool RunFile(const FString& Filename, bool bIgnoreNonExistent, int NRet = 0, bool bNonContentDirectory=false);
+	bool RunFile(const FString& Filename, bool bIgnoreNonExistent, int NRet = 0, bool bNonContentDirectory = false);
 
 	static int MetaTableFunctionUserData__index(lua_State* L);
 	static int MetaTableFunctionUserData__newindex(lua_State* L);
+
+	static int MetaTableFunctionUserDataInterface__index(lua_State* L);
+	static int MetaTableFunctionUserDataInterface__newindex(lua_State* L);
+	static int MetaTableFunctionUserDataInterface__gc(lua_State* L);
+	static int MetaTableFunctionUserDataInterface__tostring(lua_State* L);
 
 	static int TableFunction_print(lua_State* L);
 	static int TableFunction_package_preload(lua_State* L);
@@ -393,7 +480,14 @@ public:
 
 	static int ToByteCode_Writer(lua_State* L, const void* Ptr, size_t Size, void* UserData);
 
+	static void OnAllocateCallback(lua_State* L, size_t OSize, size_t NSize);
+	static void OnInterrupt(lua_State* L, int gc);
+
+	static void OnProfile(lua_State* L, int gc);
+
 	static void Debug_Hook(lua_State* L, lua_Debug* ar);
+
+	static void Debug_SingleStep(lua_State* L, lua_Debug* ar);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
 	static TArray<uint8> ToByteCode(const FString& Code, const FString& CodePath, FString& ErrorString);
@@ -443,6 +537,7 @@ public:
 	void RemoveLuaSmartReference(TSharedRef<FLuaSmartReference> Ref);
 
 	void SetupAndAssignUserDataMetatable(UObject* Context, TMap<FString, FLuaValue>& Metatable, lua_State* State);
+	void SetupAndAssignUserDataInterfaceMetatable(class ILuaUserDataInterface* LuaUserDataInterface, lua_State* State);
 
 	const void* ToPointer(int Index);
 
@@ -495,7 +590,70 @@ public:
 	FLuaValue RunString(const FString& CodeString, FString CodePath);
 
 	UFUNCTION(BlueprintCallable, Category = "Lua")
+	TArray<FLuaValue> RunStringMulti(const FString& CodeString, FString CodePath);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
+	FLuaValue GetLuaValueFromGlobalName(const FString& GlobalName);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	void SetLuaValueFromGlobalName(const FString& Name, FLuaValue LuaValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	FLuaValue LuaValueCall(FLuaValue LuaValue, TArray<FLuaValue> Args);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	TArray<FLuaValue> LuaValueCallMulti(FLuaValue LuaValue, TArray<FLuaValue> Args);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
 	void Error(const FString& ErrorString);
+
+	template<typename T>
+	static T* CreateDynamicLuaState(UWorld* InWorld)
+	{
+		T* NewLuaState = NewObject<T>((UObject*)GetTransientPackage());
+		if (!NewLuaState)
+		{
+			return nullptr;
+		}
+
+		return Cast<T>(NewLuaState->GetLuaState(InWorld));
+	}
+
+	UPROPERTY(EditAnywhere, Category = "Lua")
+	int64 MaxMemoryUsage = 0;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
+	int64 GetMemoryUsage() const { return CurrentMemoryUsage; }
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	void SetLuaTableReadonly(FLuaValue LuaValue, const bool bEnabled);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	void Sandbox();
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	FLuaValue RequireLuaBlueprintPackage(const FString& Name, TSubclassOf<ULuaBlueprintPackage> LuaBlueprintPackage);
+
+	template<typename T>
+	FLuaValue RequireLuaBlueprintPackage(const FString& Name)
+	{
+		return RequireLuaBlueprintPackage(Name, T::StaticClass());
+	}
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	TArray<FLuaValue> LuaValueResume(FLuaValue LuaValue, TArray<FLuaValue> Args);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Lua")
+	int32 LuaValueLength(FLuaValue LuaValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	void SetSingleStep(const bool bEnable);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	void StartProfiler(const double Frequency = 0);
+
+	UFUNCTION(BlueprintCallable, Category = "Lua")
+	TMap<FLuaProfiledStack, FLuaProfiledData> StopProfiler();
 
 protected:
 	lua_State* L;
@@ -505,6 +663,8 @@ protected:
 
 	FLuaValue UserDataMetaTable;
 
+	FLuaValue DefaultUserDataMetaMethodEq;
+
 	virtual void LuaStateInit();
 
 	FDelegateHandle GCLuaDelegatesHandle;
@@ -513,6 +673,16 @@ protected:
 	TMap<TWeakObjectPtr<UObject>, FLuaDelegateGroup> LuaDelegatesMap;
 
 	FLuaCommandExecutor LuaConsole;
+
+	int64 CurrentMemoryUsage;
+
+	TMap<FLuaProfiledStack, FLuaProfiledData> CurrentProfiledStacks;
+
+	void (*PreviousOnInterrupt)(lua_State* L, int gc) = nullptr;
+
+	double ProfilerFrequency = 0;
+	double LastProfilerRealTimeSeconds = 0;
+	int64 ProfilerSamples = 0;
 };
 
 #define LUACFUNCTION(FuncClass, FuncName, NumRetValues, NumArgs) static int FuncName ## _C(lua_State* L)\

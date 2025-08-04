@@ -26,6 +26,8 @@ FString FLuaValue::ToString() const
 		return Object ? (FunctionName.ToString() + " @ " + Object->GetClass()->GetPathName()) : FunctionName.ToString();
 	case ELuaValueType::Thread:
 		return FString::Printf(TEXT("thread: %d"), LuaRef);
+	case ELuaValueType::Lambda:
+		return FString(TEXT("lambda"));
 	}
 	return FString(TEXT("nil"));
 }
@@ -132,6 +134,7 @@ FLuaValue::FLuaValue(const FLuaValue& SourceValue)
 	String = SourceValue.String;
 	FunctionName = SourceValue.FunctionName;
 	MulticastScriptDelegate = SourceValue.MulticastScriptDelegate;
+	Lambda = SourceValue.Lambda;
 
 	// make a new reference to the table, to avoid it being destroyed
 	if (LuaRef != LUA_NOREF)
@@ -153,6 +156,7 @@ FLuaValue& FLuaValue::operator = (const FLuaValue& SourceValue)
 	String = SourceValue.String;
 	FunctionName = SourceValue.FunctionName;
 	MulticastScriptDelegate = SourceValue.MulticastScriptDelegate;
+	Lambda = SourceValue.Lambda;
 
 	// make a new reference to the table, to avoid it being destroyed
 	if (LuaRef != LUA_NOREF)
@@ -396,7 +400,9 @@ TArray<uint8> FLuaValue::ToBytes() const
 {
 	TArray<uint8> Bytes;
 	if (Type != ELuaValueType::String)
+	{
 		return Bytes;
+	}
 
 	const int32 StringLength = String.Len();
 	Bytes.AddUninitialized(StringLength);

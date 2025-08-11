@@ -4,6 +4,20 @@
 #include "LuaState.h"
 #include "Misc/Base64.h"
 
+FLuaValue::FLuaValue(TFunction<FLuaValueOrError(TArray<FLuaValue>)> InLambda) : FLuaValue()
+{
+	if (InLambda)
+	{
+		Type = ELuaValueType::Lambda;
+		Lambda = MakeShared<TFunction<FLuaValueOrError(TArray<FLuaValue>)>>(InLambda);
+	}
+}
+
+FLuaValue FLuaValue::NewLambda(TFunction<FLuaValueOrError(TArray<FLuaValue>)> InLambda)
+{
+	return FLuaValue(InLambda);
+}
+
 FString FLuaValue::ToString() const
 {
 	switch (Type)

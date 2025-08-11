@@ -132,14 +132,7 @@ struct LUAMACHINE_API FLuaValue
 		}
 	}
 
-	FLuaValue(TFunction<FLuaValueOrError(TArray<FLuaValue>)> InLambda) : FLuaValue()
-	{
-		if (InLambda)
-		{
-			Type = ELuaValueType::Lambda;
-			Lambda = MakeShared<TFunction<FLuaValueOrError(TArray<FLuaValue>)>>(InLambda);
-		}
-	}
+	FLuaValue(TFunction<FLuaValueOrError(TArray<FLuaValue>)> InLambda);
 
 	~FLuaValue();
 
@@ -160,10 +153,7 @@ struct LUAMACHINE_API FLuaValue
 		return LuaValue;
 	}
 
-	static FLuaValue NewLambda(TFunction<FLuaValueOrError(TArray<FLuaValue>)> InLambda)
-	{
-		return FLuaValue(InLambda);
-	}
+	static FLuaValue NewLambda(TFunction<FLuaValueOrError(TArray<FLuaValue>)> InLambda);
 
 	FString ToString() const;
 	FName ToName() const;

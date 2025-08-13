@@ -10,6 +10,7 @@ public class LuaMachine : ModuleRules
         Lua54,
         Luau,
         LuaJIT,
+        Lua55,
         Unknown
     }
 
@@ -57,6 +58,8 @@ public class LuaMachine : ModuleRules
                 "SlateCore",
                 "UMG",
                 "InputCore",
+                "Networking",
+                "Sockets"
 				// ... add private dependencies that you statically link with here ...	
 			}
         );

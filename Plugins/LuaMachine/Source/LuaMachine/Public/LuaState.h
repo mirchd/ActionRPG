@@ -655,6 +655,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lua")
 	TMap<FLuaProfiledStack, FLuaProfiledData> StopProfiler();
 
+	UPROPERTY(EditAnywhere, meta = (DisplayName = "Override Script Content Directory"), Category = "Lua")
+	FString ScriptContentDirectory;
+
+	UFUNCTION(BlueprintNativeEvent, Category = "Lua", meta = (DisplayName = "Override the default path where Lua scripts are searched for"))
+	FString GetScriptContentDirectory() const;
+
+	/* Start the Remote Debugger on the specified Host and port */
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Start Remote Debugger"), Category = "Lua")
+	bool StartRemoteDebugger(const FString& HostAndPort);
+
+	/* Stop the Remote Debugger */
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Stop Remote Debugger"), Category = "Lua")
+	void StopRemoteDebugger();
+
+	class FLuaRemoteDebugger* GetLuaRemoteDebugger() { return LuaRemoteDebugger; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category ="Lua")
+	int32 GetStackDepth() const;
+
 protected:
 	lua_State* L;
 	bool bDisabled;
@@ -683,6 +702,10 @@ protected:
 	double ProfilerFrequency = 0;
 	double LastProfilerRealTimeSeconds = 0;
 	int64 ProfilerSamples = 0;
+
+	FLuaRemoteDebugger* LuaRemoteDebugger = nullptr;
+	FRunnableThread* LuaRemoteDebuggerThread;
+	bool bRemoteDebuggerStarted = false;
 };
 
 #define LUACFUNCTION(FuncClass, FuncName, NumRetValues, NumArgs) static int FuncName ## _C(lua_State* L)\

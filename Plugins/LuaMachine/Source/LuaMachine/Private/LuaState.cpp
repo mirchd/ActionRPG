@@ -122,8 +122,22 @@ FLuaValue ULuaState::RequireLuaBlueprintPackage(const FString& Name, TSubclassOf
 			SetField(-2, TCHAR_TO_ANSI(*LuaPair.Key));
 		}
 		SetField(-2, TCHAR_TO_ANSI(*Name));
+
+#if !LUAMACHINE_LUAU
+		// fill package.loaded
+		GetField(-1, "package");
+		GetField(-1, "loaded");
+		PushValue(-3);
+		SetField(-2, TCHAR_TO_ANSI(*Name));
+		// pop package, loaded and value
+		Pop(3);
+#endif
+
+
 		// pop global table
 		Pop();
+
+
 
 		return LuaBlueprintPackageInstance->SelfTable;
 	}
@@ -232,7 +246,7 @@ ULuaState* ULuaState::GetLuaState(UWorld* InWorld)
 	GetField(-1, "package");
 	if (!OverridePackagePath.IsEmpty())
 	{
-		OverridePackagePath.ReplaceInline(*FString("$(CONTENT_DIR)"), *FPaths::ProjectContentDir());
+		OverridePackagePath.ReplaceInline(*FString("$(CONTENT_DIR)"), *GetScriptContentDirectory());
 		lua_pushstring(L, TCHAR_TO_ANSI(*OverridePackagePath));
 		SetField(-2, "path");
 	}
@@ -241,7 +255,7 @@ ULuaState* ULuaState::GetLuaState(UWorld* InWorld)
 	{
 		GetField(-1, "path");
 		const char* CurrentLuaPath = lua_tostring(L, -1);
-		FString NewPackagePath = FString(CurrentLuaPath) + ";" + FPaths::ProjectContentDir() + "/?.lua";
+		FString NewPackagePath = FString(CurrentLuaPath) + ";" + GetScriptContentDirectory() + "/?.lua";
 		Pop();
 		lua_pushstring(L, TCHAR_TO_ANSI(*NewPackagePath));
 		SetField(-2, "path");
@@ -251,7 +265,7 @@ ULuaState* ULuaState::GetLuaState(UWorld* InWorld)
 	{
 		GetField(-1, "path");
 		const char* CurrentLuaPath = lua_tostring(L, -1);
-		FString NewPackagePath = FString(CurrentLuaPath) + ";" + FPaths::ProjectContentDir() / SubDir + "/?.lua";
+		FString NewPackagePath = FString(CurrentLuaPath) + ";" + GetScriptContentDirectory() / SubDir + "/?.lua";
 		Pop();
 		lua_pushstring(L, TCHAR_TO_ANSI(*NewPackagePath));
 		SetField(-2, "path");
@@ -259,7 +273,7 @@ ULuaState* ULuaState::GetLuaState(UWorld* InWorld)
 
 	if (!OverridePackageCPath.IsEmpty())
 	{
-		OverridePackageCPath.ReplaceInline(*FString("$(CONTENT_DIR)"), *FPaths::ProjectContentDir());
+		OverridePackageCPath.ReplaceInline(*FString("$(CONTENT_DIR)"), *GetScriptContentDirectory());
 
 		static const FString libExtension =
 #if PLATFORM_MAC || PLATFORM_IOS
@@ -473,7 +487,7 @@ bool ULuaState::RunCodeAsset(ULuaCode* CodeAsset, int NRet)
 bool ULuaState::RunFile(const FString& Filename, bool bIgnoreNonExistent, int NRet, bool bNonContentDirectory)
 {
 	TArray<uint8> Code;
-	FString AbsoluteFilename = FPaths::Combine(FPaths::ProjectContentDir(), Filename);
+	FString AbsoluteFilename = FPaths::Combine(GetScriptContentDirectory(), Filename);
 
 	if (bNonContentDirectory)
 	{
@@ -1886,7 +1900,7 @@ int ULuaState::TableFunction_package_loader(lua_State * L)
 			Key += ".lua";
 		}
 		// search in root content...
-		FString AbsoluteFilename = FPaths::Combine(FPaths::ProjectContentDir(), Key);
+		FString AbsoluteFilename = FPaths::Combine(LuaState->GetScriptContentDirectory(), Key);
 		if (FPaths::FileExists(AbsoluteFilename))
 		{
 			lua_pushcfunction(L, ULuaState::TableFunction_package_loader_asset);
@@ -1898,7 +1912,7 @@ int ULuaState::TableFunction_package_loader(lua_State * L)
 			// or search in additional paths
 			for (FString AdditionalPath : LuaState->AppendProjectContentDirSubDir)
 			{
-				AbsoluteFilename = FPaths::Combine(FPaths::ProjectContentDir(), AdditionalPath, Key);
+				AbsoluteFilename = FPaths::Combine(LuaState->GetScriptContentDirectory(), AdditionalPath, Key);
 				if (FPaths::FileExists(AbsoluteFilename))
 				{
 					lua_pushcfunction(L, ULuaState::TableFunction_package_loader_asset);
@@ -2197,7 +2211,9 @@ void ULuaState::UnrefChecked(int Ref)
 {
 	// in case of moved value (like when compiling a blueprint), L should be nullptr
 	if (!L)
+	{
 		return;
+	}
 
 	Unref(Ref);
 }
@@ -2215,6 +2231,19 @@ void ULuaState::GetRef(int Ref)
 int ULuaState::Next(int Index)
 {
 	return lua_next(L, Index);
+}
+
+int32 ULuaState::GetStackDepth() const
+{
+	int32 Depth = 0;
+#if LUAMACHINE_LUA53
+	lua_Debug Ar;
+	while (lua_getstack(L, Depth, &Ar))
+	{
+		Depth++;
+	}
+#endif
+	return Depth;
 }
 
 bool ULuaState::Yield(int Index, int NArgs)
@@ -2423,6 +2452,8 @@ void ULuaState::RemoveLuaSmartReference(TSharedRef<FLuaSmartReference> Ref)
 
 ULuaState::~ULuaState()
 {
+	StopRemoteDebugger();
+
 	FCoreUObjectDelegates::GetPostGarbageCollect().Remove(GCLuaDelegatesHandle);
 
 #if WITH_EDITOR
@@ -3351,6 +3382,16 @@ TArray<FLuaValue> ULuaState::LuaValueCallMulti(FLuaValue LuaValue, TArray<FLuaVa
 	Pop();
 
 	return ReturnValue;
+}
+
+FString ULuaState::GetScriptContentDirectory_Implementation() const
+{
+	if (ScriptContentDirectory.IsEmpty())
+	{
+		return FPaths::ProjectContentDir();
+	}
+
+	return ScriptContentDirectory;
 }
 
 void ULuaState::StartProfiler(const double Frequency)

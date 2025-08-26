@@ -495,15 +495,11 @@ FUnrealSkeletalMeshTranslator::CreateInputNodesForSkeletalMesh(
 			if (UseMergeNode)
 			{
 				// Create a new input node for the current LOD
-				const char* LODName = "";
-				{
-					FString LOD = TEXT("lod") + FString::FromInt(LODIndex);
-					LODName = TCHAR_TO_UTF8(*LOD);
-				}
+				FString LODName = TEXT("lod") + FString::FromInt(LODIndex);
 
 				// Create the node in this input object's OBJ node
 				HOUDINI_CHECK_ERROR_RETURN(FHoudiniEngineUtils::CreateNode(
-					InputObjectNodeId, TEXT("null"), LODName, false, &CurrentLODNodeId), false);
+					InputObjectNodeId, TEXT("null"), H_TCHAR_TO_UTF8(*LODName), false, &CurrentLODNodeId), false);
 			}
 			else
 			{
@@ -726,7 +722,7 @@ FUnrealSkeletalMeshTranslator::CreateInputNodesForSkeletalMesh(
 				const FString FormatString = TEXT("s@{0} = '{1}';");
 				FString PathName = PhysicalMaterial->GetPathName();
 				FString AttrName = TEXT(HAPI_UNREAL_ATTRIB_SIMPLE_PHYSICAL_MATERIAL);
-				std::string VEXpression = TCHAR_TO_UTF8(*FString::Format(*FormatString,
+				std::string VEXpression = H_TCHAR_TO_UTF8(*FString::Format(*FormatString,
 					{ AttrName, PathName }));
 
 				// Set the snippet parameter to the VEXpression.
@@ -1539,16 +1535,12 @@ FUnrealSkeletalMeshTranslator::SetSkeletalMeshDataOnNodeFromSourceModel(
 	if (bAddLODGroups)
 	{
 		// LOD Group
-		const char* LODGroupStr = "";
-		{
-			FString LODGroup = TEXT("lod") + FString::FromInt(LODIndex);
-			LODGroupStr = TCHAR_TO_UTF8(*LODGroup);
-		}
+		FString LODGroup = TEXT("lod") + FString::FromInt(LODIndex);
 
 		// Add a LOD group
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddGroup(
 			FHoudiniEngine::Get().GetSession(),
-			NewNodeId, 0, HAPI_GROUPTYPE_PRIM, LODGroupStr), false);
+			NewNodeId, 0, HAPI_GROUPTYPE_PRIM, H_TCHAR_TO_UTF8(*LODGroup)), false);
 
 		// Set GroupMembership
 		TArray<int> GroupArray;
@@ -1558,7 +1550,7 @@ FUnrealSkeletalMeshTranslator::SetSkeletalMeshDataOnNodeFromSourceModel(
 
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetGroupMembership(
 			FHoudiniEngine::Get().GetSession(),
-			NewNodeId, 0, HAPI_GROUPTYPE_PRIM, LODGroupStr,
+			NewNodeId, 0, HAPI_GROUPTYPE_PRIM, H_TCHAR_TO_UTF8(*LODGroup),
 			GroupArray.GetData(), 0, Part.faceCount), false);
 
 		FSkeletalMeshLODInfo* LODInfo = SkeletalMesh->GetLODInfo(LODIndex);
@@ -1580,12 +1572,12 @@ FUnrealSkeletalMeshTranslator::SetSkeletalMeshDataOnNodeFromSourceModel(
 
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddAttribute(
 				FHoudiniEngine::Get().GetSession(),
-				NewNodeId, 0, TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize), false);
+				NewNodeId, 0, H_TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize), false);
 
 			float lodscreensize = LODInfo->ScreenSize.Default;
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetAttributeFloatData(
 				FHoudiniEngine::Get().GetSession(), NewNodeId, 0,
-				TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize,
+				H_TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize,
 				&lodscreensize, 0, 1), false);
 		}
 	}
@@ -2026,7 +2018,7 @@ FUnrealSkeletalMeshTranslator::CreateInputNodeForCapturePose(
 			if (ParmId != -1)
 			{
 				FHoudiniApi::SetParmStringValue(FHoudiniEngine::Get().GetSession(), AttribWrangleNodeId,
-					TCHAR_TO_UTF8(*FormatString), ParmId, 0);
+					H_TCHAR_TO_UTF8(*FormatString), ParmId, 0);
 			}
 			else
 			{

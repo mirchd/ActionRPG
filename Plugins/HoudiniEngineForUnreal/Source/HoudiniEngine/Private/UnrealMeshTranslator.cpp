@@ -458,11 +458,8 @@ FUnrealMeshTranslator::HapiCreateInputNodeForStaticMesh(
 			if (UseMergeNode)
 			{
 				// Create a new input node for the current LOD
-				const char * LODName = "";
-				{
-					FString LOD = TEXT("lod") + FString::FromInt(LODIndex);
-					LODName = TCHAR_TO_UTF8(*LOD);
-				}
+
+				FString LODName = TEXT("lod") + FString::FromInt(LODIndex);
 
 				// Create the node in this input object's OBJ node
 				HOUDINI_CHECK_ERROR_RETURN( FHoudiniEngineUtils::CreateNode(
@@ -689,7 +686,7 @@ FUnrealMeshTranslator::HapiCreateInputNodeForStaticMesh(
 			const FString FormatString = TEXT("s@{0} = '{1}';\n");
 			FString PathName = StaticMesh->GetPathName();
 			FString AttrName = TEXT(HAPI_UNREAL_ATTRIB_INPUT_MESH_NAME);
-			std::string VEXpression = TCHAR_TO_UTF8(*FString::Format(*FormatString, { AttrName, PathName }));
+			std::string VEXpression = H_TCHAR_TO_UTF8(*FString::Format(*FormatString, { AttrName, PathName }));
 
 			// Create a new primitive attribute where each value contains the Physical Material
 			// mae in Unreal.
@@ -701,7 +698,7 @@ FUnrealMeshTranslator::HapiCreateInputNodeForStaticMesh(
 				// eg. s@unreal_physical_material = 'MyPath/PhysicalMaterial';
 				PathName = PhysicalMaterial->GetPathName();
 				AttrName = TEXT(HAPI_UNREAL_ATTRIB_SIMPLE_PHYSICAL_MATERIAL);
-				VEXpression += TCHAR_TO_UTF8(*FString::Format(*FormatString, { AttrName, PathName }));
+				VEXpression += H_TCHAR_TO_UTF8(*FString::Format(*FormatString, { AttrName, PathName }));
 			}
 
 			// Set the snippet parameter to the VEXpression.
@@ -2477,16 +2474,13 @@ FUnrealMeshTranslator::CreateInputNodeForStaticMeshLODResources(
 	if (bAddLODGroups)
 	{
 		// LOD Group
-		const char * LODGroupStr = "";
-		{
-			FString LODGroup = TEXT("lod") + FString::FromInt(InLODIndex);
-			LODGroupStr = TCHAR_TO_UTF8(*LODGroup);
-		}
+
+		FString LODGroup = TEXT("lod") + FString::FromInt(InLODIndex);
 
 		// Add a LOD group
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddGroup(
 			FHoudiniEngine::Get().GetSession(),
-			NodeId, 0, HAPI_GROUPTYPE_PRIM, LODGroupStr), false);
+			NodeId, 0, HAPI_GROUPTYPE_PRIM, H_TCHAR_TO_UTF8(*LODGroup)), false);
 
 		// Set GroupMembership
 		TArray<int> GroupArray;
@@ -2496,7 +2490,7 @@ FUnrealMeshTranslator::CreateInputNodeForStaticMeshLODResources(
 
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetGroupMembership(
 			FHoudiniEngine::Get().GetSession(),
-			NodeId, 0, HAPI_GROUPTYPE_PRIM, LODGroupStr,
+			NodeId, 0, HAPI_GROUPTYPE_PRIM, H_TCHAR_TO_UTF8(*LODGroup),
 			GroupArray.GetData(), 0, Part.faceCount), false);
 
 		if (!StaticMesh->bAutoComputeLODScreenSize)
@@ -2517,12 +2511,12 @@ FUnrealMeshTranslator::CreateInputNodeForStaticMeshLODResources(
 
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddAttribute(
 				FHoudiniEngine::Get().GetSession(),
-				NodeId, 0, TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize), false);
+				NodeId, 0, H_TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize), false);
 
 			float lodscreensize = SourceModel.ScreenSize.Default;
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetAttributeFloatData(
 				FHoudiniEngine::Get().GetSession(), NodeId, 0,
-				TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize,
+				H_TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize,
 				&lodscreensize, 0, 1), false);
 		}
 	}
@@ -3571,16 +3565,13 @@ FUnrealMeshTranslator::CreateAndPopulateMeshPartFromMeshDescription(
 		H_SCOPED_FUNCTION_STATIC_LABEL("LOD GROUP AND SCREEN SIZE");
 
 		// LOD Group
-		const char * LODGroupStr = "";
-		{
-			FString LODGroup = TEXT("lod") + FString::FromInt(InLODIndex);
-			LODGroupStr = TCHAR_TO_UTF8(*LODGroup);
-		}
+
+		FString LODGroup = TEXT("lod") + FString::FromInt(InLODIndex);
 
 		// Add a LOD group
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddGroup(
 			FHoudiniEngine::Get().GetSession(),
-			NodeId, 0, HAPI_GROUPTYPE_PRIM, LODGroupStr), false);
+			NodeId, 0, HAPI_GROUPTYPE_PRIM, H_TCHAR_TO_UTF8(*LODGroup)), false);
 
 		// Set GroupMembership
 		TArray<int> GroupArray;
@@ -3590,7 +3581,7 @@ FUnrealMeshTranslator::CreateAndPopulateMeshPartFromMeshDescription(
 
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetGroupMembership(
 			FHoudiniEngine::Get().GetSession(),
-			NodeId, 0, HAPI_GROUPTYPE_PRIM, LODGroupStr,
+			NodeId, 0, HAPI_GROUPTYPE_PRIM, H_TCHAR_TO_UTF8(*LODGroup),
 			GroupArray.GetData(), 0, Part.faceCount), false);
 
 		if (LODScreenSize.IsSet())
@@ -3611,12 +3602,12 @@ FUnrealMeshTranslator::CreateAndPopulateMeshPartFromMeshDescription(
 
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::AddAttribute(
 				FHoudiniEngine::Get().GetSession(),
-				NodeId, 0, TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize), false);
+				NodeId, 0, H_TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize), false);
 
 			const float LODScreenSizeValue = LODScreenSize.GetValue();
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetAttributeFloatData(
 				FHoudiniEngine::Get().GetSession(), NodeId, 0,
-				TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize,
+				H_TCHAR_TO_UTF8(*LODAttributeName), &AttributeInfoLODScreenSize,
 				&LODScreenSizeValue, 0, 1), false);
 		}
 	}
@@ -4057,13 +4048,11 @@ FUnrealMeshTranslator::CreateInputNodeForBox(
 	// Set its group name param to collision_geo_simple_box
 	HAPI_ParmInfo ParmInfo;
 	HAPI_ParmId parmId = FHoudiniEngineUtils::HapiFindParameterByName(GroupNodeId, "groupname", ParmInfo);
-	const char * GroupNameStr = "";
-	{
-		FString LODGroup = TEXT("collision_geo_simple_box") + FString::FromInt(ColliderIndex);
-		GroupNameStr = TCHAR_TO_UTF8(*LODGroup);
-	}
+
+	FString LODGroup = TEXT("collision_geo_simple_box") + FString::FromInt(ColliderIndex);
+
 	FHoudiniApi::SetParmStringValue(
-		FHoudiniEngine::Get().GetSession(), GroupNodeId, GroupNameStr, parmId, 0);
+		FHoudiniEngine::Get().GetSession(), GroupNodeId, H_TCHAR_TO_UTF8(*LODGroup), parmId, 0);
 
 	// Connect the box to the group
 	FHoudiniApi::ConnectNodeInput(
@@ -4083,11 +4072,7 @@ FUnrealMeshTranslator::CreateInputNodeForSphere(
 	const float& SphereRadius)
 {
 	// Create a new input node for the sphere collider
-	const char * SphereName = "";
-	{
-		FString SPH = TEXT("Sphere") + FString::FromInt(ColliderIndex);
-		SphereName = TCHAR_TO_UTF8(*SPH);
-	}
+	FString SphereName = TEXT("Sphere") + FString::FromInt(ColliderIndex);
 
 	// Create the node in this input object's OBJ node
 	HAPI_NodeId SphereNodeId = -1;
@@ -4128,13 +4113,11 @@ FUnrealMeshTranslator::CreateInputNodeForSphere(
 	// Set its group name param to collision_geo_simple_box
 	HAPI_ParmInfo ParmInfo;
 	HAPI_ParmId parmId = FHoudiniEngineUtils::HapiFindParameterByName(GroupNodeId, "groupname", ParmInfo);
-	const char * GroupNameStr = "";
-	{
-		FString LODGroup = TEXT("collision_geo_simple_sphere") + FString::FromInt(ColliderIndex);
-		GroupNameStr = TCHAR_TO_UTF8(*LODGroup);
-	}
+
+	FString LODGroup = TEXT("collision_geo_simple_sphere") + FString::FromInt(ColliderIndex);
+	
 	FHoudiniApi::SetParmStringValue(
-		FHoudiniEngine::Get().GetSession(), GroupNodeId, GroupNameStr, parmId, 0);
+		FHoudiniEngine::Get().GetSession(), GroupNodeId, H_TCHAR_TO_UTF8(*LODGroup), parmId, 0);
 
 	// Connect the box to the group
 	FHoudiniApi::ConnectNodeInput(
@@ -4264,13 +4247,11 @@ FUnrealMeshTranslator::CreateInputNodeForSphyl(
 	// Set its group name param to collision_geo_simple_box
 	HAPI_ParmInfo ParmInfo;
 	HAPI_ParmId parmId = FHoudiniEngineUtils::HapiFindParameterByName(GroupNodeId, "groupname", ParmInfo);
-	const char * GroupNameStr = "";
-	{
-		FString LODGroup = TEXT("collision_geo_simple_capsule") + FString::FromInt(ColliderIndex);
-		GroupNameStr = TCHAR_TO_UTF8(*LODGroup);
-	}
+
+	FString LODGroup = TEXT("collision_geo_simple_capsule") + FString::FromInt(ColliderIndex);
+
 	FHoudiniApi::SetParmStringValue(
-		FHoudiniEngine::Get().GetSession(), GroupNodeId, GroupNameStr, parmId, 0);
+		FHoudiniEngine::Get().GetSession(), GroupNodeId, H_TCHAR_TO_UTF8(*LODGroup), parmId, 0);
 
 	// Connect the box to the group
 	FHoudiniApi::ConnectNodeInput(
@@ -4409,13 +4390,11 @@ FUnrealMeshTranslator::CreateInputNodeForConvex(
 	// Set its group name param to collision_geo_simple_ucx
 	HAPI_ParmInfo ParmInfo;
 	HAPI_ParmId parmId = FHoudiniEngineUtils::HapiFindParameterByName(GroupNodeId, "groupname", ParmInfo);
-	const char * GroupNameStr = "";
-	{
-		FString LODGroup = TEXT("collision_geo_simple_ucx") + FString::FromInt(ColliderIndex);
-		GroupNameStr = TCHAR_TO_UTF8(*LODGroup);
-	}
+
+	FString LODGroup = TEXT("collision_geo_simple_ucx") + FString::FromInt(ColliderIndex);
+
 	FHoudiniApi::SetParmStringValue(
-		FHoudiniEngine::Get().GetSession(), GroupNodeId, GroupNameStr, parmId, 0);
+		FHoudiniEngine::Get().GetSession(), GroupNodeId, H_TCHAR_TO_UTF8(*LODGroup), parmId, 0);
 
 	// Create a convex hull (shrinkwrap::2.0) node to fix the lack of proper indices
 	HAPI_NodeId ConvexHullNodeId = -1;	
@@ -4458,7 +4437,7 @@ FUnrealMeshTranslator::CreateInputNodeForCollider(
 	// Create a new input node for the collider in this input object's OBJ node
 	HAPI_NodeId ColliderNodeId = -1;
 	HOUDINI_CHECK_ERROR_RETURN( FHoudiniEngineUtils::CreateNode(
-		InParentNodeID, "null", TCHAR_TO_UTF8(*ColliderName), false, &ColliderNodeId), false);
+		InParentNodeID, "null", H_TCHAR_TO_UTF8(*ColliderName), false, &ColliderNodeId), false);
 
 	// Create a part
 	HAPI_PartInfo Part;

@@ -244,12 +244,9 @@ inline HOUDINIENGINERUNTIME_API uint32 GetTypeHash(const FUnrealObjectInputOptio
 enum class EUnrealObjectInputNodeType : uint8
 {
 	Invalid,
-	/** A node that contains other nodes. */
-	Container,
-	/** A node that references (or merges) other leaf nodes. */
-	Reference,
-	/** A node that contains an object/asset, such as static mesh geometry. */
-	Leaf
+	Container, 	/** A node that contains other nodes. */
+	Reference,	/** A node that references (or merges) other leaf nodes. */
+	Leaf		/** A node that contains an object/asset, such as static mesh geometry. */
 };
 
 
@@ -288,9 +285,6 @@ public:
 	
 	/** Construct an identifier for a container associated with a path. Analogous to directories. */
 	FUnrealObjectInputIdentifier(const FName& InPath);
-
-	/** Construct from a handle (copies the handle's identifier). */
-	FUnrealObjectInputIdentifier(const class FUnrealObjectInputHandle& InHandle);
 
 	/**
 	 * Returns true if the identifier is valid.
@@ -340,6 +334,8 @@ public:
 	/** Gets the Options that forms part of this identifier. */
 	const FUnrealObjectInputOptions& GetOptions() const { return Options; }
 
+	FString ToString() const ;
+
 private:
 	/** The object this identifier is associated with. */
 	TWeakObjectPtr<const UObject> Object;
@@ -381,6 +377,8 @@ public:
 	 */
 	FUnrealObjectInputHandle(const FUnrealObjectInputHandle& InHandle);
 
+	FUnrealObjectInputHandle(FUnrealObjectInputHandle&& InHandle);
+
 	/** Destructor: decrements reference count via the manager if the handle is valid. */
 	virtual ~FUnrealObjectInputHandle();
 
@@ -411,7 +409,8 @@ public:
 	 * initialized, this handle will increment the reference count to the new identifier.
 	 */
 	FUnrealObjectInputHandle& operator=(const FUnrealObjectInputHandle& InOther);
-	
+	FUnrealObjectInputHandle& operator=(FUnrealObjectInputHandle&& InOther);
+
 protected:
 	/**
 	 * Initialize the handle: check that InIdentifier is valid, assign it internally and increment the reference count

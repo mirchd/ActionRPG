@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
+// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 /*=============================================================================
 	RealtimeMeshVertexFactory.cpp: Local vertex factory implementation
@@ -58,6 +58,27 @@ namespace RealtimeMesh
 
 	static TGlobalResource<FRealtimeMeshSpeedTreeWindNullUniformBuffer> GSpeedTreeWindNullUniformBuffer;
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
+	void FRealtimeMeshNullColorVertexBuffer::InitRHI(FRHICommandListBase& RHICmdList)
+	{
+		FRHIBufferCreateDesc CreateDesc =
+			FRHIBufferCreateDesc::Create(TEXT("FRealtimeMeshNullColorVertexBuffer"), sizeof(FColor), 0, BUF_Static | BUF_VertexBuffer | BUF_ShaderResource)
+			.SetInitialState(ERHIAccess::VertexOrIndexBuffer | ERHIAccess::SRVMask)
+			.DetermineInitialState();
+
+		VertexBufferRHI = RHICmdList.CreateBuffer(CreateDesc);
+		FColor* Vertices = static_cast<FColor*>(RHICmdList.LockBuffer(VertexBufferRHI, 0, sizeof(FColor), RLM_WriteOnly));
+		Vertices[0] = FColor(255, 255, 255, 255);
+		RHICmdList.UnlockBuffer(VertexBufferRHI);
+		VertexBufferSRV = RHICmdList.CreateShaderResourceView(VertexBufferRHI, FRHIViewDesc::CreateBufferSRV()
+			.SetType(FRHIViewDesc::EBufferType::Typed)
+			.SetFormat(EPixelFormat(PF_R8G8B8A8))
+		);
+
+		FVertexBuffer::InitRHI(RHICmdList);
+	}
+#else
+
 #if RMC_ENGINE_ABOVE_5_3
 	void FRealtimeMeshNullColorVertexBuffer::InitRHI(FRHICommandListBase& RHICmdList)
 	{		
@@ -85,11 +106,34 @@ namespace RealtimeMesh
 	}
 #endif
 
+#endif
+
 	void FRealtimeMeshNullColorVertexBuffer::ReleaseRHI()
 	{
 		VertexBufferSRV.SafeRelease();
 		FVertexBuffer::ReleaseRHI();
 	}
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
+	void FRealtimeMeshNullTangentVertexBuffer::InitRHI(FRHICommandListBase& RHICmdList)
+	{
+		FRHIBufferCreateDesc CreateDesc =
+			FRHIBufferCreateDesc::Create(TEXT("FRealtimeMeshNullTangentVertexBuffer"), sizeof(TRealtimeMeshTangents<FPackedRGBA16N>), 0, BUF_Static | BUF_VertexBuffer | BUF_ShaderResource)
+			.SetInitialState(ERHIAccess::VertexOrIndexBuffer | ERHIAccess::SRVMask)
+			.DetermineInitialState();
+
+		VertexBufferRHI = RHICmdList.CreateBuffer(CreateDesc);
+		TRealtimeMeshTangents<FPackedRGBA16N>* Vertices = static_cast<TRealtimeMeshTangents<FPackedRGBA16N>*>(RHICmdList.LockBuffer(VertexBufferRHI, 0, sizeof(TRealtimeMeshTangents<FPackedRGBA16N>), RLM_WriteOnly));
+		Vertices[0] = TRealtimeMeshTangents<FPackedRGBA16N>(FVector3f::ZAxisVector, FVector3f::YAxisVector, FVector3f::XAxisVector);
+		RHICmdList.UnlockBuffer(VertexBufferRHI);
+		VertexBufferSRV = RHICmdList.CreateShaderResourceView(VertexBufferRHI, FRHIViewDesc::CreateBufferSRV()
+			.SetType(FRHIViewDesc::EBufferType::Typed)
+			.SetFormat(EPixelFormat(PF_R16G16B16A16_SINT))
+		);
+
+		FVertexBuffer::InitRHI(RHICmdList);
+	}
+#else
 
 #if RMC_ENGINE_ABOVE_5_3
 	void FRealtimeMeshNullTangentVertexBuffer::InitRHI(FRHICommandListBase& RHICmdList)
@@ -118,11 +162,34 @@ namespace RealtimeMesh
 	}
 #endif
 
+#endif
+
 	void FRealtimeMeshNullTangentVertexBuffer::ReleaseRHI()
 	{
 		VertexBufferSRV.SafeRelease();
 		FVertexBuffer::ReleaseRHI();
 	}
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
+	void FRealtimeMeshNullTexCoordVertexBuffer::InitRHI(FRHICommandListBase& RHICmdList)
+	{
+		FRHIBufferCreateDesc CreateDesc =
+			FRHIBufferCreateDesc::Create(TEXT("FRealtimeMeshNullTexCoordVertexBuffer"), sizeof(FVector2f), 0, BUF_Static | BUF_VertexBuffer | BUF_ShaderResource)
+			.SetInitialState(ERHIAccess::VertexOrIndexBuffer | ERHIAccess::SRVMask)
+			.DetermineInitialState();
+
+		VertexBufferRHI = RHICmdList.CreateBuffer(CreateDesc);
+		FVector2f* Vertices = static_cast<FVector2f*>(RHICmdList.LockBuffer(VertexBufferRHI, 0, sizeof(FVector2f), RLM_WriteOnly));
+		Vertices[0] = FVector2f::ZeroVector;
+		RHICmdList.UnlockBuffer(VertexBufferRHI);
+		VertexBufferSRV = RHICmdList.CreateShaderResourceView(VertexBufferRHI, FRHIViewDesc::CreateBufferSRV()
+			.SetType(FRHIViewDesc::EBufferType::Typed)
+			.SetFormat(EPixelFormat(PF_G32R32F))
+		);
+
+		FVertexBuffer::InitRHI(RHICmdList);
+	}
+#else
 
 #if RMC_ENGINE_ABOVE_5_3
 	void FRealtimeMeshNullTexCoordVertexBuffer::InitRHI(FRHICommandListBase& RHICmdList)
@@ -148,6 +215,8 @@ namespace RealtimeMesh
 		RHIUnlockBuffer(VertexBufferRHI);
 		VertexBufferSRV = RHICreateShaderResourceView(VertexBufferRHI, sizeof(FVector2f), PF_G32R32F);	
 	}
+#endif
+
 #endif
 
 	void FRealtimeMeshNullTexCoordVertexBuffer::ReleaseRHI()

@@ -12,11 +12,7 @@ namespace RealtimeMesh
 			auto& RHICmdList = UpdateContext.GetRHICmdList();
 
 #if RMC_ENGINE_ABOVE_5_5
-			const FRHIBufferCreateDesc Desc =
-				FRHIBufferCreateDesc::CreateVertex<SectionTriangleInfo>(TEXT("StaticMeshSectionAreaWeightedTriangleSamplerBuffer"), TriangleCount)
-				.AddUsage(UsageFlags | BUF_VertexBuffer | BUF_ShaderResource)
-				.SetInitialState(ERHIAccess::VertexOrIndexBuffer | ERHIAccess::SRVMask)
-				.SetInitActionInitializer();
+			
 #else
 			FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Temp"), &Stream);
 			CreateInfo.bWithoutNativeResource = Stream.Num() == 0 || Stream.GetStride() == 0;
@@ -25,35 +21,23 @@ namespace RealtimeMesh
 			if (GetStreamKey().IsVertexStream())
 			{
 #if RMC_ENGINE_ABOVE_5_5
-				const FRHIBufferCreateDesc CreateDesc =
-					FRHIBufferCreateDesc::CreateVertex(TEXT("RealtimeMeshBuffer-Temp"), Stream.GetResourceDataSize())
-					.AddUsage(UsageFlags | BUF_VertexBuffer | BUF_ShaderResource)
-					.SetInitialState(ERHIAccess::VertexOrIndexBuffer | ERHIAccess::SRVMask)
-					.SetInitActionInitializer();
-
-				Buffer = RHICmdList.CreateBuffer(CreateDesc);
-
+				const FRHIBufferCreateDesc CreateDesc;
 				if (Stream.Num() == 0 || Stream.GetStride() == 0)
 				{
-					RHICmdList.CreateNullBuffer(ResourceState, CreateInfo);
+					const FRHIBufferCreateDesc CreateDesc =
+						FRHIBufferCreateDesc::CreateNull(TEXT("RealtimeMeshBuffer-Temp"));
+
+					Buffer = RHICmdList.CreateBuffer(CreateDesc);
 				}
-
-				FRHIBufferCreateDesc CreateDesc =
-					FRHIBufferCreateDesc::Create(CreateInfo.DebugName, Size, Stride, Usage)
-					.SetGPUMask(CreateInfo.GPUMask)
-					.SetInitialState(ResourceState)
-					.SetClassName(CreateInfo.ClassName)
-					.SetOwnerName(CreateInfo.OwnerName);
-
-				if (CreateInfo.ResourceArray)
+				else
 				{
-					CreateDesc.SetInitActionResourceArray(CreateInfo.ResourceArray);
+					FRHIBufferCreateDesc CreateDesc =
+						FRHIBufferCreateDesc::Create(TEXT("RealtimeMeshBuffer-Temp"), Stream.GetResourceDataSize(), Stream.GetStride(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource)
+						.SetInitialState(ERHIAccess::SRVMask)
+						.SetInitActionResourceArray(&Stream);
+
+					Buffer = RHICmdList.CreateBuffer(CreateDesc);
 				}
-
-				return CreateBuffer(CreateDesc);
-
-				Buffer = RHICmdList.CreateBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource,
-					Stream.GetStride(), ERHIAccess::SRVMask, CreateInfo);
 #else
 				Buffer = RHICmdList->CreateBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource,
 					Stream.GetStride(), ERHIAccess::SRVMask, CreateInfo);
@@ -63,8 +47,23 @@ namespace RealtimeMesh
 			{
 				check(GetStreamKey().IsIndexStream());
 #if RMC_ENGINE_ABOVE_5_5
-				Buffer = RHICmdList.CreateBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource,
-					Stream.GetElementStride(), ERHIAccess::SRVMask, CreateInfo);
+				const FRHIBufferCreateDesc CreateDesc;
+				if (Stream.Num() == 0 || Stream.GetStride() == 0)
+				{
+					const FRHIBufferCreateDesc CreateDesc =
+						FRHIBufferCreateDesc::CreateNull(TEXT("RealtimeMeshBuffer-Temp"));
+
+					Buffer = RHICmdList.CreateBuffer(CreateDesc);
+				}
+				else
+				{
+					FRHIBufferCreateDesc CreateDesc =
+						FRHIBufferCreateDesc::Create(TEXT("RealtimeMeshBuffer-Temp"), Stream.GetResourceDataSize(), Stream.GetElementStride(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource)
+						.SetInitialState(ERHIAccess::SRVMask)
+						.SetInitActionResourceArray(&Stream);
+
+					Buffer = RHICmdList.CreateBuffer(CreateDesc);
+				}
 #else
 				Buffer = RHICmdList->CreateBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource,
 					Stream.GetElementStride(), ERHIAccess::SRVMask, CreateInfo);

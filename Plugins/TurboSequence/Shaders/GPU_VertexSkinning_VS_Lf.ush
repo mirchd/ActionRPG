@@ -1,0 +1,51 @@
+// Copyright Lukas Fratzl, 2022-2024. All Rights Reserved.
+
+#pragma once
+
+#include "TS_MaterialFunctions.ush"
+
+float3 FinalCurrentFrameBlendPosition = float3(0, 0, 0);
+
+TurboSequenceVSFunctions_Lf f;
+
+TurboSequenceEncodeFunctions_Lf EncodeFunction;
+
+int SwTextureOffset = EncodeFunction.EncodeUInt16ToUInt32_Float(CustomData.x, CustomData.y);
+if (SwTextureOffset)
+{
+	int4 Settings0 = (int4)TransformTexture_CurrentFrame[int3(0, 0, 0)];
+
+	int VertexBaseIndex = 0;
+	if (MeshDataMode > 0.5f) // Vertex Color
+	{
+		float4 VertexColorScaled = float4(VertexInstanceColorTS_Lf.x * 0xFF, VertexInstanceColorTS_Lf.y * 0xFF,
+											 VertexInstanceColorTS_Lf.z * 0xFF, VertexInstanceColorTS_Lf.w * 0xFF);
+		VertexBaseIndex = EncodeFunction.EncodeUInt32ToColor_Float(VertexColorScaled) * 7 + (SwTextureOffset - Settings0.z);
+		// Setting0.z -> Custom States offset
+	}
+	else // UV
+	{
+		int UVChannelIndex = NUM_MATERIAL_TEXCOORDS_VERTEX - 1;
+		if (MeshDataUVChannelOverride > -0.5f)
+		{
+			UVChannelIndex = MeshDataUVChannelOverride;
+		}
+
+		float2 UVs = Parameters.TexCoords[UVChannelIndex];
+		VertexBaseIndex = EncodeFunction.EncodeUInt16ToUInt32_Float(UVs.x, UVs.y) * 7 + (SwTextureOffset - Settings0.z);
+		// Setting0.z -> Custom States offset
+	}
+
+	int TTextureOffset = EncodeFunction.EncodeUInt16ToUInt32_Float(CustomData.z, CustomData.w);
+	int4 Settings1 = (int4)TransformTexture_CurrentFrame[int3(1, 0, 0)];
+	int2 MaterialSettings0 = int2((int)MeshDataTextureDimension.x,
+								  (int)MeshDataTextureDimension.y);
+
+	bool bEarlyOutInfluences = EarlyOutInfluences > 0.1f;
+
+	f.VertexSkin(FinalCurrentFrameBlendPosition, FinalPreviousBlendPosition, TransformTexture_CurrentFrame,
+	             TransformTexture_PreviousFrame, SkinWeightTexture, TTextureOffset, VertexBaseIndex, Settings0.w,
+	             Settings1, MaterialSettings0, VertexPosition, bEarlyOutInfluences);
+}
+
+return FinalCurrentFrameBlendPosition;

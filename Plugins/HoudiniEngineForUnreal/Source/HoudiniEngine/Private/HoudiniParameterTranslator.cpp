@@ -30,6 +30,12 @@
 #include "HoudiniEnginePrivatePCH.h"
 
 #include "HoudiniAsset.h"
+#include "HoudiniAssetComponent.h"
+#include "HoudiniCookable.h"
+#include "HoudiniEngine.h"
+#include "HoudiniEngineUtils.h"
+#include "HoudiniEngineString.h"
+#include "HoudiniInput.h"
 #include "HoudiniNodeSyncComponent.h"
 #include "HoudiniParameter.h"
 #include "HoudiniParameterButton.h"
@@ -43,20 +49,12 @@
 #include "HoudiniParameterInt.h"
 #include "HoudiniParameterLabel.h"
 #include "HoudiniParameterMultiParm.h"
+#include "HoudiniParameterOperatorPath.h"
 #include "HoudiniParameterRamp.h"
 #include "HoudiniParameterSeparator.h"
 #include "HoudiniParameterString.h"
 #include "HoudiniParameterToggle.h"
-#include "HoudiniParameterFile.h"
-#include "HoudiniParameterOperatorPath.h"
 
-#include "HoudiniInput.h"
-
-#include "HoudiniEngine.h"
-#include "HoudiniEngineUtils.h"
-#include "HoudiniEngineString.h"
-#include "HoudiniParameter.h"
-#include "HoudiniAssetComponent.h"
 
 
 // Default values for certain UI min and max parameter values
@@ -72,46 +70,31 @@
 #define HAPI_UNREAL_PARAM_PIVOT						"p"
 #define HAPI_UNREAL_PARAM_UNIFORMSCALE				"scale"
 
-// 
-bool 
-FHoudiniParameterTranslator::UpdateParameters(UHoudiniAssetComponent* HAC)
+bool
+FHoudiniParameterTranslator::UpdateParameters(
+	HAPI_NodeId InNodeId, 
+	UObject* InOuter,
+	TArray<TObjectPtr<UHoudiniParameter>>& InParameters, 
+	UHoudiniAsset* InHoudiniAsset, 
+	const FString& InHapiAssetName,
+	bool bForceFullUpdate,
+	bool bCacheRampParms, 
+	bool& bNeedToUpdateEditorProperties)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniParameterTranslator::UpdateParameters);
 
-	if (!IsValid(HAC))
-		return false;
-
-	// Nothing to do for Node Sync Components!
-	if (HAC->IsA<UHoudiniNodeSyncComponent>())
-		return true;
-
-	// When recooking/rebuilding the HDA, force a full update of all params
-	const bool bForceFullUpdate = HAC->HasRebuildBeenRequested() || HAC->HasRecookBeenRequested() || HAC->IsParameterDefinitionUpdateNeeded();
-
 	TArray<TObjectPtr<UHoudiniParameter>> NewParameters;
-	if (FHoudiniParameterTranslator::BuildAllParameters(HAC->GetAssetId(), HAC, HAC->Parameters, NewParameters, true, bForceFullUpdate, HAC->GetHoudiniAsset(), HAC->GetHapiAssetName()))
+	if (FHoudiniParameterTranslator::BuildAllParameters(InNodeId, InOuter, InParameters, NewParameters, true, bForceFullUpdate, InHoudiniAsset, InHapiAssetName, bCacheRampParms))
 	{
-		/*
 		// DO NOT MANUALLY DESTROY THE OLD/DANGLING PARAMETERS!
 		// This messes up unreal's Garbage collection and would cause crashes on duplication
 
-		// Destroy old/dangling parameters
-		for (auto& OldParm : HAC->Parameters)
-		{
-			if (!IsValid(OldParm))
-				continue;
-
-			OldParm->ConditionalBeginDestroy();
-			OldParm = nullptr;
-		}
-		*/
-
 		// Replace with the new parameters
-		HAC->Parameters = NewParameters;
+		InParameters = NewParameters;
 
 #if WITH_EDITORONLY_DATA
 		// Indicate we want to update the details panel after the parameter changes/updates
-		HAC->bNeedToUpdateEditorProperties = true;
+		bNeedToUpdateEditorProperties = true;
 #endif
 	}
 
@@ -119,15 +102,16 @@ FHoudiniParameterTranslator::UpdateParameters(UHoudiniAssetComponent* HAC)
 	return true;
 }
 
+
 bool
-FHoudiniParameterTranslator::OnPreCookParameters(UHoudiniAssetComponent* HAC)
+FHoudiniParameterTranslator::OnPreCookParameters(TArray<TObjectPtr<UHoudiniParameter>>& InParams)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniParameterTranslator::OnPreCookParameters);
 
 	// Call OnPreCook for all parameters.
 	// Parameters can use this to ensure that any cached / non-cooking state is properly
 	// synced before the cook starts (Looking at you, ramp parameters!)
-	for (UHoudiniParameter* Param : HAC->Parameters)
+	for (UHoudiniParameter* Param : InParams)
 	{
 		if (!IsValid(Param))
 			continue;
@@ -140,16 +124,15 @@ FHoudiniParameterTranslator::OnPreCookParameters(UHoudiniAssetComponent* HAC)
 
 // 
 bool
-FHoudiniParameterTranslator::UpdateLoadedParameters(UHoudiniAssetComponent* HAC)
+FHoudiniParameterTranslator::UpdateLoadedParameters(
+	HAPI_NodeId InNodeId,
+	TArray<TObjectPtr<UHoudiniParameter>>& InParameters,
+	UObject* InOuter,
+	bool bForceFullUpdate,
+	bool bCacheRampParams,
+	bool& bNeedToUpdateEditorProperties)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniParameterTranslator::UpdateLoadedParameters);
-
-	if (!IsValid(HAC))
-		return false;
-
-	// Nothing to do for Node Sync Components!
-	if (HAC->IsA<UHoudiniNodeSyncComponent>())
-		return true;
 
 	// Update all the parameters using the loaded parameter object
 	// We set "UpdateValues" to false because we do not want to "read" the parameter value
@@ -160,10 +143,9 @@ FHoudiniParameterTranslator::UpdateLoadedParameters(UHoudiniAssetComponent* HAC)
 	HAPI_AssetInfo AssetInfo;
 
 	// This is the first cook on loading after a save or duplication
-	for (int32 Idx = 0; Idx < HAC->Parameters.Num(); ++Idx)
+	for (int32 Idx = 0; Idx < InParameters.Num(); ++Idx)
 	{
-		UHoudiniParameter* Param = HAC->Parameters[Idx];
-
+		UHoudiniParameter* Param = InParameters[Idx];
 		if (!IsValid(Param))
 			continue;
 
@@ -176,12 +158,12 @@ FHoudiniParameterTranslator::UpdateLoadedParameters(UHoudiniAssetComponent* HAC)
 				// We need to sync the Ramp parameters first, so that their child parameters can be kept
 				if (bNeedToFetchAssetInfo)
 				{
-					FHoudiniApi::GetAssetInfo(FHoudiniEngine::Get().GetSession(), HAC->AssetId, &AssetInfo);
+					FHoudiniApi::GetAssetInfo(FHoudiniEngine::Get().GetSession(), InNodeId, &AssetInfo);
 					bNeedToFetchAssetInfo = false;
 				}
 
 				// TODO: Simplify this, should be handled in BuildAllParameters
-				SyncMultiParmValuesAtLoad(Param, HAC->Parameters, HAC->AssetId, AssetInfo);
+				SyncMultiParmValuesAtLoad(Param, InParameters, InNodeId, AssetInfo);
 			}
 			break;
 
@@ -198,38 +180,32 @@ FHoudiniParameterTranslator::UpdateLoadedParameters(UHoudiniAssetComponent* HAC)
 		}
 	}
 
-	// When recooking/rebuilding the HDA, force a full update of all params
-	const bool bForceFullUpdate = HAC->HasRebuildBeenRequested() || HAC->HasRecookBeenRequested() || HAC->IsParameterDefinitionUpdateNeeded();
-
 	// This call to BuildAllParameters will keep all the loaded parameters (in the HAC's Parameters array)
 	// that are still present in the HDA, and keep their loaded value.
 	TArray<TObjectPtr<UHoudiniParameter>> NewParameters;
 	// We don't need to fetch defaults from the asset definition for a loaded HAC
 	const UHoudiniAsset* const HoudiniAsset = nullptr;
 	const FString HoudiniAssetName = FString();
-	if (FHoudiniParameterTranslator::BuildAllParameters(HAC->GetAssetId(), HAC, HAC->Parameters, NewParameters, false, bForceFullUpdate, HoudiniAsset, HoudiniAssetName))
+	if (FHoudiniParameterTranslator::BuildAllParameters(
+		InNodeId,
+		InOuter,
+		InParameters,
+		NewParameters, 
+		false,
+		bForceFullUpdate, 
+		HoudiniAsset, 
+		HoudiniAssetName, 
+		bCacheRampParams))
 	{
-		/*
 		// DO NOT DESTROY OLD PARAMS MANUALLY HERE
 		// This causes crashes upon duplication due to uncollected zombie objects...
 		// GC is supposed to handle this by itself
-		// Destroy old/dangling parameters
-		for (auto& OldParm : HAC->Parameters)
-		{
-			if (!IsValid(OldParm))
-				continue;
-
-			OldParm->ConditionalBeginDestroy();
-			OldParm = nullptr;
-		}
-		*/
-
 		// Simply replace with the new parameters
-		HAC->Parameters = NewParameters;
+		InParameters = NewParameters;
 
 #if WITH_EDITORONLY_DATA
 		// Indicate we want to update the details panel after the parameter changes/updates
-		HAC->bNeedToUpdateEditorProperties = true;
+		bNeedToUpdateEditorProperties = true;
 #endif
 	}
 
@@ -238,18 +214,19 @@ FHoudiniParameterTranslator::UpdateLoadedParameters(UHoudiniAssetComponent* HAC)
 
 bool
 FHoudiniParameterTranslator::BuildAllParameters(
-	const HAPI_NodeId& AssetId, 
+	HAPI_NodeId AssetId, 
 	class UObject* Outer,
 	TArray<TObjectPtr<UHoudiniParameter>>& CurrentParameters,
 	TArray<TObjectPtr<UHoudiniParameter>>& NewParameters,
-	const bool& bUpdateValues,
-	const bool& InForceFullUpdate,
+	bool bUpdateValues,
+	bool InForceFullUpdate,
 	const UHoudiniAsset* InHoudiniAsset,
-	const FString& InHoudiniAssetName)
+	const FString& InHoudiniAssetName,
+	bool bCacheRampParms)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniParameterTranslator::BuildAllParameters);
 
-	// Ensure the asset has a valid node ID
+	// Ensure the asset has a valid node ID or a valid HoudiniAsset
 	const bool bIsAssetValid = IsValid(InHoudiniAsset);	
 	if (AssetId < 0 && !bIsAssetValid)
 	{	
@@ -567,8 +544,7 @@ FHoudiniParameterTranslator::BuildAllParameters(
 					{
 						// Record float and color ramps for further processing (creating their Points arrays)
 						FloatRampsToIndex.Add(FloatRampParam, NewParameters.Num());
-						UHoudiniAssetComponent* ParentHAC = Cast<UHoudiniAssetComponent>(FloatRampParam->GetOuter());
-						if (ParentHAC && !ParentHAC->HasBeenLoaded() && !ParentHAC->HasBeenDuplicated())
+						if (bCacheRampParms)
 							FloatRampParam->bCaching = false;
 					}
 
@@ -582,8 +558,7 @@ FHoudiniParameterTranslator::BuildAllParameters(
 					{
 						// Record float and color ramps for further processing (creating their Points arrays)
 						ColorRampsToIndex.Add(ColorRampParam, NewParameters.Num());
-						UHoudiniAssetComponent* ParentHAC = Cast<UHoudiniAssetComponent>(ColorRampParam->GetOuter());
-						if (ParentHAC && !ParentHAC->HasBeenLoaded() && !ParentHAC->HasBeenDuplicated())
+						if (bCacheRampParms)
 							ColorRampParam->bCaching = false;
 					}
 
@@ -1322,8 +1297,11 @@ FHoudiniParameterTranslator::CreateTypedParameter(UObject * Outer, const EHoudin
 
 bool
 FHoudiniParameterTranslator::UpdateParameterFromInfo(
-	UHoudiniParameter * HoudiniParameter, const HAPI_NodeId& InNodeId, const HAPI_ParmInfo& ParmInfo,
-	const bool& bFullUpdate, const bool& bUpdateValue,
+	UHoudiniParameter * HoudiniParameter, 
+	HAPI_NodeId InNodeId, 
+	const HAPI_ParmInfo& ParmInfo,
+	bool bFullUpdate,
+	bool bUpdateValue,
 	const TArray<int>* DefaultIntValues,
 	const TArray<float>* DefaultFloatValues,
 	const TArray<HAPI_StringHandle>* DefaultStringValues,
@@ -2164,13 +2142,15 @@ FHoudiniParameterTranslator::UpdateParameterFromInfo(
 						{
 							if (ChoiceIdx < ParmChoices.Num())
 							{
-								FHoudiniEngineString HoudiniEngineString(ParmChoices[ChoiceIdx].labelSH);
+								FHoudiniEngineString HoudiniEngineString(ParmChoices[ChoiceIdx].valueSH);
 								FString Token;
-
 								if (HoudiniEngineString.ToFString(Token))
 								{
-									int32 Value = FCString::Atoi(*Token);
-									IntValue = Value;
+									if (Token.IsNumeric())
+									{
+										int32 Value = FCString::Atoi(*Token);
+										IntValue = Value;
+									}
 								}
 							}
 						}
@@ -2215,6 +2195,12 @@ FHoudiniParameterTranslator::UpdateParameterFromInfo(
 					else
 					{
 						return false;
+					}
+
+					// If useMenuItemTokenAsValue is set, then the value is not the index. Find the value using the token, if possible.
+					if (ParmInfo.useMenuItemTokenAsValue)
+					{
+						// NOT HANDLED
 					}
 
 					// Get the string value
@@ -2542,7 +2528,11 @@ FHoudiniParameterTranslator::UpdateParameterFromInfo(
 }
 
 bool
-FHoudiniParameterTranslator::HapiGetParameterTagValue(const HAPI_NodeId& NodeId, const HAPI_ParmId& ParmId, const FString& Tag, FString& TagValue)
+FHoudiniParameterTranslator::HapiGetParameterTagValue(
+	HAPI_NodeId NodeId,
+	HAPI_ParmId ParmId,
+	const FString& Tag,
+	FString& TagValue)
 {
 	// Default
 	TagValue = FString();
@@ -2573,7 +2563,10 @@ FHoudiniParameterTranslator::HapiGetParameterTagValue(const HAPI_NodeId& NodeId,
 
 
 bool
-FHoudiniParameterTranslator::HapiGetParameterUnit(const HAPI_NodeId& NodeId, const HAPI_ParmId& ParmId, FString& OutUnitString)
+FHoudiniParameterTranslator::HapiGetParameterUnit(
+	HAPI_NodeId NodeId,
+	HAPI_ParmId ParmId,
+	FString& OutUnitString)
 {
 	//
 	OutUnitString = TEXT("");
@@ -2605,7 +2598,10 @@ FHoudiniParameterTranslator::HapiGetParameterUnit(const HAPI_NodeId& NodeId, con
 }
 
 bool
-FHoudiniParameterTranslator::HapiGetParameterHasTag(const HAPI_NodeId& NodeId, const HAPI_ParmId& ParmId, const FString& Tag)
+FHoudiniParameterTranslator::HapiGetParameterHasTag(
+	HAPI_NodeId NodeId,
+	HAPI_ParmId ParmId,
+	const FString& Tag)
 {
 	// Does the parameter has the tag we're looking for?
 	bool HasTag = false;
@@ -2618,17 +2614,14 @@ FHoudiniParameterTranslator::HapiGetParameterHasTag(const HAPI_NodeId& NodeId, c
 
 
 bool
-FHoudiniParameterTranslator::UploadChangedParameters( UHoudiniAssetComponent * HAC )
+FHoudiniParameterTranslator::UploadChangedParameters(
+	TArray<TObjectPtr<UHoudiniParameter>>& InParameters,
+	HAPI_NodeId InNodeId)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniParameterTranslator::UploadChangedParameters);
-	if (!IsValid(HAC))
-		return false;
-
-	// Nothing to do for Node Sync Components!
-	if (HAC->IsA<UHoudiniNodeSyncComponent>())
-		return true;
 
 	bool bResult = true;
+
 	TMap<FString, UHoudiniParameter*> RampsToRevert;
 	// First upload all parameters, including the current child parameters/points of ramps, and then process
 	// the ramp parameters themselves (delete and insert operations of ramp points)
@@ -2636,14 +2629,13 @@ FHoudiniParameterTranslator::UploadChangedParameters( UHoudiniAssetComponent * H
 	// (which will change after potential insert/delete operations). Insert operations will upload their new
 	// parameter values after the insert.
 	TArray<UHoudiniParameter*> RampsToUpload;
-	for (int32 ParmIdx = 0; ParmIdx < HAC->GetNumParameters(); ParmIdx++)
+	for (int32 ParmIdx = 0; ParmIdx < InParameters.Num(); ParmIdx++)
 	{
-		TObjectPtr<UHoudiniParameter>& CurrentParm = HAC->Parameters[ParmIdx];
+		TObjectPtr<UHoudiniParameter>& CurrentParm = InParameters[ParmIdx];
 		if (!IsValid(CurrentParm) || !CurrentParm->HasChanged())
 			continue;
 
 		bool bSuccess = false;
-
 		const EHoudiniParameterType CurrentParmType = CurrentParm->GetParameterType();
 		if (CurrentParm->IsPendingRevertToDefault())
 		{
@@ -2682,7 +2674,7 @@ FHoudiniParameterTranslator::UploadChangedParameters( UHoudiniAssetComponent * H
 		}
 	}
 
-	if (!FHoudiniParameterTranslator::RevertRampParameters(RampsToRevert, HAC->GetAssetId()))
+	if (!FHoudiniParameterTranslator::RevertRampParameters(RampsToRevert, InNodeId))
 		bResult = false;
 
 	for (UHoudiniParameter* const RampParam : RampsToUpload)
@@ -3205,8 +3197,8 @@ bool FHoudiniParameterTranslator::UploadRampParameter(UHoudiniParameter* InParam
 	if (!IsValid(MultiParam))
 		return false;
 
-	UHoudiniAssetComponent* HoudiniAssetComponent = Cast<UHoudiniAssetComponent>(InParam->GetOuter());
-	if (!HoudiniAssetComponent)
+	UHoudiniCookable* Cookable = Cast<UHoudiniCookable>(InParam->GetOuter());
+	if (!Cookable)
 		return false;
 
 	int32 InsertIndexStart = -1;
@@ -3272,12 +3264,12 @@ bool FHoudiniParameterTranslator::UploadRampParameter(UHoudiniParameter* InParam
 	// Step 3:  Set inserted parameter values (only if there are instances inserted)
 	if (InsertIndex > InsertIndexStart)
 	{
-		if (HoudiniAssetComponent) 
+		if (Cookable)
 		{
 			// Get the asset's info
 			HAPI_AssetInfo AssetInfo;
 			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetAssetInfo(
-				FHoudiniEngine::Get().GetSession(), HoudiniAssetComponent->AssetId, &AssetInfo), false);
+				FHoudiniEngine::Get().GetSession(), Cookable->GetNodeId(), &AssetInfo), false);
 
 			int32 Idx = 0;
 			int32 InstanceCount = -1;

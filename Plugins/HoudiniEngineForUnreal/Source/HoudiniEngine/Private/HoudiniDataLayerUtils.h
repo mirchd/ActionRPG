@@ -26,7 +26,6 @@
 
 #pragma once
 
-#include "RawMesh.h"
 #include "GameFramework/Actor.h"
 #include "Editor.h"
 #include "HAPI/HAPI_Common.h"
@@ -37,7 +36,6 @@ struct FHoudiniPackageParams;
 struct FHoudiniDataLayer;
 class AActor;
 class FName;
-struct FHoudiniAttributeDataLayer;
 
 // Determine if we can enable data layers or not. The public API still exists in all versions
 // to minimize the number of defines in the code.
@@ -64,7 +62,6 @@ public:
 
 	static TArray<FHoudiniDataLayer> GetDataLayers(HAPI_NodeId NodeId, HAPI_PartId PartId);
 	static TArray<FHoudiniDataLayer> GetDataLayers(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_GroupType GroupType, int Index);
-	static TArray<FHoudiniAttributeDataLayer> GetDataLayers(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_GroupType GroupType);
 
 	// Using this cache, create Houdini Groups for this Actor.
 	static HAPI_NodeId AddGroupsFromDataLayers(AActor* Actor, HAPI_NodeId ParentNodeId, HAPI_NodeId InputNodeId);

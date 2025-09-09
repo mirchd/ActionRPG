@@ -657,18 +657,31 @@ UHoudiniEditorNodeSyncSubsystem::FetchFromHoudini()
 				if (!FHoudiniEngineUtils::HapiGetAbsNodePath(CurrentFetchId, CurrentFetchPath))
 					continue;
 
-				// Create the fetch(object merge) node for the geo importer
-				HAPI_NodeId CurrentFetchNodeId = -1;
-				if (!HoudiniGeoImporter->MergeGeoFromNode(CurrentFetchPath, CurrentFetchNodeId))
-					return FailImportAndReturn();
+				// Check if the node is a COP or COP2 node
+				HAPI_NodeType NodeType;
+				bool bGetNodeTypeSuccess = FHoudiniEngineUtils::HapiGetNodeType(CurrentFetchId, NodeType);
+				bool bIsCopNode = bGetNodeTypeSuccess && (NodeType == HAPI_NODETYPE_COP || NodeType == HAPI_NODETYPE_COP2);
+
+				HAPI_NodeId CurrentOutputNodeId = -1;
+				if (bIsCopNode)
+				{
+					// Simply use the COP node as the output node
+					CurrentOutputNodeId = CurrentFetchId;
+				}
+				else
+				{
+					// Create an object merge node for the geo importer
+					if (!HoudiniGeoImporter->MergeGeoFromNode(CurrentFetchPath, CurrentOutputNodeId))
+						return FailImportAndReturn();
+
+					// Keep track of the created merge node so we can delete it later on
+					CreatedNodeIds.Add(CurrentOutputNodeId);
+				}
 
 				// 4. Get the output from the Fetch node
 				//TArray<UHoudiniOutput*> CurrentOutputs;
-				if (!HoudiniGeoImporter->BuildOutputsForNode(CurrentFetchNodeId, DummyOldOutputs, NewOutputs, NodeSyncOptions.bUseOutputNodes))
+				if (!HoudiniGeoImporter->BuildOutputsForNode(CurrentOutputNodeId, DummyOldOutputs, NewOutputs, NodeSyncOptions.bUseOutputNodes))
 					return FailImportAndReturn();
-
-				// Keep track of the created merge node so we can delete it later on
-				CreatedNodeIds.Add(CurrentFetchNodeId);
 			}
 
 			// Prepare the package used for creating the mesh, landscape and instancer pacakges
@@ -809,24 +822,28 @@ UHoudiniEditorNodeSyncSubsystem::FetchFromHoudini()
 			// Add the Houdini logo back to the NodeSync component
 			FHoudiniEngineUtils::AddHoudiniLogoToComponent(HNSC);
 
-			// Set the Node Sync options
-			// Fetch node path
+			// Set the Fetch node path on the component
 			HNSC->SetFetchNodePath(CurrentFetchNodePath);
-			HNSC->SetHoudiniAssetState(EHoudiniAssetState::NewHDA);
+
+			// Set the Node Sync options
+			UHoudiniCookable* HC = HNSC->GetCookable();
+			if (!IsValid(HC))
+				return FailImportAndReturn();
+			
+			HC->SetCurrentState(EHoudiniAssetState::NewHDA);
 
 			// Disable proxies
-			HNSC->bOverrideGlobalProxyStaticMeshSettings = true;
-			HNSC->bEnableProxyStaticMeshOverride = false;
-			//HNSC->StaticMeshMethod = EHoudiniStaticMeshMethod::FMeshDescription;
+			HC->SetOverrideGlobalProxyStaticMeshSettings(true);
+			HC->SetEnableProxyStaticMeshOverride(false);
 
-			// AutoBake?
-			HNSC->SetBakeAfterNextCook(NodeSyncOptions.bAutoBake ? EHoudiniBakeAfterNextCook::Always : EHoudiniBakeAfterNextCook::Disabled);
-			HNSC->bRemoveOutputAfterBake = true;
+			// AutoBake
+			HC->SetBakeAfterNextCook(NodeSyncOptions.bAutoBake ? EHoudiniBakeAfterNextCook::Always : EHoudiniBakeAfterNextCook::Disabled);
+			HC->SetRemoveOutputAfterBake(true);
 
 			// Other options
-			HNSC->bUseOutputNodes = NodeSyncOptions.bUseOutputNodes;
-			HNSC->bReplacePreviousBake = NodeSyncOptions.bReplaceExisting;
-			HNSC->BakeFolder.Path = NodeSyncOptions.UnrealAssetFolder;
+			HC->SetUseOutputNodes(NodeSyncOptions.bUseOutputNodes);
+			HC->SetReplacePreviousBake(NodeSyncOptions.bReplaceExisting);
+			HC->SetBakeFolderPath(NodeSyncOptions.UnrealAssetFolder);
 
 			// Make sure we the actor has a unique name/label
 			FString ActorNameAndLabel = NodeSyncOptions.GetUnrealActorLabel(PathIdx);
@@ -902,19 +919,20 @@ UHoudiniEditorNodeSyncSubsystem::GatherAllFetchedNodeIds(
 	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetNodeInfo(
 		FHoudiniEngine::Get().GetSession(), InFetchNodeId, &FetchNodeInfo), false);
 
-	// If the node is neither SOP nor OBJ, stop there
+	// If the node is neither SOP nor OBJ nor COP nor COP2, stop there
 	if (FetchNodeInfo.type != HAPI_NODETYPE_SOP
-		&& FetchNodeInfo.type != HAPI_NODETYPE_OBJ)
+		&& FetchNodeInfo.type != HAPI_NODETYPE_OBJ
+		&& FetchNodeInfo.type != HAPI_NODETYPE_COP
+		&& FetchNodeInfo.type != HAPI_NODETYPE_COP2)
 	{
 		HOUDINI_LOG_ERROR(TEXT("Houdini Node Sync: Invalid fetch node type - the node should be either a SOP or OBJ node."));
 		return false;
 	}
 
-	// If the node is a SOP instead of an OBJ/container node, then we won't need to run child queries on this node. They will fail.
+	// For non-container/non-subnet SOP nodes, or any COP nodes, no need to look further, just use the node itself
 	const bool bAssetHasChildren = !(FetchNodeInfo.type == HAPI_NODETYPE_SOP && FetchNodeInfo.childNodeCount == 0);
-	
-	// For non-container/subnet SOP nodes, no need to look further, just use the current SOP node
-	if (!bAssetHasChildren)
+	const bool bAssetIsCop = FetchNodeInfo.type == HAPI_NODETYPE_COP || FetchNodeInfo.type == HAPI_NODETYPE_COP2;
+	if (!bAssetHasChildren || bAssetIsCop)
 	{
 		OutOutputNodes.AddUnique(InFetchNodeId);
 		return true;

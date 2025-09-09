@@ -61,32 +61,28 @@ FHoudiniPDGManager::~FHoudiniPDGManager()
 }
 
 bool
-FHoudiniPDGManager::InitializePDGAssetLink(UHoudiniAssetComponent* InHAC)
+FHoudiniPDGManager::InitializePDGAssetLink(
+	const HAPI_NodeId& InNodeId, UObject* InOuter, UHoudiniPDGAssetLink*& PDGAssetLink, const bool& bHasBeenLoaded)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniPDGManager::InitializePDGAssetLink);
-	if (!IsValid(InHAC))
+	if (InNodeId < 0)
 		return false;
 
-	int32 AssetId = InHAC->GetAssetId();
-	if (AssetId < 0)
-		return false;
-
-	if (!FHoudiniEngineUtils::IsHoudiniNodeValid((HAPI_NodeId)AssetId))
+	if (!FHoudiniEngineUtils::IsHoudiniNodeValid((HAPI_NodeId)InNodeId))
 		return false;
 
 	// Create a new PDG Asset Link Object
-	bool bRegisterPDGAssetLink = false;
-	UHoudiniPDGAssetLink* PDGAssetLink = InHAC->GetPDGAssetLink();		
+	bool bRegisterPDGAssetLink = false;		
 	if (!IsValid(PDGAssetLink))
 	{
-		PDGAssetLink = NewObject<UHoudiniPDGAssetLink>(InHAC, UHoudiniPDGAssetLink::StaticClass(), NAME_None, RF_Transactional);
+		PDGAssetLink = NewObject<UHoudiniPDGAssetLink>(InOuter, UHoudiniPDGAssetLink::StaticClass(), NAME_None, RF_Transactional);
 		bRegisterPDGAssetLink = true;
 	}
 
 	if (!IsValid(PDGAssetLink))
 		return false;
 	
-	PDGAssetLink->AssetID = AssetId;
+	PDGAssetLink->AssetID = InNodeId;
 	
 	// Get the HDA's info
 	HAPI_NodeInfo AssetInfo;
@@ -107,12 +103,11 @@ FHoudiniPDGManager::InitializePDGAssetLink(UHoudiniAssetComponent* InHAC)
 	{
 		// We couldn't find any valid TOPNet/TOPNode, this is not a PDG Asset
 		// Make sure the HDA doesn't have a PDGAssetLink
-		InHAC->SetPDGAssetLink(nullptr);
 		return false;
 	}
 
 	// If the PDG asset link comes from a loaded asset, we also need to register it
-	if (InHAC->HasBeenLoaded())
+	if (bHasBeenLoaded)
 	{
 		bRegisterPDGAssetLink = true;
 	}
@@ -123,8 +118,6 @@ FHoudiniPDGManager::InitializePDGAssetLink(UHoudiniAssetComponent* InHAC)
 
 	if (PDGAssetLink->SelectedTOPNetworkIndex < 0)
 		PDGAssetLink->SelectedTOPNetworkIndex = 0;
-
-	InHAC->SetPDGAssetLink(PDGAssetLink);
 
 	if (bRegisterPDGAssetLink)
 	{
@@ -160,20 +153,28 @@ FHoudiniPDGManager::UpdatePDGAssetLink(UHoudiniPDGAssetLink* PDGAssetLink)
 	if (!IsValid(PDGAssetLink))
 		return false;
 
-	// If the PDG Asset link is inactive, indicate that our HDA must be instantiated
+	// TODO COOKABLE: Improve! do not rely on GetOuter
+	UHoudiniAssetComponent* ParentHAC = Cast<UHoudiniAssetComponent>(PDGAssetLink->GetOuter());
+	UHoudiniCookable* ParentHC = Cast<UHoudiniCookable>(PDGAssetLink->GetOuter());
+	EHoudiniAssetState ParentState = ParentHAC ? ParentHAC->GetAssetState() : ParentHC ? ParentHC->GetCurrentState() : EHoudiniAssetState::None;
+	HAPI_NodeId ParentNodeId = ParentHAC ? ParentHAC->GetAssetId() : ParentHC ? ParentHC->GetNodeId() : -1;
+
+		// If the PDG Asset link is inactive, indicate that our HDA must be instantiated
 	if (PDGAssetLink->LinkState == EPDGLinkState::Inactive)
 	{
-		UHoudiniAssetComponent* ParentHAC = Cast<UHoudiniAssetComponent>(PDGAssetLink->GetOuter());
-		if(!ParentHAC)
+		if(!ParentHAC && !ParentHC)
 		{
-			// No valid parent HAC, error!
+			// No valid parent, error!
 			PDGAssetLink->LinkState = EPDGLinkState::Error_Not_Linked;
 			HOUDINI_LOG_ERROR(TEXT("No valid Houdini Asset Component parent for PDG Asset Link!"));
 		}
-		else if (ParentHAC && ParentHAC->GetAssetState() == EHoudiniAssetState::NeedInstantiation)
+		else if (ParentState == EHoudiniAssetState::NeedInstantiation)
 		{
 			PDGAssetLink->LinkState = EPDGLinkState::Linking;
-			ParentHAC->SetAssetState(EHoudiniAssetState::PreInstantiation);
+			if (ParentHAC)
+				ParentHAC->SetAssetState(EHoudiniAssetState::PreInstantiation);
+			else if (ParentHC)
+				ParentHC->SetCurrentState(EHoudiniAssetState::PreInstantiation);
 		}
 		else
 		{
@@ -189,15 +190,13 @@ FHoudiniPDGManager::UpdatePDGAssetLink(UHoudiniPDGAssetLink* PDGAssetLink)
 
 	if (PDGAssetLink->LinkState != EPDGLinkState::Linked)
 	{
-		UHoudiniAssetComponent* ParentHAC = Cast<UHoudiniAssetComponent>(PDGAssetLink->GetOuter());
-		int32 AssetId = ParentHAC->GetAssetId();
-		if (AssetId < 0)
+		if (ParentNodeId < 0)
 			return false;
 
-		if (!FHoudiniEngineUtils::IsHoudiniNodeValid((HAPI_NodeId)AssetId))
+		if (!FHoudiniEngineUtils::IsHoudiniNodeValid((HAPI_NodeId)ParentNodeId))
 			return false;
 
-		PDGAssetLink->AssetID = AssetId;
+		PDGAssetLink->AssetID = ParentNodeId;
 	}
 
 	if(!PopulateTOPNetworks(PDGAssetLink))
@@ -696,6 +695,14 @@ FHoudiniPDGManager::Update()
 			PDGAssetLinks.RemoveAt(Idx);
 			continue;
 		}
+
+		// Remove PDG AL that dont have a valid/registered cookable
+		UHoudiniCookable* OuterHC = CurPDGAssetLink->GetOuterHoudiniCookable();
+		if (!IsValid(OuterHC) ||!FHoudiniEngineRuntime::Get().IsCookableRegistered(OuterHC))
+		{
+			PDGAssetLinks.RemoveAt(Idx);
+			continue;
+		}
 	}
 
 	// Do nothing if we dont have any valid PDG asset Link
@@ -840,8 +847,11 @@ FHoudiniPDGManager::ProcessPDGEvent(const HAPI_PDG_GraphContextId& InContextID, 
 
 	if(!GetTOPAssetLinkNetworkAndNode(EventInfo.nodeId, PDGAssetLink, TOPNetwork, TOPNode)
 		|| !IsValid(PDGAssetLink) || !IsValid(TOPNetwork) || !IsValid(TOPNode))
-	{		
-		HOUDINI_LOG_WARNING(TEXT("[ProcessPDGEvent]: Could not find matching TOPNode for event %s, workitem id %d, node id %d"), *EventName, EventInfo.workItemId, EventInfo.nodeId);
+	{
+		// Prevent PDG warning spam
+		if ((EventInfo.workItemId != -1) && (EventInfo.nodeId != -1))
+			HOUDINI_LOG_WARNING(TEXT("[ProcessPDGEvent]: Could not find matching TOPNode for event %s, workitem id %d, node id %d"), *EventName, EventInfo.workItemId, EventInfo.nodeId);
+
 		return;
 	}
 
@@ -1283,11 +1293,13 @@ FHoudiniPDGManager::RefreshPDGAssetLinkUI(UHoudiniPDGAssetLink* InAssetLink)
 	// else, just update the workitemtally
 	InAssetLink->UpdateWorkItemTally();
 
-	UHoudiniAssetComponent* HAC = Cast<UHoudiniAssetComponent>(InAssetLink->GetOuter());
-	if (!IsValid(HAC))
+	UHoudiniAssetComponent* ParentHAC = Cast<UHoudiniAssetComponent>(InAssetLink->GetOuter());
+	UHoudiniCookable* ParentHC = Cast<UHoudiniCookable>(InAssetLink->GetOuter());
+
+	if (!IsValid(ParentHAC) && !IsValid(ParentHC))
 		return;
 	
-	AActor* ActorOwner = HAC->GetOwner();
+	AActor* ActorOwner = ParentHC ? ParentHC->GetOwner() : ParentHAC->GetOwner();
 	if (ActorOwner != nullptr && ActorOwner->IsSelected())
 	{
 		FHoudiniEngineUtils::UpdateEditorProperties(true);
@@ -1580,7 +1592,7 @@ FHoudiniPDGManager::SyncAndPruneWorkItems(UTOPNode* InTOPNode)
 
 	// Remove any work result entries with invalid IDs or where the WorkItemID is not in the set of ids returned by
 	// HAPI (only if we could get the IDs from HAPI).
-	const FGuid HoudiniComponentGuid(InTOPNode->GetHoudiniComponentGuid());
+	const FGuid CookableGUID(InTOPNode->GetHoudiniCookableGuid());
 	int32 NumRemoved = 0;
 	const int32 NumWorkItemsInArray = InTOPNode->WorkResult.Num();
 	for (int32 Index = NumWorkItemsInArray - 1; Index >= 0; --Index)
@@ -1591,7 +1603,7 @@ FHoudiniPDGManager::SyncAndPruneWorkItems(UTOPNode* InTOPNode)
 			HOUDINI_PDG_WARNING(
 				TEXT("Pruning a FTOPWorkResult entry from TOP Node %d, WorkItemID %d, WorkItemIndex %d, Array Index %d"),
 				InTOPNode->NodeId, WorkResult.WorkItemID, WorkResult.WorkItemIndex, Index);
-			WorkResult.ClearAndDestroyResultObjects(HoudiniComponentGuid);
+			WorkResult.ClearAndDestroyResultObjects(CookableGUID);
 			InTOPNode->WorkResult.RemoveAt(Index);
 			InTOPNode->OnWorkItemRemoved(WorkResult.WorkItemID);
 			NumRemoved++;
@@ -1636,17 +1648,23 @@ FHoudiniPDGManager::ProcessWorkItemResults()
 		PackageParams.BakeFolder = FHoudiniEngineRuntime::Get().GetDefaultBakeFolder();
 		PackageParams.TempCookFolder = FHoudiniEngineRuntime::Get().GetDefaultTemporaryCookFolder();
 
-		// AActor* ParentActor = nullptr;
 		UObject* AssetLinkParent = AssetLink->GetOuter();
 		UHoudiniAssetComponent* HAC = AssetLinkParent != nullptr ? Cast<UHoudiniAssetComponent>(AssetLinkParent) : nullptr;
-		if (HAC)
+		UHoudiniCookable* HC = AssetLinkParent != nullptr ? Cast<UHoudiniCookable>(AssetLinkParent) : nullptr;
+		if (HC)
+		{
+			AActor* Owner = HC->GetOwner();
+			PackageParams.OuterPackage = Owner ? Cast<UObject>(Owner->GetLevel()) : Cast<UObject>(HC->GetPackage());
+			PackageParams.HoudiniAssetName = HC->GetHoudiniAssetName();
+			PackageParams.HoudiniAssetActorName = Owner ? Owner->GetActorNameOrLabel() : HC->GetName();
+			PackageParams.ComponentGUID = HC->GetCookableGUID();
+		}
+		else if (HAC)
 		{
 			PackageParams.OuterPackage = HAC->GetComponentLevel();
 			PackageParams.HoudiniAssetName = HAC->GetHoudiniAssetName();
 			PackageParams.HoudiniAssetActorName = HAC->GetOwner()->GetActorNameOrLabel();
 			PackageParams.ComponentGUID = HAC->GetComponentGUID();
-
-			// ParentActor = HAC->GetOwner();
 		}
 		else
 		{
@@ -1668,8 +1686,8 @@ FHoudiniPDGManager::ProcessWorkItemResults()
 
 		// Static mesh generation / build settings, get it from the HAC if available, otherwise from the plugin
 		// defaults
-		const FHoudiniStaticMeshGenerationProperties& StaticMeshGenerationProperties = HAC ? HAC->StaticMeshGenerationProperties : FHoudiniEngineRuntimeUtils::GetDefaultStaticMeshGenerationProperties();
-		const FMeshBuildSettings& MeshBuildSettings = HAC ? HAC->StaticMeshBuildSettings : FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings();
+		const FHoudiniStaticMeshGenerationProperties& StaticMeshGenerationProperties = HAC ? HAC->GetStaticMeshGenerationProperties() : FHoudiniEngineRuntimeUtils::GetDefaultStaticMeshGenerationProperties();
+		const FMeshBuildSettings& MeshBuildSettings = HAC ? HAC->GetStaticMeshBuildSettings() : FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings();
 
 		// .. All TOP Nets
 		for (UTOPNetwork* CurrentTOPNet : AssetLink->AllTOPNetworks)
@@ -1851,19 +1869,25 @@ void FHoudiniPDGManager::HandleImportBGEOResultMessage(
 		// Set package params outer
 		UObject* AssetLinkParent = AssetLink->GetOuter();
 		UHoudiniAssetComponent* HAC = AssetLinkParent != nullptr ? Cast<UHoudiniAssetComponent>(AssetLinkParent) : nullptr;
-		if (HAC)
+		UHoudiniCookable* HC = AssetLinkParent != nullptr ? Cast<UHoudiniCookable>(AssetLinkParent) : nullptr;
+		if (HC)
+		{
+			AActor* Owner = HC->GetOwner();
+			PackageParams.OuterPackage = Owner ? Cast<UObject>(Owner->GetLevel()) : Cast<UObject>(HC->GetPackage());
+		}
+		else if (HAC)
 		{
 			PackageParams.OuterPackage = HAC->GetComponentLevel();
 		}
 		else
 		{
-			PackageParams.OuterPackage = AssetLinkParent->GetOutermost();
+			PackageParams.OuterPackage = AssetLinkParent->GetPackage();
 		}
 
 		// Construct UHoudiniOutputs
 		bool bHasUnsupportedOutputs = false;
 		TArray<TObjectPtr<UHoudiniOutput>> NewOutputs;
-		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData> InstancedOutputPartData;
+		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData> InstancedOutputPartData;
 		NewOutputs.Reserve(InMessage.Outputs.Num());
 		for (const FHoudiniPDGImportNodeOutput& Output : InMessage.Outputs)
 		{
@@ -1886,8 +1910,7 @@ void FHoudiniPDGManager::HandleImportBGEOResultMessage(
 					Identifier.GeoId = HGPO.GeoId;
 					Identifier.PartId = HGPO.PartId;
 					Identifier.PartName = HGPO.PartName;
-					FHoudiniInstancedOutputPartData InstancedPartData = Output.InstancedOutputPartData[Index];
-					InstancedPartData.BuildOriginalInstancedTransformsAndObjectArrays();
+					FHoudiniInstancerPartData InstancedPartData = Output.InstancedOutputPartData[Index];
 					InstancedOutputPartData.Add(Identifier, InstancedPartData);
 				}
 			}

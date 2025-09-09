@@ -57,6 +57,9 @@
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
 #include "LandscapeEditLayer.h"
 #endif
+#if defined(HOUDINI_USE_PCG)
+#include "HoudiniPCGCookable.h"
+#endif
 #include "LandscapeInfo.h"
 #include "LandscapeLayerInfoObject.h"
 #include "Misc/Guid.h"
@@ -85,7 +88,22 @@ FHoudiniLandscapeTranslator::ProcessLandscapeOutput(
 {
 	H_SCOPED_FUNCTION_TIMER();
 
-	UHoudiniAssetComponent* HAC = FHoudiniEngineUtils::GetOuterHoudiniAssetComponent(InOutput);
+	FHoudiniLandscapeSettings LandscapeSettings;
+
+	if (UHoudiniCookable* HC = FHoudiniEngineUtils::GetOuterHoudiniCookable(InOutput))
+	{
+		// Pull settings from the HAC
+		LandscapeSettings.LocalToWorldTransform = HC->GetComponent() ? HC->GetComponent()->GetComponentToWorld() : FTransform::Identity;
+		LandscapeSettings.bUseTempLayers = HC->GetLandscapeUseTempLayers();
+		LandscapeSettings.TempLayerSuffix = InPackageParams.GetPackageName() + HC->GetCookableGUID().ToString();
+	}
+	else if (USceneComponent* SceneComponent = FHoudiniEngineUtils::GetOuterSceneComponent(InOutput))
+	{
+		// TODO: ? unecessary?
+		// If attached to a scene component (which a cookable may be), use its transform.
+		LandscapeSettings.LocalToWorldTransform = SceneComponent->GetComponentToWorld();
+		LandscapeSettings.bUseTempLayers = HC->GetLandscapeUseTempLayers();
+	}
 
 	//------------------------------------------------------------------------------------------------------------------------------
 	// Get a list of layers to update from HDA
@@ -107,7 +125,7 @@ FHoudiniLandscapeTranslator::ProcessLandscapeOutput(
 	FHoudiniLayersToUnrealLandscapeMapping LandscapeMapping = FHoudiniLandscapeUtils::ResolveLandscapes(
 			CoookedLandscapeActorPrefix,
 			InPackageParams, 
-			HAC,
+			LandscapeSettings,
 			LandscapeMap,
 			Parts, 
 			InWorld, 
@@ -131,7 +149,7 @@ FHoudiniLandscapeTranslator::ProcessLandscapeOutput(
 
 		int Index = LandscapeMapping.HoudiniLayerToUnrealLandscape[&Part];
 		FHoudiniUnrealLandscapeTarget& Landscape = LandscapeMapping.TargetLandscapes[Index];
-		UHoudiniLandscapeTargetLayerOutput* Result = TranslateHeightFieldPart(InOutput, Landscape, Part, *HAC, ClearedLayers, InPackageParams);
+		UHoudiniLandscapeTargetLayerOutput* Result = TranslateHeightFieldPart(InOutput, Landscape, Part, LandscapeSettings, ClearedLayers, InPackageParams);
 		if (!Result)
 			continue;
 		AllOutputs.Add(Result);
@@ -183,6 +201,8 @@ FHoudiniLandscapeTranslator::ProcessLandscapeOutput(
 
 TArray<FHoudiniHeightFieldPartData> FHoudiniLandscapeTranslator::GetPartsToTranslate(UHoudiniOutput* InOutput)
 {
+	UHoudiniCookable* Cookable = Cast<UHoudiniCookable>(InOutput->GetOuter());
+
 	TArray<FHoudiniHeightFieldPartData> Results;
 	const TArray<FHoudiniGeoPartObject>& GeoObjects = InOutput->GetHoudiniGeoPartObjects();
 	for (const FHoudiniGeoPartObject& PartObj : GeoObjects)
@@ -248,6 +268,21 @@ TArray<FHoudiniHeightFieldPartData> FHoudiniLandscapeTranslator::GetPartsToTrans
 		int LandscapeOutputMode = HAPI_UNREAL_LANDSCAPE_OUTPUT_MODE_GENERATE;
 		FHoudiniLandscapeUtils::GetOutputMode(PartObj.GeoId, PartObj.PartId, HAPI_ATTROWNER_INVALID, LandscapeOutputMode);
 		PartData.bCreateNewLandscape = LandscapeOutputMode == HAPI_UNREAL_LANDSCAPE_OUTPUT_MODE_GENERATE;
+
+		if (LandscapeOutputMode != HAPI_UNREAL_LANDSCAPE_OUTPUT_MODE_GENERATE && !Cookable->IsLandscapeModificationEnabled())
+		{
+			HOUDINI_LOG_ERROR(TEXT("Ignoring Landscape Modification"));
+#if defined(HOUDINI_USE_PCG)
+			UHoudiniPCGCookable* PCGCookable = Cast<UHoudiniPCGCookable>(Cookable->GetOuter());
+
+			if (PCGCookable)
+			{
+				FString Error = TEXT("'Ignore Landscape Tracking' must be set on the PCG Component to enable HDA landscape modification.");
+				PCGCookable->AddCookError(Error);
+			}
+#endif
+			return {};
+		}
 
 		//-----------------------------------------------------------------------------------------------------------------------------
 		// Landscape Locking / Unlocking
@@ -548,7 +583,7 @@ FHoudiniLandscapeTranslator::TranslateHeightFieldPart(
 		UHoudiniOutput* OwningOutput,
 		FHoudiniUnrealLandscapeTarget& Landscape,
 		FHoudiniHeightFieldPartData& Part,
-		UHoudiniAssetComponent& HAC,
+		const FHoudiniLandscapeSettings& LandscapeSettings,
 		FHoudiniClearedEditLayers& ClearedLayers,
 		const FHoudiniPackageParams& InPackageParams)
 {
@@ -589,9 +624,9 @@ FHoudiniLandscapeTranslator::TranslateHeightFieldPart(
 	auto LayerPackageParams = InPackageParams;
 	FString CookedLayerName = BakedLayerName;
 
-	if (HAC.bLandscapeUseTempLayers)
+	if (LandscapeSettings.bUseTempLayers)
 	{
-		CookedLayerName = CookedLayerName + FString(" : ") + LayerPackageParams.GetPackageName() + HAC.GetComponentGUID().ToString();
+		CookedLayerName = CookedLayerName + FString(" : ") + LandscapeSettings.TempLayerSuffix;
 	}	
 
 	// ------------------------------------------------------------------------------------------------------------------
@@ -616,9 +651,11 @@ FHoudiniLandscapeTranslator::TranslateHeightFieldPart(
 	FLandscapeLayer* UnrealEditLayer = nullptr;
 #endif
 	bool bWasLocked = false;
+	bool bLayerWasCreated = false;
+
 	if (OutputLandscape->bCanHaveLayersContent)
 	{
-		UnrealEditLayer = FHoudiniLandscapeUtils::GetOrCreateEditLayer(OutputLandscape, FName(CookedLayerName));
+		UnrealEditLayer = FHoudiniLandscapeUtils::GetOrCreateEditLayer(OutputLandscape, FName(CookedLayerName), &bLayerWasCreated);
 		if (!UnrealEditLayer)
 			return nullptr;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
@@ -712,21 +749,28 @@ FHoudiniLandscapeTranslator::TranslateHeightFieldPart(
 	{
 		bool bLayerSubractive = false;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
+		PRAGMA_DISABLE_INTERNAL_WARNINGS
+
 		ULandscapeEditLayerBase* EditLayer = OutputLandscape->GetEditLayer(UnrealEditLayerIndex);
 		if (EditLayer != nullptr)
 		{
 			// Great, these are the Epic recommended replacements for Is/SetLayerBlendSubstractive,
-			// But this throws a warning anyway...
+			// But this throws a warning anyway... Disable/Enable internal warnings temporarily
+PRAGMA_DISABLE_INTERNAL_WARNINGS
 			const bool* AllocationBlend = EditLayer->GetWeightmapLayerAllocationBlend().Find(TargetLayerInfo);
 			if (AllocationBlend != nullptr && (Part.bSubtractiveEditLayer != *AllocationBlend))
 			{
 				EditLayer->AddOrUpdateWeightmapAllocationLayerBlend(TargetLayerInfo, Part.bSubtractiveEditLayer, true);
 			}
+PRAGMA_ENABLE_INTERNAL_WARNINGS
 		}
+
+		PRAGMA_ENABLE_INTERNAL_WARNINGS
 #else
 		if (Part.bSubtractiveEditLayer != OutputLandscape->IsLayerBlendSubstractive(UnrealEditLayerIndex, TargetLayerInfo))
 			OutputLandscape->SetLayerSubstractiveBlendStatus(UnrealEditLayerIndex, Part.bSubtractiveEditLayer, TargetLayerInfo);
 #endif
+		
 		if (TargetLayerInfo)
 			TargetLayerInfo->bNoWeightBlend = !Part.bIsWeightBlended;
 	}
@@ -746,7 +790,7 @@ FHoudiniLandscapeTranslator::TranslateHeightFieldPart(
 			bFetchData);
 
 	// The transform we get from Houdini should be relative to the HDA:
-	HeightFieldData.Transform = HeightFieldData.Transform * HAC.GetComponentTransform();
+	HeightFieldData.Transform = HeightFieldData.Transform * LandscapeSettings.LocalToWorldTransform;
 
 	// If a new landscape was created, resize the layer to match the created landscape size. (We resize the landscape if it does
 	// not fit one of Unreal's predetermined sizes. Only do this for non-tiles.
@@ -863,6 +907,7 @@ FHoudiniLandscapeTranslator::TranslateHeightFieldPart(
 	Obj->bWriteLockedLayers = Part.bWriteLockedLayers;
 	Obj->bLockLayer = Part.bLockLayer;
 	Obj->PropertyAttributes = Part.PropertyAttributes;
+	Obj->bLayerWasCreated = bLayerWasCreated;
 	return Obj;
 
 

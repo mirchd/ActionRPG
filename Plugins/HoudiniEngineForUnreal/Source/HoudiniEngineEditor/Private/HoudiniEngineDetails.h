@@ -28,23 +28,25 @@
 
 #include "CoreMinimal.h"
 
-#include "Widgets/DeclarativeSyntaxSupport.h"
-#include "Widgets/SCompoundWidget.h"
-#include "Framework/SlateDelegates.h"
-#include "Styling/SlateBrush.h"
-#include "Widgets/Layout/SBorder.h"
-#include "Framework/SlateDelegates.h"
-#include "Widgets/Input/SButton.h"
+#include "HAPI/HAPI_Common.h"
 #include "HoudiniEngineDetails.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
 
+#include "Framework/SlateDelegates.h"
+#include "Framework/SlateDelegates.h"
+#include "Styling/SlateBrush.h"
+#include "Widgets/DeclarativeSyntaxSupport.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/SCompoundWidget.h"
+
 class IDetailCategoryBuilder;
 class UHoudiniAssetComponent;
+class UHoudiniCookable;
 class UHoudiniPDGAssetLink;
 class FMenuBuilder;
 class SBorder;
 class SButton;
-
 
 #define IsValidWeakPointer(InWeakObjectPointer) \
 	FHoudiniEngineDetails::IsValidWeakObjectPointer(InWeakObjectPointer, true, TEXT(__FILE__), __LINE__)
@@ -58,71 +60,136 @@ public:
 		: _LogText(TEXT(""))
 	{}
 
-	SLATE_ARGUMENT(FString, LogText)
-		SLATE_END_ARGS()
+		SLATE_ARGUMENT(FString, LogText)
+	SLATE_END_ARGS()
 
 		/** Widget construct. **/
 		void Construct(const FArguments & InArgs);
 };
 
+struct EHoudiniDetailsFlags 
+{
+	// Controls the UI for the Houdini Details Planel. The defaults are for for HACs, but its customized
+	// for PCG, where some settings should not be used.
+
+	bool bAutoBake = true;
+	bool bBakeButton = true;
+	bool bDisplayOnOutputLess = false;
+	bool bAssetOptions = true;
+	bool bGenerateBar = true;
+	bool bReplacePreviousBake = true;
+	bool bRemoveHDAOutputAfterBake = true;
+	bool bTemporaryCookFolderRow = true;
+	bool bCookTriggers = true;
+	bool bDoNotGenerateOutputs = true;
+	bool bPushTransformToHoudini = true;
+
+	static EHoudiniDetailsFlags Defaults;
+};
+
 class FHoudiniEngineDetails : public TSharedFromThis<FHoudiniEngineDetails, ESPMode::NotThreadSafe>
 {
 public:
-	static void CreateWidget(
-		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
 
+	// HE ICON
 	static void CreateHoudiniEngineIconWidget(
-		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder);
 
+	// HOUDINI ASSET + PRESET MENU
+	static void CreateHoudiniAssetDetails(
+		IDetailCategoryBuilder& HoudiniAssetCategory,
+		TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables);
+
+	// PRESET MENU (FULL ROW - unused)
 	static void CreateHoudiniEngineActionWidget(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables);
 
+	// GENERATE
 	static void CreateGenerateWidgets(
-			IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-			const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+		const EHoudiniDetailsFlags& DetailsFlags);
 
+	// RESET PARAMETERS - used by PCG, this is like GENERATE, but no Rebuild/Recook buttons.
+	static void CreateResetParametersOnlyWidgets(
+		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs);
+
+	// BAKE
 	static void CreateBakeWidgets(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+		const EHoudiniDetailsFlags& DetailsFlags);
 
+	// PDG
 	static void CreatePDGBakeWidgets(
 		IDetailCategoryBuilder& InPDGCategory,
-		UHoudiniPDGAssetLink* InPDGAssetLink); 
+		UHoudiniPDGAssetLink* InPDGAssetLink);
 
+	// ASSET OPTIONS
 	static void CreateAssetOptionsWidgets(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+		const EHoudiniDetailsFlags& DetailsFlags);
 
+	// HELP DEBUG
 	static void CreateHelpAndDebugWidgets(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs);
 
+	// NODE SYNC
 	static void CreateNodeSyncWidgets(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables);
 
 	static void CreateInstallInfoWindow();
 
-	static FReply ShowCookLog(const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACS);
+	static void AddRemovedHDAOutputAfterBakeCheckBox(const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, 
+		TSharedPtr<SVerticalBox>& LeftColumnVerticalBox);
 
-	static FReply ShowAssetHelp(const TWeakObjectPtr<UHoudiniAssetComponent>& InHAC);
+	static void AddRenterBakedActorsCheckbox(const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, 
+		TSharedPtr<SVerticalBox>& LeftColumnVerticalBox);
+
+	static void AddAutoBakeCheckbox(const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, 
+		TSharedPtr<SVerticalBox>& RightColumnVerticalBox);
+
+	static void AddReplaceCheckbox(const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, 
+		TSharedPtr<SVerticalBox>& RightColumnVerticalBox);
+
+	static void AddBakeFolderSelector(
+		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder, 
+		const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs);
+
+	static void AddBakeControlBar(
+		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder, 
+		const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, 
+		EHoudiniDetailsFlags DetailsFlags);
+
+	static FReply ShowCookLog(const TArray<HAPI_NodeId>& InNodeIds);
+
+	static FReply ShowAssetHelp(HAPI_NodeId InNodeId);
 
 	static FMenuBuilder Helper_CreateHoudiniAssetPicker();
 
-	const FSlateBrush * GetHoudiniAssetThumbnailBorder(TSharedPtr< SBorder > HoudiniAssetThumbnailBorder) const;
+	const FSlateBrush * GetHoudiniAssetThumbnailBorder(TSharedPtr<SBorder> HoudiniAssetThumbnailBorder) const;
 
 	/** Construct drop down menu content for Houdini asset. **/
 	//static TSharedRef< SWidget > OnGetHoudiniAssetMenuContent(TArray<UHoudiniAssetComponent*> InHACs);
 
 	static TSharedPtr<SWidget> ConstructActionMenu(
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs, class IDetailLayoutBuilder*);
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables,
+		class IDetailLayoutBuilder*);
 
-	static void AddHeaderRowForHoudiniAssetComponent(
+	static void AddHeaderRowForCookable(
 		IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-		const TWeakObjectPtr<UHoudiniAssetComponent>& HoudiniAssetComponent,
+		const TWeakObjectPtr<UHoudiniCookable>& HoudiniCookable,
 		int32 MenuSection);
 
 	static void AddHeaderRowForHoudiniPDGAssetLink(
@@ -136,6 +203,17 @@ public:
 		TFunction<FText(void)>& InGetText,
 		TFunction<const FSlateBrush*(SButton* InExpanderArrow)>& InGetExpanderBrush);
 
+	// Adds a text row that indicate the status of the Houdini Session
+	static void AddSessionStatusRow(IDetailCategoryBuilder& InCategory);
+
+	static bool GetSessionStatusAndColor(FString& OutStatusString, FLinearColor& OutStatusColor);
+
+	// Adds a text row indicate we're using a Houdini indie license
+	static void AddIndieLicenseRow(IDetailCategoryBuilder& InCategory);
+
+	// Adds a text row indicate we're using a Houdini Edu license
+	static void AddEducationLicenseRow(IDetailCategoryBuilder& InCategory);
+
 	// Helper to check if InWeakObjectPointer is valid or not. If not valid, the filepath and line number where the check
 	// occurred is logged.
 	template <class T>
@@ -146,15 +224,17 @@ public:
 		const int32 InLineNumber=INDEX_NONE);
 
 private:
-	static void SetCookFolderPath(
-		const FText& InPathText,
-		const TWeakObjectPtr<UHoudiniAssetComponent>& InMainHAC,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
 
-	static void SetBakeFolderPath(
+	// Helper function that can be used to set either the bake/tempcook folder path on cookables
+	static void SetFolderPath(
 		const FText& InPathText,
-		const TWeakObjectPtr<UHoudiniAssetComponent>& InMainHAC,
-		const TArray<TWeakObjectPtr<UHoudiniAssetComponent>>& InHACs);
+		const bool& bIsBakePath,
+		const TWeakObjectPtr<UHoudiniCookable>& InMainHC,
+		const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs);
+
+
+	static void CreateResetParametersButton(const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, TSharedRef<SHorizontalBox> ButtonHorizontalBox);
+
 };
 
 

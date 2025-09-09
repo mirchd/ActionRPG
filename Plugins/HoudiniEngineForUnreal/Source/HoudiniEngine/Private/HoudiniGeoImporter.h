@@ -37,7 +37,7 @@ struct FHoudiniStaticMeshGenerationProperties;
 struct FHoudiniGeoPartObject;
 struct FMeshBuildSettings;
 struct FHoudiniOutputObjectIdentifier;
-struct FHoudiniInstancedOutputPartData;
+struct FHoudiniInstancerPartData;
 
 enum class EHoudiniOutputType : uint8;
 enum class EHoudiniPartType : uint8;
@@ -69,7 +69,8 @@ public:
 		TArray<TObjectPtr<UHoudiniOutput>>& OutNewOutputs,
 		bool bInAddOutputsToRootSet = false,
 		bool bInUseOutputNodes = true,
-		bool bGatherEditableCurves = true);
+		bool bGatherEditableCurves = true,
+		bool bCreateSceneComponents = true);
 
 	// Delete the HAPI node and remove InOutputs from the root set.
 	static bool CloseBGEOFile(const HAPI_NodeId& InNodeId);
@@ -108,7 +109,7 @@ public:
 		FHoudiniPackageParams InPackageParams,
 		const FHoudiniStaticMeshGenerationProperties& InStaticMeshGenerationProperties,
 		const FMeshBuildSettings& InMeshBuildSettings,
-		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData>* OutInstancedOutputPartData = nullptr);
+		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>* OutInstancedOutputPartData = nullptr);
 
 	// 6. Clean up the created node
 	static bool DeleteCreatedNode(const HAPI_NodeId& InNodeId);
@@ -150,7 +151,7 @@ private:
 	/** @param InOutputs Must all have type EHoudiniOutput::Instancer. */
 	static bool CreateInstancerOutputPartData(
 		const TArray<UHoudiniOutput*>& InOutputs,
-		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData>& OutInstancedOutputPartData);
+		TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>& OutInstancedOutputPartData);
 
 	/** @param InOutputs Must all have type EHoudiniOutput::DataTable. */
 	bool CreateDataTables(const TArray<UHoudiniOutput*>& InOutputs, FHoudiniPackageParams InPackageParams);
@@ -160,6 +161,9 @@ private:
 
 	/** @param InOutputs Must all have type EHoudiniOutput::AnimSequence. */
 	bool CreateAnimSequences(const TArray<UHoudiniOutput*>& InOutputs, FHoudiniPackageParams InPackageParams);
+
+	/** @param InOutputs Must all have type EHoudiniOutput::Cop. */
+	bool CreateCopTextures(const TArray<UHoudiniOutput*>& InOutputs, FHoudiniPackageParams InPackageParams);
 
 	// Path to the file we're currently loading
 	FString SourceFilePath;

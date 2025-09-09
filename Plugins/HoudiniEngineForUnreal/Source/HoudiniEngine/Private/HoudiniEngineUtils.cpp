@@ -42,6 +42,7 @@
 #include "HoudiniAsset.h"
 #include "HoudiniAssetActor.h"
 #include "HoudiniAssetComponent.h"
+#include "HoudiniCookable.h"
 #include "HoudiniEngine.h"
 #include "HoudiniEngineEditorSettings.h"
 #include "HoudiniEnginePrivatePCH.h"
@@ -55,6 +56,7 @@
 #include "HoudiniInput.h"
 #include "HoudiniParameter.h"
 #include "HoudiniRuntimeSettings.h"
+#include "HoudiniOutputTranslator.h"
 
 #if WITH_EDITOR
 	#include "SAssetSelectionWidget.h"
@@ -83,7 +85,6 @@
 #include "Misc/StringFormatArg.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyEditorModule.h"
-#include "RawMesh.h"
 #include "SSCSEditor.h"
 #include "SSubobjectEditor.h"
 #include "UnrealEdGlobals.h"
@@ -101,8 +102,17 @@
 	#include "EditorModes.h"	
 	#include "Interfaces/IMainFrameModule.h"
 #endif
+#include "UObject/ObjectSaveContext.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE
+
+TAutoConsoleVariable<float> CVarHoudiniEngineMeshBuildTimer(
+	TEXT("HoudiniEngine.MeshBuildTimer"),
+	0.0,
+	TEXT("When enabled, the plugin will output timings during the Mesh creation.\n")
+);
+
+FHoudiniEngineUtils::FOnHoudiniProxyMeshesRefinedDelegate FHoudiniEngineUtils::OnHoudiniProxyMeshesRefinedDelegate = FHoudiniEngineUtils::FOnHoudiniProxyMeshesRefinedDelegate();
 
 // HAPI_Result strings
 const FString kResultStringSuccess(TEXT("Success"));
@@ -357,21 +367,21 @@ FHoudiniEngineUtils::GetConnectionError()
 }
 
 void
-FHoudiniEngineUtils::MarkAllHACsAsNeedInstantiation()
-{	
-	// Notify all the HoudiniAssetComponents that they need to re instantiate themselves in the new Houdini engine session.
-	for (TObjectIterator<UHoudiniAssetComponent> Itr; Itr; ++Itr)
+FHoudiniEngineUtils::MarkAllCookablesAsNeedInstantiation()
+{
+	// Notify all the Cookables that they need to re instantiate themselves in the new Houdini engine session.
+	for (TObjectIterator<UHoudiniCookable> Itr; Itr; ++Itr)
 	{
-		UHoudiniAssetComponent * HoudiniAssetComponent = *Itr;
-		if (!IsValid(HoudiniAssetComponent))
+		UHoudiniCookable* HC = *Itr;
+		if (!IsValid(HC))
 			continue;
 
-		HoudiniAssetComponent->MarkAsNeedInstantiation();
+		HC->MarkAsNeedInstantiation();
 	}
 }
 
 const FString
-FHoudiniEngineUtils::GetNodeErrorsWarningsAndMessages(const HAPI_NodeId& InNodeId)
+FHoudiniEngineUtils::GetNodeErrorsWarningsAndMessages(HAPI_NodeId InNodeId)
 {
 	int32 NodeErrorLength = 0;
 	if (HAPI_RESULT_SUCCESS != FHoudiniApi::ComposeNodeCookResult(
@@ -396,7 +406,7 @@ FHoudiniEngineUtils::GetNodeErrorsWarningsAndMessages(const HAPI_NodeId& InNodeI
 }
 
 const FString
-FHoudiniEngineUtils::GetCookLog(TArray<UHoudiniAssetComponent*>& InHACs)
+FHoudiniEngineUtils::GetCookLog(const TArray<HAPI_NodeId>& InNodeIds)
 {
 	FString CookLog;
 
@@ -416,13 +426,13 @@ FHoudiniEngineUtils::GetCookLog(TArray<UHoudiniAssetComponent*>& InHACs)
 		CookLog += TEXT("Error Description:\n") + Error + TEXT("\n\n");
 
 	// Iterates on all the selected HAC and get their node errors
-	for (auto& HAC : InHACs)
+	for (auto& NodeId : InNodeIds)
 	{
-		if (!IsValid(HAC))
+		if (NodeId < 0)
 			continue;
 
 		// Get the node errors, warnings and messages
-		FString NodeErrors = FHoudiniEngineUtils::GetNodeErrorsWarningsAndMessages(HAC->GetAssetId());
+		FString NodeErrors = FHoudiniEngineUtils::GetNodeErrorsWarningsAndMessages(NodeId);
 		if (NodeErrors.IsEmpty())
 			continue;
 
@@ -463,20 +473,16 @@ FHoudiniEngineUtils::GetCookLog(TArray<UHoudiniAssetComponent*>& InHACs)
 }
 
 const FString
-FHoudiniEngineUtils::GetAssetHelp(UHoudiniAssetComponent* HoudiniAssetComponent)
+FHoudiniEngineUtils::GetAssetHelp(HAPI_NodeId InNodeId)
 {
 	FString HelpString = TEXT("");
-	if (!HoudiniAssetComponent)
+	if (InNodeId < 0)
 		return HelpString;
 
 	HAPI_AssetInfo AssetInfo;
 	FHoudiniApi::AssetInfo_Init(&AssetInfo);
-	HAPI_NodeId AssetId = HoudiniAssetComponent->GetAssetId();
-	if (AssetId < 0)
-		return HelpString;
-
 	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetAssetInfo(
-		FHoudiniEngine::Get().GetSession(), AssetId, &AssetInfo), HelpString);
+		FHoudiniEngine::Get().GetSession(), InNodeId, &AssetInfo), HelpString);
 
 	if (FHoudiniEngineString::ToFString(AssetInfo.helpTextSH, HelpString))
 		return HelpString;
@@ -488,20 +494,16 @@ FHoudiniEngineUtils::GetAssetHelp(UHoudiniAssetComponent* HoudiniAssetComponent)
 }
 
 const FString
-FHoudiniEngineUtils::GetAssetHelpURL(UHoudiniAssetComponent* HoudiniAssetComponent)
+FHoudiniEngineUtils::GetAssetHelpURL(HAPI_NodeId InNodeId)
 {
 	FString HelpString = TEXT("");
-	if (!HoudiniAssetComponent)
+	if (InNodeId < 0)
 		return HelpString;
 
 	HAPI_AssetInfo AssetInfo;
 	FHoudiniApi::AssetInfo_Init(&AssetInfo);
-	HAPI_NodeId AssetId = HoudiniAssetComponent->GetAssetId();
-	if (AssetId < 0)
-		return HelpString;
-
 	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetAssetInfo(
-		FHoudiniEngine::Get().GetSession(), AssetId, &AssetInfo), HelpString);
+		FHoudiniEngine::Get().GetSession(), InNodeId, &AssetInfo), HelpString);
 
 	// If we have a help url, use it first
 	if (FHoudiniEngineString::ToFString(AssetInfo.helpURLSH, HelpString))
@@ -1032,7 +1034,7 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutput(
 void
 FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 	UWorld* const InWorldContext,
-	const UHoudiniAssetComponent* HoudiniAssetComponent,
+	const UHoudiniCookable* InCookable,
 	const FHoudiniOutputObjectIdentifier& InIdentifier,
 	const FHoudiniOutputObject& InOutputObject,
 	const bool bInHasPreviousBakeData,
@@ -1059,7 +1061,7 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 	const FString DefaultBakeFolder = !InDefaultBakeFolder.IsEmpty() ? InDefaultBakeFolder :
 		FHoudiniEngineRuntime::Get().GetDefaultBakeFolder();
 
-	const bool bIsHACValid = IsValid(HoudiniAssetComponent);
+	const bool bIsHCValid = IsValid(InCookable);
 	
 	// If InHoudiniAssetName was specified, use that, otherwise use the name of the UHoudiniAsset used by the
 	// HoudiniAssetComponent
@@ -1068,9 +1070,9 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 	{
 		HoudiniAssetName = InHoudiniAssetName;
 	}
-	else if (bIsHACValid)
+	else if (bIsHCValid)
 	{
-		HoudiniAssetName = HoudiniAssetComponent->GetHoudiniAssetName();
+		HoudiniAssetName = InCookable->GetHoudiniAssetName();
 	}
 
 	// If InHoudiniAssetActorName was specified, use that, otherwise use the name of the owner of HoudiniAssetComponent
@@ -1079,15 +1081,15 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 	{
 		HoudiniAssetActorName = InHoudiniAssetActorName;
 	}
-	else if (bIsHACValid && IsValid(HoudiniAssetComponent->GetOwner()))
+	else if (bIsHCValid && IsValid(InCookable->GetOwner()))
 	{
-		HoudiniAssetActorName = HoudiniAssetComponent->GetOwner()->GetActorNameOrLabel();
+		HoudiniAssetActorName = InCookable->GetOwner()->GetActorNameOrLabel();
 	}	
 
 	// Get the HAC's GUID, if the HAC is valid
-	TOptional<FGuid> ComponentGuid;
-	if (bIsHACValid)
-		ComponentGuid = HoudiniAssetComponent->GetComponentGUID();
+	TOptional<FGuid> CookableGuid;
+	if (bIsHCValid)
+		CookableGuid = InCookable->GetCookableGUID();
 
 	const bool bHasBakeNameUIOverride = !InOutputObject.BakeName.IsEmpty();
 	FillInPackageParamsForBakingOutput(
@@ -1099,7 +1101,7 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 		HoudiniAssetActorName,
 		InReplaceMode,
 		bAutomaticallySetAttemptToLoadMissingPackages,
-		ComponentGuid);
+		CookableGuid);
 
 	// If ObjectName is empty and InDefaultObjectName are empty, generate a default via GetPackageName
 	const FString DefaultObjectName = OutPackageParams.ObjectName.IsEmpty() && InDefaultObjectName.IsEmpty()
@@ -1109,7 +1111,7 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 
 	const TMap<FString, FString>& CachedAttributes = InOutputObject.CachedAttributes;
 	TMap<FString, FString> Tokens = InOutputObject.CachedTokens;
-	OutPackageParams.UpdateTokensFromParams(InWorldContext, HoudiniAssetComponent, Tokens);
+	OutPackageParams.UpdateTokensFromParams(InWorldContext, InCookable->GetComponent(), Tokens);
 	OutResolver.SetCachedAttributes(CachedAttributes);
 	OutResolver.SetTokensFromStringMap(Tokens);
 
@@ -1155,7 +1157,7 @@ FHoudiniEngineUtils::FillInPackageParamsForBakingOutputWithResolver(
 	if (!bInSkipObjectNameResolutionAndUseDefault || !bInSkipBakeFolderResolutionAndUseDefault)
 	{
 		// Update the tokens from the package params
-		OutPackageParams.UpdateTokensFromParams(InWorldContext, HoudiniAssetComponent, Tokens);
+		OutPackageParams.UpdateTokensFromParams(InWorldContext, InCookable->GetComponent(), Tokens);
 		OutResolver.SetTokensFromStringMap(Tokens);
 
 #if defined(HOUDINI_ENGINE_DEBUG_BAKING) && HOUDINI_ENGINE_DEBUG_BAKING
@@ -1241,17 +1243,13 @@ FHoudiniEngineUtils::RepopulateFoliageTypeListInUI()
 
 void
 FHoudiniEngineUtils::GatherLandscapeInputs(
-	UHoudiniAssetComponent* HAC,
+	const TArray<TObjectPtr<UHoudiniInput>>& Inputs,
 	TArray<ALandscapeProxy*>& AllInputLandscapes)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::GatherLandscapeInputs);
-	if (!IsValid(HAC))
-		return;
 
-	int32 NumInputs = HAC->GetNumInputs();	
-	for (int32 InputIndex = 0; InputIndex < NumInputs; InputIndex++ )
+	for(auto CurrentInput : Inputs)
 	{
-		UHoudiniInput* CurrentInput = HAC->GetInputAt(InputIndex);
 		if (!CurrentInput)
 			continue;
 		
@@ -1274,12 +1272,59 @@ FHoudiniEngineUtils::GatherLandscapeInputs(
 	}
 }
 
+USceneComponent* 
+FHoudiniEngineUtils::GetOuterSceneComponent(const UObject* Obj)
+{
+	if(!Obj)
+		return nullptr;
+
+	// TODO: ? test cookable?
+	UObject* Outer = Obj->GetOuter();
+	while (Outer)
+	{
+		USceneComponent* SceneComponent = Cast<USceneComponent>(Outer);
+		if(SceneComponent)
+			return SceneComponent;
+		Outer = Outer->GetOuter();
+	}
+	return nullptr;
+}
+
+UHoudiniCookable*
+FHoudiniEngineUtils::GetOuterHoudiniCookable(const UObject* Obj)
+{
+	if (!IsValid(Obj))
+		return nullptr;
+
+	// Check the direct Outer
+	UHoudiniCookable* OuterHC = Cast<UHoudiniCookable>(Obj->GetOuter());
+	if (IsValid(OuterHC))
+		return OuterHC;
+
+	// Check the whole outer chain
+	OuterHC = Obj->GetTypedOuter<UHoudiniCookable>();
+	if (IsValid(OuterHC))
+		return OuterHC;
+
+	// Finally check if the Object itself is a HC
+	UObject* NonConstObj = const_cast<UObject*>(Obj);
+	OuterHC = Cast<UHoudiniCookable>(NonConstObj);
+	if (IsValid(OuterHC))
+		return OuterHC;
+
+	return nullptr;
+}
 
 UHoudiniAssetComponent*
 FHoudiniEngineUtils::GetOuterHoudiniAssetComponent(const UObject* Obj)
 {
 	if (!IsValid(Obj))
 		return nullptr;
+
+	// Start by looking for a Cookable outer
+	UHoudiniCookable* OuterHC = FHoudiniEngineUtils::GetOuterHoudiniCookable(Obj);
+	if (IsValid(OuterHC))
+		return Cast<UHoudiniAssetComponent>(OuterHC->GetComponent());
 
 	// Check the direct Outer
 	UHoudiniAssetComponent* OuterHAC = Cast<UHoudiniAssetComponent>(Obj->GetOuter());
@@ -1559,7 +1604,7 @@ FHoudiniEngineUtils::IsInitialized()
 }
 
 bool
-FHoudiniEngineUtils::IsHoudiniNodeValid(const HAPI_NodeId& NodeId)
+FHoudiniEngineUtils::IsHoudiniNodeValid(HAPI_NodeId NodeId)
 {
 	if (NodeId < 0)
 		return false;
@@ -1594,7 +1639,7 @@ FHoudiniEngineUtils::HapiDisconnectAsset(HAPI_NodeId HostAssetId, int32 InputInd
 }
 
 bool
-FHoudiniEngineUtils::DestroyHoudiniAsset(const HAPI_NodeId& AssetId)
+FHoudiniEngineUtils::DestroyHoudiniAsset(HAPI_NodeId AssetId)
 {
 	if (HAPI_RESULT_SUCCESS == FHoudiniApi::DeleteNode(
 		FHoudiniEngine::Get().GetSession(), AssetId))
@@ -1606,7 +1651,7 @@ FHoudiniEngineUtils::DestroyHoudiniAsset(const HAPI_NodeId& AssetId)
 }
 
 bool
-FHoudiniEngineUtils::DeleteHoudiniNode(const HAPI_NodeId& InNodeId)
+FHoudiniEngineUtils::DeleteHoudiniNode(HAPI_NodeId InNodeId)
 {
 	if (HAPI_RESULT_SUCCESS == FHoudiniApi::DeleteNode(
 		FHoudiniEngine::Get().GetSession(), InNodeId))
@@ -2035,6 +2080,9 @@ FHoudiniEngineUtils::GetAssetPreset(HAPI_NodeId InNodeId, TArray<int8>& PresetBu
 		FHoudiniEngine::Get().GetSession(), NodeId,
 		HAPI_PRESETTYPE_BINARY, NULL, &BufferLength), false);
 
+	if (BufferLength <= 0)
+		return false;
+
 	PresetBuffer.SetNumZeroed(BufferLength);
 	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetPreset(
 		FHoudiniEngine::Get().GetSession(), NodeId,
@@ -2042,6 +2090,7 @@ FHoudiniEngineUtils::GetAssetPreset(HAPI_NodeId InNodeId, TArray<int8>& PresetBu
 
 	return true;
 }
+
 
 bool
 FHoudiniEngineUtils::SetAssetPreset(HAPI_NodeId InNodeId, const TArray<int8>& PresetBuffer)
@@ -2072,7 +2121,7 @@ FHoudiniEngineUtils::SetAssetPreset(HAPI_NodeId InNodeId, const TArray<int8>& Pr
 }
 
 bool
-FHoudiniEngineUtils::HapiGetAbsNodePath(const HAPI_NodeId& InNodeId, FString& OutPath)
+FHoudiniEngineUtils::HapiGetAbsNodePath(HAPI_NodeId InNodeId, FString& OutPath)
 {
 	// Retrieve Path to the given Node, relative to the other given Node
 	if (InNodeId < 0)
@@ -2096,7 +2145,7 @@ FHoudiniEngineUtils::HapiGetAbsNodePath(const HAPI_NodeId& InNodeId, FString& Ou
 
 
 bool
-FHoudiniEngineUtils::HapiGetNodePath(const HAPI_NodeId& InNodeId, const HAPI_NodeId& InRelativeToNodeId, FString& OutPath)
+FHoudiniEngineUtils::HapiGetNodePath(HAPI_NodeId InNodeId, HAPI_NodeId InRelativeToNodeId, FString& OutPath)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::HapiGetNodePath);
 
@@ -2180,7 +2229,10 @@ FHoudiniEngineUtils::HapiGetNodePath(const FHoudiniGeoPartObject& InHGPO, FStrin
 
 
 bool
-FHoudiniEngineUtils::HapiGetObjectInfos(const HAPI_NodeId& InNodeId, TArray<HAPI_ObjectInfo>& OutObjectInfos, TArray<HAPI_Transform>& OutObjectTransforms)
+FHoudiniEngineUtils::HapiGetObjectInfos(
+	HAPI_NodeId InNodeId,
+	TArray<HAPI_ObjectInfo>& OutObjectInfos,
+	TArray<HAPI_Transform>& OutObjectTransforms)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::HapiGetObjectInfos);
 
@@ -2193,13 +2245,10 @@ FHoudiniEngineUtils::HapiGetObjectInfos(const HAPI_NodeId& InNodeId, TArray<HAPI
 	int32 ObjectCount = 0;
 	if (NodeInfo.type == HAPI_NODETYPE_SOP)
 	{
+		// Add one object info
 		ObjectCount = 1;
 		OutObjectInfos.SetNumUninitialized(1);
 		FHoudiniApi::ObjectInfo_Init(&(OutObjectInfos[0]));
-
-		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetObjectInfo(
-			FHoudiniEngine::Get().GetSession(),
-			NodeInfo.parentId, &OutObjectInfos[0]), false);
 
 		// Use the identity transform
 		OutObjectTransforms.SetNumUninitialized(1);
@@ -2210,6 +2259,27 @@ FHoudiniEngineUtils::HapiGetObjectInfos(const HAPI_NodeId& InNodeId, TArray<HAPI
 		OutObjectTransforms[0].scale[1] = 1.0f;
 		OutObjectTransforms[0].scale[2] = 1.0f;
 		OutObjectTransforms[0].rstOrder = HAPI_SRT;
+
+		// Make sure our parent is an OBJ node
+		HAPI_NodeId ParentId = NodeInfo.parentId;
+		bool bParentIsObj = false;
+		while (!bParentIsObj && ParentId >= 0)
+		{
+			HAPI_NodeInfo ParentNodeInfo;
+			FHoudiniApi::NodeInfo_Init(&ParentNodeInfo);
+			HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetNodeInfo(
+				FHoudiniEngine::Get().GetSession(),
+				ParentId, &ParentNodeInfo), false);
+
+			if (ParentNodeInfo.type == HAPI_NODETYPE_OBJ)
+				bParentIsObj = true;
+			else
+				ParentId = ParentNodeInfo.parentId;
+		}
+
+		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetObjectInfo(
+			FHoudiniEngine::Get().GetSession(),
+			ParentId, &OutObjectInfos[0]), false);
 	}
 	else if (NodeInfo.type == HAPI_NODETYPE_OBJ)
 	{
@@ -2297,7 +2367,7 @@ FHoudiniEngineUtils::HapiGetObjectInfos(const HAPI_NodeId& InNodeId, TArray<HAPI
 }
 
 bool 
-FHoudiniEngineUtils::IsObjNodeFullyVisible(const TSet<HAPI_NodeId>& AllObjectIds, const HAPI_NodeId& InRootNodeId, const HAPI_NodeId& InChildNodeId)
+FHoudiniEngineUtils::IsObjNodeFullyVisible(const TSet<HAPI_NodeId>& AllObjectIds, HAPI_NodeId InRootNodeId, HAPI_NodeId InChildNodeId)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::IsObjNodeFullyVisible);
 
@@ -2362,7 +2432,24 @@ FHoudiniEngineUtils::IsObjNodeFullyVisible(const TSet<HAPI_NodeId>& AllObjectIds
 
 
 bool
-FHoudiniEngineUtils::IsSopNode(const HAPI_NodeId& NodeId)
+FHoudiniEngineUtils::HapiGetNodeType(HAPI_NodeId InNodeId, HAPI_NodeType& OutNodeType)
+{
+	HAPI_NodeInfo NodeInfo;
+	FHoudiniApi::NodeInfo_Init(&NodeInfo);
+	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetNodeInfo(
+		FHoudiniEngine::Get().GetSession(),
+		InNodeId,
+		&NodeInfo
+		),
+		false
+	);
+	OutNodeType = NodeInfo.type;
+	return true;
+}
+
+
+bool
+FHoudiniEngineUtils::IsSopNode(HAPI_NodeId NodeId)
 {
 	HAPI_NodeInfo NodeInfo;
 	FHoudiniApi::NodeInfo_Init(&NodeInfo);
@@ -2377,7 +2464,7 @@ FHoudiniEngineUtils::IsSopNode(const HAPI_NodeId& NodeId)
 }
 
 
-bool FHoudiniEngineUtils::ContainsSopNodes(const HAPI_NodeId& NodeId)
+bool FHoudiniEngineUtils::ContainsSopNodes(HAPI_NodeId NodeId)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::ContainsSopNodes);
 	int ChildCount = 0;
@@ -2395,7 +2482,7 @@ bool FHoudiniEngineUtils::ContainsSopNodes(const HAPI_NodeId& NodeId)
 	return ChildCount > 0;
 }
 
-bool FHoudiniEngineUtils::GetOutputIndex(const HAPI_NodeId& InNodeId, int32& OutOutputIndex)
+bool FHoudiniEngineUtils::GetOutputIndex(HAPI_NodeId InNodeId, int32& OutOutputIndex)
 {
 	int TempValue = -1;
 	if (HAPI_RESULT_SUCCESS == FHoudiniApi::GetParmIntValue(
@@ -2456,6 +2543,10 @@ FHoudiniEngineUtils::GatherAllAssetOutputs(
 		else
 			return false;
 	}
+
+	// We only handle SOP and OBJ nodes here.
+	if (AssetNodeInfo.type != HAPI_NODETYPE_SOP && AssetNodeInfo.type != HAPI_NODETYPE_OBJ)
+		return false;
 
 	FString CurrentAssetName;
 	{
@@ -2645,7 +2736,7 @@ FHoudiniEngineUtils::GatherAllAssetOutputs(
 			
 		} // if (bObjectIsVisible)
 
-		for (const HAPI_NodeId& NodeId : ForceNodesToCook)
+		for (HAPI_NodeId NodeId : ForceNodesToCook)
 		{
 			OutOutputNodes.AddUnique(NodeId);
 		}
@@ -2653,7 +2744,7 @@ FHoudiniEngineUtils::GatherAllAssetOutputs(
 	return true;
 }
 
-bool FHoudiniEngineUtils::GatherImmediateOutputGeoInfos(const HAPI_NodeId& InNodeId,
+bool FHoudiniEngineUtils::GatherImmediateOutputGeoInfos(HAPI_NodeId InNodeId,
                                                         const bool bUseOutputNodes,
                                                         const bool bGatherTemplateNodes,
                                                         TArray<HAPI_GeoInfo>& OutGeoInfos,
@@ -2740,7 +2831,7 @@ bool FHoudiniEngineUtils::GatherImmediateOutputGeoInfos(const HAPI_NodeId& InNod
 					HAPI_GeoInfo GeoInfo;
 					FHoudiniApi::GeoInfo_Init(&GeoInfo);
 					// Retrieve the Geo Infos for each display node
-					for(const HAPI_NodeId& DisplayNodeId : DisplayNodeIds)
+					for(HAPI_NodeId DisplayNodeId : DisplayNodeIds)
 					{
 						if (GatheredNodeIds.Contains(DisplayNodeId))
 							continue; // This node has already been gathered from this subnet.
@@ -2787,7 +2878,7 @@ bool FHoudiniEngineUtils::GatherImmediateOutputGeoInfos(const HAPI_NodeId& InNod
 					))
 			{
 				
-				for(const HAPI_NodeId& TemplateNodeId : TemplateNodeIds)
+				for(HAPI_NodeId TemplateNodeId : TemplateNodeIds)
 				{
 					if (GatheredNodeIds.Contains(TemplateNodeId))
 					{
@@ -2820,7 +2911,7 @@ bool FHoudiniEngineUtils::GatherImmediateOutputGeoInfos(const HAPI_NodeId& InNod
 
 
 bool
-FHoudiniEngineUtils::HapiGetAssetTransform(const HAPI_NodeId& InNodeId, FTransform& OutTransform)
+FHoudiniEngineUtils::HapiGetAssetTransform(HAPI_NodeId InNodeId, FTransform& OutTransform)
 {
 	HAPI_NodeInfo NodeInfo;
 	FHoudiniApi::NodeInfo_Init(&NodeInfo);
@@ -3020,7 +3111,7 @@ FHoudiniEngineUtils::ConvertHoudiniPositionToUnrealVector(const TArray<float>& I
 
 	for (int32 OutIndex = 0; OutIndex < OutVectorData.Num(); OutIndex++)
 	{
-		const int32& InIndex = OutIndex * 3;
+		int32 InIndex = OutIndex * 3;
 
 		// Swap Y/Z and scale meters to centimeters
 		OutVectorData[OutIndex].X = (double)(InRawData[InIndex + 0] * HAPI_UNREAL_SCALE_FACTOR_POSITION);
@@ -3047,7 +3138,7 @@ FHoudiniEngineUtils::ConvertHoudiniScaleToUnrealVector(const TArray<float>& InRa
 
 	for (int32 OutIndex = 0; OutIndex < OutVectorData.Num(); OutIndex++)
 	{
-		const int32& InIndex = OutIndex * 3;
+		int32 InIndex = OutIndex * 3;
 
 		// Just swap Y/Z
 		OutVectorData[OutIndex].X = (double)InRawData[InIndex + 0];
@@ -3063,7 +3154,7 @@ FHoudiniEngineUtils::ConvertHoudiniRotQuatToUnrealVector(const TArray<float>& In
 
 	for (int32 OutIndex = 0; OutIndex < OutVectorData.Num(); OutIndex++)
 	{
-		const int32& InIndex = OutIndex * 4;
+		int32 InIndex = OutIndex * 4;
 
 		// Extract a quaternion: Swap Y/Z, invert W
 		FQuat ObjectRotation(
@@ -3084,7 +3175,7 @@ FHoudiniEngineUtils::ConvertHoudiniRotEulerToUnrealVector(const TArray<float>& I
 
 	for (int32 OutIndex = 0; OutIndex < OutVectorData.Num(); OutIndex++)
 	{
-		const int32& InIndex = OutIndex * 3;
+		int32 InIndex = OutIndex * 3;
 
 		// Just swap Y/Z
 		OutVectorData[OutIndex].X = (double)InRawData[InIndex + 0];
@@ -3094,31 +3185,37 @@ FHoudiniEngineUtils::ConvertHoudiniRotEulerToUnrealVector(const TArray<float>& I
 }
 
 bool
-FHoudiniEngineUtils::UploadHACTransform(UHoudiniAssetComponent* HAC)
+FHoudiniEngineUtils::UploadCookableTransform(UHoudiniCookable* HC)
 {
-	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::UploadHACTransform);
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::UploadCookableTransform);
 
-	if (!HAC || !HAC->bUploadTransformsToHoudiniEngine)
+	if (!HC || !HC->IsComponentSupported())
 		return false;
 
-	// Indicates the HAC has been fully loaded
-	// TODO: Check! (replaces fullyloaded)
-	if (!HAC->IsFullyLoaded())
+	if (!HC->ComponentData->bUploadTransformsToHoudiniEngine)
 		return false;
 
-	if (HAC->GetAssetCookCount() > 0 && HAC->GetAssetId() >= 0)
+	if (!IsValid(HC->ComponentData->Component.Get()))
+		return false;
+
+	// Indicates the Cookable has been fully loaded
+	if (!HC->IsFullyLoaded())
+		return false;
+
+	if (HC->CookCount > 0 && HC->GetNodeId() >= 0)
 	{
-		if (!FHoudiniEngineUtils::HapiSetAssetTransform(HAC->GetAssetId(), HAC->GetComponentTransform()))
+		if (!FHoudiniEngineUtils::HapiSetAssetTransform(HC->GetNodeId(), HC->ComponentData->Component->GetComponentTransform()))
 			return false;
 	}
 
-	HAC->SetHasComponentTransformChanged(false);
+	HC->SetHasComponentTransformChanged(false);
 
 	return true;
 }
 
+
 bool
-FHoudiniEngineUtils::HapiSetAssetTransform(const HAPI_NodeId& AssetId, const FTransform & Transform)
+FHoudiniEngineUtils::HapiSetAssetTransform(HAPI_NodeId AssetId, const FTransform & Transform)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::HapiSetAssetTransform);
 	if (AssetId < 0)
@@ -3155,7 +3252,7 @@ FHoudiniEngineUtils::HapiSetAssetTransform(const HAPI_NodeId& AssetId, const FTr
 }
 
 HAPI_NodeId
-FHoudiniEngineUtils::HapiGetParentNodeId(const HAPI_NodeId& NodeId)
+FHoudiniEngineUtils::HapiGetParentNodeId(HAPI_NodeId NodeId)
 {
 	HAPI_NodeId ParentId = -1;
 	if (NodeId >= 0)
@@ -3171,34 +3268,29 @@ FHoudiniEngineUtils::HapiGetParentNodeId(const HAPI_NodeId& NodeId)
 
 // Assign a unique Actor Label if needed
 void
-FHoudiniEngineUtils::AssignUniqueActorLabelIfNeeded(UHoudiniAssetComponent* HAC)
+FHoudiniEngineUtils::AssignUniqueActorLabelIfNeeded(HAPI_NodeId InNodeId, AActor* InActorOwner)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::AssignUniqueActorLabelIfNeeded);
 
-	if (!IsValid(HAC))
-		return;
-
 #if WITH_EDITOR
-	HAPI_NodeId AssetId = HAC->GetAssetId();
-	if (AssetId < 0)
+	if (InNodeId < 0)
 		return;
 
-	AActor* OwnerActor = HAC->GetOwner();
-	if (!OwnerActor)
+	if (!InActorOwner)
 		return;
 
 	// Make sure we only create a unique name for a new Houdini Actor
 	// We don't want to loose custom/manual names
-	if (!OwnerActor->GetActorNameOrLabel().StartsWith(AHoudiniAssetActor::StaticClass()->GetName()))
+	if (!InActorOwner->GetActorNameOrLabel().StartsWith(AHoudiniAssetActor::StaticClass()->GetName()))
 		return;
 
-	if (!OwnerActor->GetName().StartsWith(AHoudiniAssetActor::StaticClass()->GetName()))
+	if (!InActorOwner->GetName().StartsWith(AHoudiniAssetActor::StaticClass()->GetName()))
 		return;
 
 	// Assign unique actor label based on asset name if it seems to have not been renamed already
 	FString UniqueName;
-	if (FHoudiniEngineUtils::GetHoudiniAssetName(AssetId, UniqueName))
-		FActorLabelUtilities::SetActorLabelUnique(OwnerActor, UniqueName);
+	if (FHoudiniEngineUtils::GetHoudiniAssetName(InNodeId, UniqueName))
+		FActorLabelUtilities::SetActorLabelUnique(InActorOwner, UniqueName);
 #endif
 }
 
@@ -3281,33 +3373,27 @@ FHoudiniEngineUtils::GetLicenseType(FString & LicenseType)
 	return true;
 }
 
-// Check if the Houdini asset component (or parent HAC of a parameter) is being cooked
+// Check if the cookable (or parent cookable) is being cooked
 bool
-FHoudiniEngineUtils::IsHoudiniAssetComponentCooking(UObject* InObj) 
+FHoudiniEngineUtils::IsHoudiniCookableCooking(UObject* InObj)
 {
 	if (!InObj)
 		return false;
 
-	UHoudiniAssetComponent* HoudiniAssetComponent = nullptr;
-
-	if (InObj->IsA<UHoudiniAssetComponent>()) 
+	UHoudiniCookable* Cookable = nullptr;
+	if (InObj->IsA<UHoudiniCookable>())
 	{
-		HoudiniAssetComponent = Cast<UHoudiniAssetComponent>(InObj);
+		Cookable = Cast<UHoudiniCookable>(InObj);
 	}
-	else if (InObj->IsA<UHoudiniParameter>())
+	else
 	{
-		UHoudiniParameter* Parameter = Cast<UHoudiniParameter>(InObj);
-		if (!Parameter)
-			return false;
-
-		HoudiniAssetComponent = Cast<UHoudiniAssetComponent>(Parameter->GetOuter());
+		Cookable = Cast<UHoudiniCookable>(InObj->GetOuter());
 	}
 
-	if (!HoudiniAssetComponent)
+	if (!Cookable)
 		return false;
 
-	EHoudiniAssetState AssetState = HoudiniAssetComponent->GetAssetState();
-
+	EHoudiniAssetState AssetState = Cookable->GetCurrentState();
 	return AssetState >= EHoudiniAssetState::PreCook && AssetState <= EHoudiniAssetState::PostCook;
 }
 
@@ -3382,11 +3468,27 @@ FHoudiniEngineUtils::UpdateEditorProperties_Internal(const bool bInForceFullUpda
 	// TODO: These shouldn't be hardcoded strings, but when building on Mac, we get linking errors
 	//       when trying to use LevelEditorTabIds::LevelEditorSelectionDetails
 	//
+	/*
 	static const FName DetailsTabIdentifiers[] = {
 		"LevelEditorSelectionDetails",
 		"LevelEditorSelectionDetails2",
 		"LevelEditorSelectionDetails3",
 		"LevelEditorSelectionDetails4" };
+	*/
+
+	TArray<FName> DetailsTabIdentifiers;
+	DetailsTabIdentifiers.SetNum(4);
+	DetailsTabIdentifiers[0] = FName("LevelEditorSelectionDetails");
+	DetailsTabIdentifiers[1] = FName("LevelEditorSelectionDetails2");
+	DetailsTabIdentifiers[2] = FName("LevelEditorSelectionDetails3");
+	DetailsTabIdentifiers[3] = FName("LevelEditorSelectionDetails4");
+
+	// Add the Houdini Asset editor identifiers to the Details tab array
+	{
+		TArray<FName> AssetEditorId = FHoudiniEngine::Get().GetAllHoudiniAssetEditorIdentifier();
+		for (auto CurId : AssetEditorId)
+			DetailsTabIdentifiers.Add(CurId);
+	}
 
 	for (const FName DetailsPanelName : DetailsTabIdentifiers)
 	{
@@ -3555,8 +3657,8 @@ FHoudiniEngineUtils::UpdateBlueprintEditor_Internal(UHoudiniAssetComponent* HAC)
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeFloatData(
 	const TArray<float>& InFloatData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo,
 	bool bAttemptRunLengthEncoding)
@@ -3574,8 +3676,8 @@ FHoudiniEngineUtils::HapiSetAttributeFloatData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeFloatData(
 	const float* InFloatData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo,
 	bool bAttemptRunLengthEncoding)
@@ -3644,8 +3746,8 @@ FHoudiniEngineUtils::HapiSetAttributeFloatData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeIntData(
 	const TArray<int32>& InIntData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo,
     bool bAttemptRunLengthEncoding)
@@ -3662,8 +3764,8 @@ FHoudiniEngineUtils::HapiSetAttributeIntData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeFloatUniqueData(
 	const float InFloatData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3683,8 +3785,8 @@ FHoudiniEngineUtils::HapiSetAttributeFloatUniqueData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeIntUniqueData(
 	const int32 InIntData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3704,8 +3806,8 @@ FHoudiniEngineUtils::HapiSetAttributeIntUniqueData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeIntData(	
 	const int32* InIntData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo,
 	bool bAttemptRunLengthEncoding)
@@ -3775,8 +3877,8 @@ FHoudiniEngineUtils::HapiSetAttributeIntData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUIntData(
 	const TArray<int64>& InIntData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3789,8 +3891,8 @@ FHoudiniEngineUtils::HapiSetAttributeUIntData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUIntData(
 	const int64* InIntData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3803,8 +3905,8 @@ FHoudiniEngineUtils::HapiSetAttributeUIntData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeInt8Data(
 	const TArray<int8>& InByteData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3820,8 +3922,8 @@ FHoudiniEngineUtils::HapiSetAttributeInt8Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeInt8Data(
 	const int8* InByteData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3865,8 +3967,8 @@ FHoudiniEngineUtils::HapiSetAttributeInt8Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUInt8Data(
 	const TArray<uint8>& InByteData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3883,8 +3985,8 @@ FHoudiniEngineUtils::HapiSetAttributeUInt8Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUInt8Data(
 	const uint8* InByteData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3928,8 +4030,8 @@ FHoudiniEngineUtils::HapiSetAttributeUInt8Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeInt16Data(
 	const TArray<int16>& InShortData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3947,8 +4049,8 @@ FHoudiniEngineUtils::HapiSetAttributeInt16Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeInt16Data(
 	const int16* InShortData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -3992,8 +4094,8 @@ FHoudiniEngineUtils::HapiSetAttributeInt16Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUInt16Data(
 	const TArray<int32>& InShortData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4006,8 +4108,8 @@ FHoudiniEngineUtils::HapiSetAttributeUInt16Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUInt16Data(
 	const int32* InShortData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4020,8 +4122,8 @@ FHoudiniEngineUtils::HapiSetAttributeUInt16Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeInt64Data(
 	const TArray<int64>& InInt64Data,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4037,8 +4139,8 @@ FHoudiniEngineUtils::HapiSetAttributeInt64Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeInt64Data(
 	const int64* InInt64Data,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4130,8 +4232,8 @@ FHoudiniEngineUtils::HapiSetAttributeInt64Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeUInt64Data(
 	const TArray<int64>& InInt64Data,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4144,8 +4246,8 @@ FHoudiniEngineUtils::HapiSetAttributeUInt64Data(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeDoubleData(
 	const TArray<double>& InDoubleData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4162,8 +4264,8 @@ FHoudiniEngineUtils::HapiSetAttributeDoubleData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeDoubleData(
 	const double* InDoubleData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4207,8 +4309,8 @@ FHoudiniEngineUtils::HapiSetAttributeDoubleData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetVertexList(
 	const TArray<int32>& InVertexListData,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId)
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId)
 {
     H_SCOPED_FUNCTION_TIMER();
 
@@ -4246,8 +4348,8 @@ FHoudiniEngineUtils::HapiSetVertexList(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetFaceCounts(
 	const TArray<int32>& InFaceCounts,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId)
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId)
 {
     H_SCOPED_FUNCTION_TIMER();
 
@@ -4284,8 +4386,8 @@ FHoudiniEngineUtils::HapiSetFaceCounts(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeStringUniqueData(
 	const FString& InString,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4305,8 +4407,8 @@ FHoudiniEngineUtils::HapiSetAttributeStringUniqueData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeStringMap(
 	const FHoudiniEngineIndexedStringMap& InIndexedStringMap,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
@@ -4326,8 +4428,8 @@ FHoudiniEngineUtils::HapiSetAttributeStringMap(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeStringData(
 	const TArray<FString>& InStringArray, 
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo )
 {
@@ -4380,8 +4482,8 @@ FHoudiniEngineUtils::HapiSetAttributeStringData(
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeStringArrayData(
 	const TArray<FString>& InStringArray,
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo,
 	const TArray<int>& SizesFixedArray)
@@ -4443,7 +4545,7 @@ FHoudiniEngineUtils::HapiSetAttributeStringArrayData(
 
 HAPI_Result
 FHoudiniEngineUtils::HapiSetAttributeDictionaryData(const TArray<FString>& JSONData,
-	const HAPI_NodeId& InNodeId, const HAPI_PartId& InPartId, const FString& InAttributeName,
+	HAPI_NodeId InNodeId, HAPI_PartId InPartId, const FString& InAttributeName,
 	const HAPI_AttributeInfo& InAttributeInfo)
 {
 	H_SCOPED_FUNCTION_DYNAMIC_LABEL(InAttributeName);
@@ -4494,8 +4596,8 @@ FHoudiniEngineUtils::HapiSetAttributeDictionaryData(const TArray<FString>& JSOND
 
 HAPI_Result
 FHoudiniEngineUtils::HapiSetHeightFieldData(
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	const TArray<float>& InFloatValues,
 	const FString& InHeightfieldName)
 {
@@ -4584,13 +4686,13 @@ FHoudiniEngineUtils::FreeRawStringMemory(TArray<const char*>& InRawStringArray)
 }
 
 bool
-FHoudiniEngineUtils::AddHoudiniLogoToComponent(UHoudiniAssetComponent* HAC)
+FHoudiniEngineUtils::AddHoudiniLogoToComponent(USceneComponent* InComponent)
 {
-	if (!IsValid(HAC))
+	if (!IsValid(InComponent))
 		return false;
 
 	// No need to add another component if we already show the logo
-	if (FHoudiniEngineUtils::HasHoudiniLogo(HAC))
+	if (FHoudiniEngineUtils::HasHoudiniLogo(InComponent))
 		return true;
 
 	UStaticMesh* HoudiniLogoSM = FHoudiniEngine::Get().GetHoudiniLogoStaticMesh().Get();
@@ -4598,7 +4700,7 @@ FHoudiniEngineUtils::AddHoudiniLogoToComponent(UHoudiniAssetComponent* HAC)
 		return false;
 
 	UStaticMeshComponent * HoudiniLogoSMC = NewObject<UStaticMeshComponent>(
-		HAC, UStaticMeshComponent::StaticClass(), NAME_None, RF_Transactional);
+		InComponent, UStaticMeshComponent::StaticClass(), NAME_None, RF_Transactional);
 
 	if (!HoudiniLogoSMC)
 		return false;
@@ -4607,16 +4709,16 @@ FHoudiniEngineUtils::AddHoudiniLogoToComponent(UHoudiniAssetComponent* HAC)
 	HoudiniLogoSMC->SetVisibility(true);
 	HoudiniLogoSMC->SetHiddenInGame(true);
 	// Attach created static mesh component to our Houdini component.
-	HoudiniLogoSMC->AttachToComponent(HAC, FAttachmentTransformRules::KeepRelativeTransform);
+	HoudiniLogoSMC->AttachToComponent(InComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	HoudiniLogoSMC->RegisterComponent();
 
 	return true;
 }
 
 bool
-FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(UHoudiniAssetComponent* HAC)
+FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(USceneComponent* InComponent)
 {
-	if (!IsValid(HAC))
+	if (!IsValid(InComponent))
 		return false;
 
 	// Get the Houdini Logo SM
@@ -4625,7 +4727,7 @@ FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(UHoudiniAssetComponent* HAC)
 		return false;
 
 	// Iterate on the HAC's component
-	for (USceneComponent* CurrentSceneComp : HAC->GetAttachChildren())
+	for (USceneComponent* CurrentSceneComp : InComponent->GetAttachChildren())
 	{
 		if (!IsValid(CurrentSceneComp) || !CurrentSceneComp->IsA<UStaticMeshComponent>())
 			continue;
@@ -4650,9 +4752,9 @@ FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(UHoudiniAssetComponent* HAC)
 }
 
 bool
-FHoudiniEngineUtils::HasHoudiniLogo(UHoudiniAssetComponent* HAC)
+FHoudiniEngineUtils::HasHoudiniLogo(USceneComponent* InComponent)
 {
-	if (!IsValid(HAC))
+	if (!IsValid(InComponent))
 		return false;
 
 	// Get the Houdini Logo SM
@@ -4661,7 +4763,7 @@ FHoudiniEngineUtils::HasHoudiniLogo(UHoudiniAssetComponent* HAC)
 		return false;
 
 	// Iterate on the HAC's component
-	for (USceneComponent* CurrentSceneComp : HAC->GetAttachChildren())
+	for (USceneComponent* CurrentSceneComp : InComponent->GetAttachChildren())
 	{
 		if (!IsValid(CurrentSceneComp) || !CurrentSceneComp->IsA<UStaticMeshComponent>())
 			continue;
@@ -4681,7 +4783,7 @@ FHoudiniEngineUtils::HasHoudiniLogo(UHoudiniAssetComponent* HAC)
 
 int32
 FHoudiniEngineUtils::HapiGetVertexListForGroup(
-	const HAPI_NodeId& GeoId,
+	HAPI_NodeId GeoId,
 	const HAPI_PartInfo& PartInfo,
 	const FString& GroupName,
 	const TArray<int32>& FullVertexList,
@@ -4691,7 +4793,7 @@ FHoudiniEngineUtils::HapiGetVertexListForGroup(
 	TArray<int32>& AllGroupFaceIndices,
 	int32& FirstValidVertex,
 	int32& FirstValidPrim,
-	const bool& isPackedPrim)
+	bool isPackedPrim)
 {
 	int32 ProcessedWedges = 0;
 	AllFaceList.Empty();
@@ -4847,7 +4949,7 @@ bool FHoudiniEngineUtils::HapiGetGroupMembership(
 
 bool
 FHoudiniEngineUtils::HapiGetGroupMembership(
-	const HAPI_NodeId& GeoId, const HAPI_PartInfo& PartInfo,
+	HAPI_NodeId GeoId, const HAPI_PartInfo& PartInfo,
 	const HAPI_GroupType& GroupType, const FString & GroupName,
 	TArray<int32>& OutGroupMembership, bool& OutAllEquals)
 {
@@ -4877,13 +4979,13 @@ FHoudiniEngineUtils::HapiGetGroupMembership(
 
 bool
 FHoudiniEngineUtils::HapiGetAttributeDataAsStringFromInfo(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	const char * InAttribName,
 	HAPI_AttributeInfo& InAttributeInfo,
 	TArray<FString>& OutData,
-	const int32& InStartIndex,
-	const int32& InCount)
+	int32 InStartIndex,
+	int32 InCount)
 {
 	if (!InAttributeInfo.exists)
 		return false;
@@ -4927,7 +5029,7 @@ FHoudiniEngineUtils::HapiGetAttributeDataAsStringFromInfo(
 
 bool
 FHoudiniEngineUtils::HapiCheckAttributeExists(
-	const HAPI_NodeId& GeoId, const HAPI_PartId& PartId,
+	HAPI_NodeId GeoId, HAPI_PartId PartId,
 	const char * AttribName, HAPI_AttributeOwner Owner)
 {
 	if (Owner == HAPI_ATTROWNER_INVALID)
@@ -4956,7 +5058,7 @@ FHoudiniEngineUtils::HapiCheckAttributeExists(
 }
 
 bool
-FHoudiniEngineUtils::IsAttributeInstancer(const HAPI_NodeId& GeoId, const HAPI_PartId& PartId, EHoudiniInstancerType& OutInstancerType)
+FHoudiniEngineUtils::IsAttributeInstancer(HAPI_NodeId GeoId, HAPI_PartId PartId, EHoudiniInstancerType& OutInstancerType)
 {
 	// Check for 
 	// - HAPI_UNREAL_ATTRIB_INSTANCE_OVERRIDE (unreal_instance) on points/detail
@@ -4982,7 +5084,7 @@ FHoudiniEngineUtils::IsAttributeInstancer(const HAPI_NodeId& GeoId, const HAPI_P
 	return false;
 }
 
-bool FHoudiniEngineUtils::IsValidDataTable(const HAPI_NodeId& GeoId, const HAPI_PartId& PartId)
+bool FHoudiniEngineUtils::IsValidDataTable(HAPI_NodeId GeoId, HAPI_PartId PartId)
 {
 	HAPI_PartInfo PartInfo;
 	HAPI_Result Error = FHoudiniApi::GetPartInfo(FHoudiniEngine::Get().GetSession(),
@@ -5017,7 +5119,7 @@ bool FHoudiniEngineUtils::IsValidDataTable(const HAPI_NodeId& GeoId, const HAPI_
 }
 
 bool
-FHoudiniEngineUtils::IsLandscapeSpline(const HAPI_NodeId& GeoId, const HAPI_PartId& PartId)
+FHoudiniEngineUtils::IsLandscapeSpline(HAPI_NodeId GeoId, HAPI_PartId PartId)
 {
 	// Check for 
 	// - HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE on points/prim/detail with true/non-zero value
@@ -5035,7 +5137,7 @@ FHoudiniEngineUtils::IsLandscapeSpline(const HAPI_NodeId& GeoId, const HAPI_Part
 
 bool
 FHoudiniEngineUtils::HapiGetParameterDataAsString(
-	const HAPI_NodeId& NodeId, 
+	HAPI_NodeId NodeId, 
 	const std::string& ParmName,
 	const FString& DefaultValue,
 	FString& OutValue)
@@ -5070,9 +5172,9 @@ FHoudiniEngineUtils::HapiGetParameterDataAsString(
 
 bool 
 FHoudiniEngineUtils::HapiGetParameterDataAsInteger(
-	const HAPI_NodeId& NodeId,
+	HAPI_NodeId NodeId,
 	const std::string& ParmName,
-	const int32& DefaultValue,
+	int32 DefaultValue,
 	int32& OutValue)
 {
 	OutValue = DefaultValue;	
@@ -5107,9 +5209,9 @@ FHoudiniEngineUtils::HapiGetParameterDataAsInteger(
 
 bool
 FHoudiniEngineUtils::HapiGetParameterDataAsFloat(
-	const HAPI_NodeId& NodeId,
+	HAPI_NodeId NodeId,
 	const std::string& ParmName,
-	const float& DefaultValue,
+	float DefaultValue,
 	float& OutValue)
 {
 	OutValue = DefaultValue;
@@ -5142,7 +5244,7 @@ FHoudiniEngineUtils::HapiGetParameterDataAsFloat(
 }
 
 HAPI_ParmId
-FHoudiniEngineUtils::HapiFindParameterByName(const HAPI_NodeId& InNodeId, const std::string& InParmName, HAPI_ParmInfo& OutFoundParmInfo)
+FHoudiniEngineUtils::HapiFindParameterByName(HAPI_NodeId InNodeId, const std::string& InParmName, HAPI_ParmInfo& OutFoundParmInfo)
 {
 	// Try to find the parameter by its name
 	HAPI_ParmId ParmId = -1;
@@ -5162,7 +5264,7 @@ FHoudiniEngineUtils::HapiFindParameterByName(const HAPI_NodeId& InNodeId, const 
 }
 
 HAPI_ParmId
-FHoudiniEngineUtils::HapiFindParameterByTag(const HAPI_NodeId& InNodeId, const std::string& InParmTag, HAPI_ParmInfo& OutFoundParmInfo)
+FHoudiniEngineUtils::HapiFindParameterByTag(HAPI_NodeId InNodeId, const std::string& InParmTag, HAPI_ParmInfo& OutFoundParmInfo)
 {
 	// Try to find the parameter by its tag
 	HAPI_ParmId ParmId = -1;
@@ -5183,8 +5285,8 @@ FHoudiniEngineUtils::HapiFindParameterByTag(const HAPI_NodeId& InNodeId, const s
 
 int32
 FHoudiniEngineUtils::HapiGetAttributeOfType(
-	const HAPI_NodeId& GeoId,
-	const HAPI_NodeId& PartId,
+	HAPI_NodeId GeoId,
+	HAPI_NodeId PartId,
 	const HAPI_AttributeOwner& AttributeOwner,
 	const HAPI_AttributeTypeInfo& AttributeType,
 	TArray<HAPI_AttributeInfo>& MatchingAttributesInfo,
@@ -5294,10 +5396,10 @@ FHoudiniEngineUtils::ToHAPIPartInfo(const FHoudiniPartInfo& InHPartInfo)
 
 int32
 FHoudiniEngineUtils::AddMeshSocketsToArray_DetailAttribute(
-	const HAPI_NodeId& GeoId,
-	const HAPI_PartId& PartId,
+	HAPI_NodeId GeoId,
+	HAPI_PartId PartId,
 	TArray< FHoudiniMeshSocket >& AllSockets,
-	const bool& isPackedPrim)
+	bool isPackedPrim)
 {
 	int32 FoundSocketCount = 0;
 
@@ -5326,7 +5428,7 @@ FHoudiniEngineUtils::AddMeshSocketsToArray_DetailAttribute(
 
 	// Lambda function for creating the socket and adding it to the array
 	// Shared between the by Attribute / by Group methods	
-	auto AddSocketToArray = [&](const int32& PointIdx)
+	auto AddSocketToArray = [&](int32 PointIdx)
 	{
 		FHoudiniMeshSocket CurrentSocket;
 		FVector currentPosition = FVector::ZeroVector;
@@ -5469,10 +5571,10 @@ FHoudiniEngineUtils::AddMeshSocketsToArray_DetailAttribute(
 
 int32
 FHoudiniEngineUtils::AddMeshSocketsToArray_Group(
-	const HAPI_NodeId& GeoId,
-	const HAPI_PartId& PartId,
+	HAPI_NodeId GeoId,
+	HAPI_PartId PartId,
 	TArray<FHoudiniMeshSocket>& AllSockets,
-	const bool& isPackedPrim)
+	bool isPackedPrim)
 {
 	TArray<float> Positions;
 	bool bHasRotation = false;
@@ -5491,7 +5593,7 @@ FHoudiniEngineUtils::AddMeshSocketsToArray_Group(
 	// Lambda function for creating the socket and adding it to the array
 	// Shared between the by Attribute / by Group methods
 	int32 FoundSocketCount = 0;
-	auto AddSocketToArray = [&](const int32& PointIdx)
+	auto AddSocketToArray = [&](int32 PointIdx)
 	{
 		FHoudiniMeshSocket CurrentSocket;
 		FVector currentPosition = FVector::ZeroVector;
@@ -5705,7 +5807,7 @@ bool
 FHoudiniEngineUtils::AddMeshSocketsToStaticMesh(
 	UStaticMesh* StaticMesh,
 	TArray<FHoudiniMeshSocket >& AllSockets,
-	const bool& CleanImportSockets)
+	bool CleanImportSockets)
 {
 	if (!IsValid(StaticMesh))
 		return false;
@@ -5775,8 +5877,8 @@ FHoudiniEngineUtils::AddMeshSocketsToStaticMesh(
 
 bool
 FHoudiniEngineUtils::CreateAttributesFromTags(
-	const HAPI_NodeId& NodeId, 
-	const HAPI_PartId& PartId,
+	HAPI_NodeId NodeId, 
+	HAPI_PartId PartId,
 	const TArray<FName>& Tags )
 {
 	if (Tags.Num() <= 0)
@@ -5839,8 +5941,8 @@ FHoudiniEngineUtils::CreateAttributesFromTags(
 
 bool
 FHoudiniEngineUtils::CreateGroupsFromTags(
-	const HAPI_NodeId& NodeId,
-	const HAPI_PartId& PartId, 
+	HAPI_NodeId NodeId,
+	HAPI_PartId PartId, 
 	const TArray<FName>& Tags )
 {
 	if (Tags.Num() <= 0)
@@ -5959,12 +6061,12 @@ FHoudiniEngineUtils::SanitizeHAPIVariableName(FString& String)
 
 int32
 FHoudiniEngineUtils::GetGenericAttributeList(
-	const HAPI_NodeId& InGeoNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoNodeId,
+	HAPI_PartId InPartId,
 	const FString& InGenericAttributePrefix,
 	TArray<FHoudiniGenericAttribute>& OutFoundAttributes,
 	const HAPI_AttributeOwner& AttributeOwner,
-	const int32& InAttribIndex)
+	int32 InAttribIndex)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::GetGenericAttributeList);
 	
@@ -6212,12 +6314,12 @@ FHoudiniEngineUtils::GetGenericAttributeList(
 
 bool
 FHoudiniEngineUtils::GetGenericPropertiesAttributes(
-	const HAPI_NodeId& InGeoNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoNodeId,
+	HAPI_PartId InPartId,
 	const bool InbFindDetailAttributes,
-	const int32& InFirstValidPrimIndex,
-	const int32& InFirstValidVertexIndex,
-	const int32& InFirstValidPointIndex,
+	int32 InFirstValidPrimIndex,
+	int32 InFirstValidVertexIndex,
+	int32 InFirstValidPointIndex,
 	TArray<FHoudiniGenericAttribute>& OutPropertyAttributes)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::GetGenericPropertiesAttributes);
@@ -6258,8 +6360,8 @@ bool
 FHoudiniEngineUtils::UpdateGenericPropertiesAttributes(
 	UObject* InObject,
 	const TArray<FHoudiniGenericAttribute>& InAllPropertyAttributes,
-	const int32& AtIndex,
-	const bool bInDeferPostEditChangePropertyCalls,
+	int32 AtIndex,
+	bool bInDeferPostEditChangePropertyCalls,
 	const FHoudiniGenericAttribute::FFindPropertyFunctionType& InProcessFunction)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::UpdateGenericPropertiesAttributes);
@@ -6351,8 +6453,8 @@ FHoudiniEngineUtils::UpdateGenericPropertiesAttributes(
 
 bool
 FHoudiniEngineUtils::SetGenericPropertyAttribute(
-	const HAPI_NodeId& InGeoNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoNodeId,
+	HAPI_PartId InPartId,
 	const FHoudiniGenericAttribute& InPropertyAttribute)
 {
 	HAPI_AttributeOwner AttribOwner;
@@ -6745,10 +6847,10 @@ FHoudiniEngineUtils::AddHoudiniMetaInformationToPackage(
 
 bool
 FHoudiniEngineUtils::AddLevelPathAttribute(
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	ULevel* InLevel,
-	const int32& InCount,
+	int32 InCount,
 	const HAPI_AttributeOwner& InAttrOwner)
 {
 	if (InNodeId < 0 || InCount <= 0)
@@ -6806,10 +6908,10 @@ FHoudiniEngineUtils::AddLevelPathAttribute(
 
 bool
 FHoudiniEngineUtils::AddActorPathAttribute(
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	AActor* InActor,
-	const int32& InCount,
+	int32 InCount,
 	const HAPI_AttributeOwner& InAttrOwner)
 {
 	if (InNodeId < 0 || InCount <= 0)
@@ -6857,10 +6959,10 @@ FHoudiniEngineUtils::AddActorPathAttribute(
 
 bool
 FHoudiniEngineUtils::AddLandscapeTypeAttribute(
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	AActor* InActor,
-	const int32& InCount)
+	int32 InCount)
 {
 	HOUDINI_CHECK_RETURN(IsValid(InActor), false);
 
@@ -6900,38 +7002,9 @@ FHoudiniEngineUtils::AddLandscapeTypeAttribute(
 	return true;
 }
 
-bool
-FHoudiniEngineUtils::ContainsInvalidLightmapFaces(const FRawMesh & RawMesh, int32 LightmapSourceIdx)
-{
-	const TArray< FVector2f > & LightmapUVs = RawMesh.WedgeTexCoords[LightmapSourceIdx];
-	const TArray< uint32 > & Indices = RawMesh.WedgeIndices;
-
-	if (LightmapUVs.Num() != Indices.Num())
-	{
-		// This is invalid raw mesh; by design we consider that it contains invalid lightmap faces.
-		return true;
-	}
-
-	for (int32 Idx = 0; Idx < Indices.Num(); Idx += 3)
-	{
-		const FVector2f& uv0 = LightmapUVs[Idx + 0];
-		const FVector2f& uv1 = LightmapUVs[Idx + 1];
-		const FVector2f& uv2 = LightmapUVs[Idx + 2];
-
-		if (uv0 == uv1 && uv1 == uv2)
-		{
-			// Detect invalid lightmap face, can stop.
-			return true;
-		}
-	}
-
-	// Otherwise there are no invalid lightmap faces.
-	return false;
-}
-
 void
 FHoudiniEngineUtils::CreateSlateNotification(
-	const FString& NotificationString, const float& NotificationExpire, const float& NotificationFadeOut )
+	const FString& NotificationString, float NotificationExpire, float NotificationFadeOut )
 {
 #if WITH_EDITOR
 	// Trying to display SlateNotifications while in a background thread will crash UE
@@ -6988,10 +7061,10 @@ FHoudiniEngineUtils::GetHoudiniEnginePluginDir()
 
 HAPI_Result
 FHoudiniEngineUtils::CreateNode(
-	const HAPI_NodeId& InParentNodeId,
+	HAPI_NodeId InParentNodeId,
 	const FString& InOperatorName,
 	const FString& InNodeLabel,
-	const HAPI_Bool& bInCookOnCreation,
+	HAPI_Bool bInCookOnCreation,
 	HAPI_NodeId* OutNewNodeId)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::CreateNode);
@@ -7035,7 +7108,7 @@ FHoudiniEngineUtils::CreateNode(
 
 
 int32
-FHoudiniEngineUtils::HapiGetCookCount(const HAPI_NodeId& InNodeId)
+FHoudiniEngineUtils::HapiGetCookCount(HAPI_NodeId InNodeId)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::HapiGetCookCount);
 
@@ -7053,12 +7126,12 @@ FHoudiniEngineUtils::HapiGetCookCount(const HAPI_NodeId& InNodeId)
 
 bool
 FHoudiniEngineUtils::GetLevelPathAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	TArray<FString>& OutLevelPaths,
 	HAPI_AttributeOwner InAttributeOwner,
-	const int32& InStartIndex,
-	const int32& InCount)
+	int32 InStartIndex,
+	int32 InCount)
 {
 	// ---------------------------------------------
 	// Attribute: unreal_level_path
@@ -7076,11 +7149,11 @@ FHoudiniEngineUtils::GetLevelPathAttribute(
 
 bool
 FHoudiniEngineUtils::GetLevelPathAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	FString& OutLevelPath,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7124,11 +7197,11 @@ FHoudiniEngineUtils::GetLevelPathAttribute(
 
 bool
 FHoudiniEngineUtils::GetOutputNameAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId, 
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId, 
 	TArray<FString>& OutOutputNames,
-	const int32& InStartIndex,
-	const int32& InCount)
+	int32 InStartIndex,
+	int32 InCount)
 {
 	FHoudiniHapiAccessor Accessor;
 	Accessor.Init(InGeoId, InPartId, HAPI_UNREAL_ATTRIB_CUSTOM_OUTPUT_NAME_V2);
@@ -7149,11 +7222,11 @@ FHoudiniEngineUtils::GetOutputNameAttribute(
 
 bool
 FHoudiniEngineUtils::GetOutputNameAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	FString& OutOutputName,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7229,12 +7302,12 @@ FHoudiniEngineUtils::GetOutputNameAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeNameAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId, 
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId, 
 	TArray<FString>& OutBakeNames,
 	const HAPI_AttributeOwner& InAttribOwner,
-	const int32& InStartIndex,
-	const int32& InCount)
+	int32 InStartIndex,
+	int32 InCount)
 {
 	// ---------------------------------------------
 	// Attribute: unreal_bake_name
@@ -7252,11 +7325,11 @@ FHoudiniEngineUtils::GetBakeNameAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeNameAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId, 
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId, 
 	FString& OutBakeName,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7300,12 +7373,12 @@ FHoudiniEngineUtils::GetBakeNameAttribute(
 
 bool
 FHoudiniEngineUtils::GetTileAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	TArray<int32>& OutTileValues,
 	const HAPI_AttributeOwner& InAttribOwner,
-	const int32& InStart,
-	const int32& InCount)
+	int32 InStart,
+	int32 InCount)
 {
 	// ---------------------------------------------
 	// Attribute: tile
@@ -7326,11 +7399,11 @@ FHoudiniEngineUtils::GetTileAttribute(
 
 bool
 FHoudiniEngineUtils::GetTileAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	int32& OutTileValue,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<int32> IntData;
@@ -7373,8 +7446,8 @@ FHoudiniEngineUtils::GetTileAttribute(
 
 bool
 FHoudiniEngineUtils::GetEditLayerName(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	FString& EditLayerName,
 	const HAPI_AttributeOwner& InAttribOwner)
 {
@@ -7399,7 +7472,7 @@ FHoudiniEngineUtils::GetEditLayerName(
 	return false;
 }
 
-bool FHoudiniEngineUtils::HasEditLayerName(const HAPI_NodeId& InGeoId, const HAPI_PartId& InPartId,
+bool FHoudiniEngineUtils::HasEditLayerName(HAPI_NodeId InGeoId, HAPI_PartId InPartId,
 	const HAPI_AttributeOwner& InAttribOwner)
 {
 	// ---------------------------------------------
@@ -7414,12 +7487,12 @@ bool FHoudiniEngineUtils::HasEditLayerName(const HAPI_NodeId& InGeoId, const HAP
 
 bool
 FHoudiniEngineUtils::GetTempFolderAttribute(
-	const HAPI_NodeId& InNodeId,
+	HAPI_NodeId InNodeId,
 	const HAPI_AttributeOwner& InAttributeOwner,
 	TArray<FString>& OutTempFolder,
-	const HAPI_PartId& InPartId,
-	const int32& InStart,
-	const int32& InCount)
+	HAPI_PartId InPartId,
+	int32 InStart,
+	int32 InCount)
 {
 	OutTempFolder.Empty();
 
@@ -7435,10 +7508,10 @@ FHoudiniEngineUtils::GetTempFolderAttribute(
 
 bool
 FHoudiniEngineUtils::GetTempFolderAttribute(
-	const HAPI_NodeId& InGeoId,
+	HAPI_NodeId InGeoId,
 	FString& OutTempFolder,
-	const HAPI_PartId& InPartId,
-	const int32& InPrimIndex)
+	HAPI_PartId InPartId,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7466,12 +7539,12 @@ FHoudiniEngineUtils::GetTempFolderAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeFolderAttribute(
-	const HAPI_NodeId& InNodeId,
+	HAPI_NodeId InNodeId,
 	const HAPI_AttributeOwner& InAttributeOwner,
 	TArray<FString>& OutBakeFolder,
-	const HAPI_PartId& InPartId,
-	const int32& InStart,
-	const int32& InCount)
+	HAPI_PartId InPartId,
+	int32 InStart,
+	int32 InCount)
 {
 	OutBakeFolder.Empty();
 
@@ -7487,11 +7560,11 @@ FHoudiniEngineUtils::GetBakeFolderAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeFolderAttribute(
-	const HAPI_NodeId& InGeoId,
+	HAPI_NodeId InGeoId,
 	TArray<FString>& OutBakeFolder,
-	const HAPI_PartId& InPartId,
-	const int32& InStart,
-	const int32& InCount)
+	HAPI_PartId InPartId,
+	int32 InStart,
+	int32 InCount)
 {
 	OutBakeFolder.Empty();
 
@@ -7556,12 +7629,12 @@ FHoudiniEngineUtils::GetBakeFolderAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeActorAttribute(
-	const HAPI_NodeId& InNodeId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InNodeId,
+	HAPI_PartId InPartId,
 	TArray<FString>& OutBakeActorNames,
 	const HAPI_AttributeOwner& InAttributeOwner,
-	const int32& InStart,
-	const int32& InCount)
+	int32 InStart,
+	int32 InCount)
 {
 	// ---------------------------------------------
 	// Attribute: unreal_bake_actor
@@ -7579,11 +7652,11 @@ FHoudiniEngineUtils::GetBakeActorAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeActorAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	FString& OutBakeActorName,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7627,12 +7700,12 @@ FHoudiniEngineUtils::GetBakeActorAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeActorClassAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	TArray<FString>& OutBakeActorClassNames,
 	const HAPI_AttributeOwner& InAttributeOwner,
-	const int32& InStart,
-	const int32& InCount)
+	int32 InStart,
+	int32 InCount)
 {
 	// ---------------------------------------------
 	// Attribute: unreal_bake_actor
@@ -7650,11 +7723,11 @@ FHoudiniEngineUtils::GetBakeActorClassAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeActorClassAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	FString& OutBakeActorClassName,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7698,12 +7771,12 @@ FHoudiniEngineUtils::GetBakeActorClassAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeOutlinerFolderAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	TArray<FString>& OutBakeOutlinerFolders,
 	const HAPI_AttributeOwner& InAttributeOwner,
-	const int32& InStart,
-	const int32& InCount)
+	int32 InStart,
+	int32 InCount)
 {
 	// ---------------------------------------------
 	// Attribute: unreal_bake_outliner_folder
@@ -7720,11 +7793,11 @@ FHoudiniEngineUtils::GetBakeOutlinerFolderAttribute(
 
 bool
 FHoudiniEngineUtils::GetBakeOutlinerFolderAttribute(
-	const HAPI_NodeId& InGeoId,
-	const HAPI_PartId& InPartId,
+	HAPI_NodeId InGeoId,
+	HAPI_PartId InPartId,
 	FString& OutBakeOutlinerFolder,
-	const int32& InPointIndex,
-	const int32& InPrimIndex)
+	int32 InPointIndex,
+	int32 InPrimIndex)
 {
 	constexpr int32 Count = 1;
 	TArray<FString> StringData;
@@ -7788,14 +7861,14 @@ FHoudiniEngineUtils::MoveActorToLevel(AActor* InActor, ULevel* InDesiredLevel)
 }
 
 HAPI_Result
-FHoudiniEngineUtils::HapiCommitGeo(const HAPI_NodeId& InNodeId)
+FHoudiniEngineUtils::HapiCommitGeo(HAPI_NodeId InNodeId)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::HapiCommitGeo);
 	return FHoudiniApi::CommitGeo(FHoudiniEngine::Get().GetSession(), InNodeId);
 }
 
 bool
-FHoudiniEngineUtils::HapiCookNode(const HAPI_NodeId& InNodeId, HAPI_CookOptions* InCookOptions, const bool& bWaitForCompletion)
+FHoudiniEngineUtils::HapiCookNode(HAPI_NodeId InNodeId, HAPI_CookOptions* InCookOptions, bool bWaitForCompletion)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineUtils::HapiCookNode);
 
@@ -7849,6 +7922,15 @@ FHoudiniEngineUtils::HapiCookNode(const HAPI_NodeId& InNodeId, HAPI_CookOptions*
 	}
 }
 
+HAPI_NodeId FHoudiniEngineUtils::CreateInputHapiNode(const FString& InNodeLabel, HAPI_NodeId InParentNodeId)
+{
+	HAPI_NodeId OutNodeId = INDEX_NONE;
+	HAPI_Result Result = CreateInputNode(InNodeLabel, OutNodeId, InParentNodeId);
+	if(Result == HAPI_Result::HAPI_RESULT_SUCCESS)
+		return OutNodeId;
+	else
+		return INDEX_NONE;
+}
 
 HAPI_Result
 FHoudiniEngineUtils::CreateInputNode(const FString& InNodeLabel, HAPI_NodeId& OutNodeId, const int32 InParentNodeId)
@@ -7898,7 +7980,7 @@ FHoudiniEngineUtils::CreateInputNode(const FString& InNodeLabel, HAPI_NodeId& Ou
 }
 
 bool
-FHoudiniEngineUtils::HapiConnectNodeInput(const int32& InNodeId, const int32& InputIndex, const int32& InNodeIdToConnect, const int32& OutputIndex, const int32& InXFormType)
+FHoudiniEngineUtils::HapiConnectNodeInput(int32 InNodeId, int32 InputIndex, int32 InNodeIdToConnect, int32 OutputIndex, int32 InXFormType)
 {
 	// Connect the node ids
 	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::ConnectNodeInput(
@@ -7949,7 +8031,7 @@ bool
 FHoudiniEngineUtils::UpdateMeshPartUVSets(
 	const int GeoId,
 	const int PartId,
-	const bool& bRemoveUnused,
+	bool bRemoveUnused,
 	TArray<TArray<float>>& OutPartUVSets,
 	TArray<HAPI_AttributeInfo>& OutAttribInfoUVSets)
 {
@@ -8455,6 +8537,596 @@ void FHoudiniEngineUtils::DumpPart(HAPI_NodeId NodeId, HAPI_PartId PartId, FStri
 	}
 }
 
+EHoudiniProxyRefineRequestResult
+FHoudiniEngineUtils::RefineHoudiniProxyMeshActorArrayToStaticMeshes(const TArray<AHoudiniAssetActor*>& InActorsToRefine, bool bSilent)
+{
+	const bool bRefineAll = true;
+	const bool bOnPreSaveWorld = false;
+	UWorld* OnPreSaveWorld = nullptr;
+	const bool bOnPreBeginPIE = false;
+
+	// First find the Cookables that have meshes that we must refine
+	TArray<UHoudiniCookable*> CookablesToRefine;
+	TArray<UHoudiniCookable*> CookablesToCook;
+	// Cookables that would be candidates for refinement/cooking, but have errors
+	TArray<UHoudiniCookable*> SkippedCookables;
+	for(const AHoudiniAssetActor* HoudiniAssetActor : InActorsToRefine)
+	{
+		if(!IsValid(HoudiniAssetActor))
+			continue;
+
+		UHoudiniCookable* HoudiniCookable = HoudiniAssetActor->GetHoudiniCookable();
+		if(!IsValid(HoudiniCookable))
+			continue;
+
+		// Check if we should consider this component for proxy mesh refinement or cooking, based on its settings and
+		// flags passed to the function.
+		TriageHoudiniCookablesForProxyMeshRefinement(HoudiniCookable, bRefineAll, bOnPreSaveWorld, OnPreSaveWorld, bOnPreBeginPIE, CookablesToRefine, CookablesToCook, SkippedCookables);
+	}
+
+	return RefineTriagedHoudiniProxyMeshesToStaticMeshes(
+		CookablesToRefine,
+		CookablesToCook,
+		SkippedCookables,
+		bSilent,
+		bRefineAll,
+		bOnPreSaveWorld,
+		OnPreSaveWorld,
+		bOnPreBeginPIE
+	);
+}
+
+
+void
+FHoudiniEngineUtils::TriageHoudiniCookablesForProxyMeshRefinement(
+	UHoudiniCookable* InHC,
+	bool bRefineAll,
+	bool bOnPreSaveWorld,
+	UWorld* OnPreSaveWorld,
+	bool bOnPreBeginPIE,
+	TArray<UHoudiniCookable*>& OutToRefine,
+	TArray<UHoudiniCookable*>& OutToCook,
+	TArray<UHoudiniCookable*>& OutSkipped)
+{
+	if(!IsValid(InHC))
+		return;
+
+	// Make sure that the cookable's World and Owner are valid
+	AActor* Owner = InHC->GetOwner();
+	if(!IsValid(Owner))
+		return;
+
+	UWorld* World = InHC->GetWorld();
+
+	// No need to return here if we're just starting PIE
+	if(bOnPreSaveWorld && !IsValid(World))
+		return;
+
+	if(bOnPreSaveWorld && OnPreSaveWorld && OnPreSaveWorld != World)
+		return;
+
+	// Check if we should consider this component for proxy mesh refinement based on its settings and
+	// flags passed to the function
+	if(bRefineAll ||
+		(bOnPreSaveWorld && InHC->IsProxyStaticMeshRefinementOnPreSaveWorldEnabled()) ||
+		(bOnPreBeginPIE && InHC->IsProxyStaticMeshRefinementOnPreBeginPIEEnabled()))
+	{
+		TArray<UPackage*> ProxyMeshPackagesToSave;
+		TArray<UHoudiniCookable*> CookablesWithProxiesToSave;
+
+		if(InHC->HasAnyCurrentProxyOutput())
+		{
+			// Get the state of the asset and check if it is cooked
+			// If it is not cook, request a cook. We can only build the UStaticMesh
+			// if the data from the cook is available
+			// If the state is not pre-cook, or None (cooked), then the state is invalid,
+			// log an error and skip the component
+			bool bNeedsRebuildOrDelete = false;
+			bool bUnsupportedState = false;
+			const bool bCookedDataAvailable = InHC->IsHoudiniCookedDataAvailable(bNeedsRebuildOrDelete, bUnsupportedState);
+			if(bCookedDataAvailable)
+			{
+				OutToRefine.Add(InHC);
+				CookablesWithProxiesToSave.Add(InHC);
+			}
+			else if(!bUnsupportedState && !bNeedsRebuildOrDelete)
+			{
+				InHC->MarkAsNeedCook();
+				// Force the output of the cook to be directly created as a UStaticMesh and not a proxy
+				InHC->SetNoProxyMeshNextCookRequested(true);
+				OutToCook.Add(InHC);
+				CookablesWithProxiesToSave.Add(InHC);
+			}
+			else
+			{
+				OutSkipped.Add(InHC);
+				const EHoudiniAssetState State = InHC->GetCurrentState();
+				HOUDINI_LOG_ERROR(TEXT("Could not refine %s, the asset is in an unsupported state: %s"), *(InHC->GetPathName()), *(UEnum::GetValueAsString(State)));
+			}
+		}
+		else if(InHC->HasAnyProxyOutput())
+		{
+			// If the HC has non-current proxies, destroy them
+			// TODO: Make this its own command?
+			const uint32 NumOutputs = InHC->GetNumOutputs();
+			for(uint32 Index = 0; Index < NumOutputs; ++Index)
+			{
+				UHoudiniOutput* Output = InHC->GetOutputAt(Index);
+				if(!IsValid(Output))
+					continue;
+
+				TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& OutputObjects = Output->GetOutputObjects();
+				for(auto& CurrentPair : OutputObjects)
+				{
+					FHoudiniOutputObject& CurrentOutputObject = CurrentPair.Value;
+					if(!CurrentOutputObject.bProxyIsCurrent)
+					{
+						// The proxy is not current, delete it and its component
+						USceneComponent* FoundProxyComponent = Cast<USceneComponent>(CurrentOutputObject.ProxyComponent);
+						if(IsValid(FoundProxyComponent))
+						{
+							// Remove from the HoudiniAssetActor
+							if(FoundProxyComponent->GetOwner())
+								FoundProxyComponent->GetOwner()->RemoveOwnedComponent(FoundProxyComponent);
+
+							FoundProxyComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
+							FoundProxyComponent->UnregisterComponent();
+							FoundProxyComponent->DestroyComponent();
+						}
+
+						UObject* ProxyObject = CurrentOutputObject.ProxyObject;
+						if(!IsValid(ProxyObject))
+							continue;
+
+						// Just mark the object as garbage and his package as dirty
+						// Do not save the package automatically - as will cause crashes in PIE
+						ProxyObject->MarkAsGarbage();
+						ProxyObject->MarkPackageDirty();
+					}
+				}
+			}
+		}
+
+		for(UHoudiniCookable* const HC : CookablesWithProxiesToSave)
+		{
+			const uint32 NumOutputs = HC->GetNumOutputs();
+			for(uint32 Index = 0; Index < NumOutputs; ++Index)
+			{
+				UHoudiniOutput* Output = HC->GetOutputAt(Index);
+				if(!IsValid(Output))
+					continue;
+
+				TMap<FHoudiniOutputObjectIdentifier, FHoudiniOutputObject>& OutputObjects = Output->GetOutputObjects();
+				for(auto& CurrentPair : OutputObjects)
+				{
+					FHoudiniOutputObject& CurrentOutputObject = CurrentPair.Value;
+					if(CurrentOutputObject.bProxyIsCurrent && CurrentOutputObject.ProxyObject)
+					{
+						UPackage* const Package = CurrentOutputObject.ProxyObject->GetPackage();
+						if(IsValid(Package) && Package->IsDirty())
+							ProxyMeshPackagesToSave.Add(Package);
+					}
+				}
+			}
+		}
+
+		if(ProxyMeshPackagesToSave.Num() > 0)
+		{
+			TryCollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+
+			FEditorFileUtils::PromptForCheckoutAndSave(ProxyMeshPackagesToSave, true, false);
+		}
+	}
+}
+
+
+EHoudiniProxyRefineRequestResult
+FHoudiniEngineUtils::RefineTriagedHoudiniProxyMeshesToStaticMeshes(
+	const TArray<UHoudiniCookable*>& InCookablesToRefine,
+	const TArray<UHoudiniCookable*>& InCookablesToCook,
+	const TArray<UHoudiniCookable*>& InSkippedCookables,
+	bool bInSilent,
+	bool bInRefineAll,
+	bool bInOnPreSaveWorld,
+	UWorld* InOnPreSaveWorld,
+	bool bInOnPrePIEBeginPlay)
+{
+	// Slate notification text
+	FString Notification = TEXT("Refining Houdini proxy meshes to static meshes...");
+
+	const uint32 NumCookablesToCook = InCookablesToCook.Num();
+	const uint32 NumCookablesToRefine = InCookablesToRefine.Num();
+	const uint32 NumCookablesToProcess = NumCookablesToCook + NumCookablesToRefine;
+
+	TArray<UHoudiniCookable*> SuccessfulCookables;
+	TArray<UHoudiniCookable*> FailedCookables;
+	TArray<UHoudiniCookable*> SkippedCookables(InSkippedCookables);
+
+	auto AllowPlayInEditorRefinementFn = [&bInOnPrePIEBeginPlay, &InCookablesToCook, &InCookablesToRefine](bool bEnabled, bool bRefinementDone) {
+		if(bInOnPrePIEBeginPlay)
+		{
+			// Flag the cookables that need cooking / refinement as cookable in PIE mode. 
+			// No other cooking will be allowed.
+			// Once refinement is done, we'll unset these flags again.
+			SetAllowPlayInEditorRefinement(InCookablesToCook, true);
+			SetAllowPlayInEditorRefinement(InCookablesToRefine, true);
+			if(bRefinementDone)
+			{
+				// Don't tick during PIE. We'll resume ticking when PIE is stopped.
+				FHoudiniEngine::Get().StopTicking(true, false);
+			}
+		}
+		};
+
+	AllowPlayInEditorRefinementFn(true, false);
+
+	if(NumCookablesToProcess > 0)
+	{
+		// The task progress pointer is potentially going to be shared with a background thread and tasks
+		// on the main thread, so make it thread safe
+		TSharedPtr<FSlowTask, ESPMode::ThreadSafe> TaskProgress = MakeShareable(new FSlowTask((float)NumCookablesToProcess, FText::FromString(Notification)));
+		TaskProgress->Initialize();
+		if(!bInSilent)
+			TaskProgress->MakeDialog(true);
+
+		// Iterate over the Cookables for which we can build UStaticMesh, and build the meshes
+		bool bCancelled = false;
+		for(uint32 ComponentIndex = 0; ComponentIndex < NumCookablesToRefine; ++ComponentIndex)
+		{
+			UHoudiniCookable* Cookable = InCookablesToRefine[ComponentIndex];
+			TaskProgress->EnterProgressFrame(1.0f);
+			const bool bDestroyProxies = true;
+			FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(Cookable, bDestroyProxies);
+
+			SuccessfulCookables.Add(Cookable);
+
+			bCancelled = TaskProgress->ShouldCancel();
+			if(bCancelled)
+			{
+				for(uint32 SkippedIndex = ComponentIndex + 1; SkippedIndex < NumCookablesToRefine; ++SkippedIndex)
+				{
+					SkippedCookables.Add(InCookablesToRefine[ComponentIndex]);
+				}
+				break;
+			}
+		}
+
+		if(bCancelled && NumCookablesToCook > 0)
+		{
+			for(UHoudiniCookable* const HC : InCookablesToCook)
+			{
+				SkippedCookables.Add(HC);
+			}
+		}
+
+		if(NumCookablesToCook > 0 && !bCancelled)
+		{
+			// Now use an async task to check on the progress of the cooking Cookables
+			Async(EAsyncExecution::Thread, [InCookablesToCook, TaskProgress, NumCookablesToProcess,
+				bInOnPreSaveWorld, InOnPreSaveWorld,
+				SuccessfulCookables, FailedCookables, SkippedCookables]() {
+					RefineHoudiniProxyMeshesToStaticMeshesWithCookInBackgroundThread(
+						InCookablesToCook, TaskProgress, NumCookablesToProcess, bInOnPreSaveWorld, InOnPreSaveWorld,
+						SuccessfulCookables, FailedCookables, SkippedCookables);
+				});
+
+			// We have to wait for cook(s) before completing refinement
+			return EHoudiniProxyRefineRequestResult::PendingCooks;
+		}
+		else
+		{
+			RefineHoudiniProxyMeshesToStaticMeshesNotifyDone(
+				NumCookablesToProcess, TaskProgress.Get(), bCancelled, bInOnPreSaveWorld, InOnPreSaveWorld,
+				SuccessfulCookables, FailedCookables, SkippedCookables);
+
+			// We didn't have to cook anything, so refinement is complete.
+			AllowPlayInEditorRefinementFn(false, true);
+			return EHoudiniProxyRefineRequestResult::Refined;
+		}
+	}
+
+	// Nothing to refine
+	AllowPlayInEditorRefinementFn(false, true);
+	return EHoudiniProxyRefineRequestResult::None;
+}
+
+void
+FHoudiniEngineUtils::RefineHoudiniProxyMeshesToStaticMeshesNotifyDone(
+	const uint32 InNumTotalCookables,
+	FSlowTask* const InTaskProgress,
+	const bool bCancelled,
+	const bool bOnPreSaveWorld,
+	UWorld* const InOnPreSaveWorld,
+	const TArray<UHoudiniCookable*>& InSuccessfulCookables,
+	const TArray<UHoudiniCookable*>& InFailedCookables,
+	const TArray<UHoudiniCookable*>& InSkippedCookables)
+{
+	FString Notification;
+	const uint32 NumSkippedCookables = InSkippedCookables.Num();
+	const uint32 NumFailedToCook = InFailedCookables.Num();
+	if(NumSkippedCookables + NumFailedToCook > 0)
+	{
+		if(bCancelled)
+		{
+			Notification = FString::Printf(TEXT("Refinement cancelled after completing %d / %d cookables. The remaining Cookables were skipped, in an invalid state, or could not be cooked. See the log for details."), NumSkippedCookables + NumFailedToCook, InNumTotalCookables);
+		}
+		else
+		{
+			Notification = FString::Printf(TEXT("Failed to refine %d / %d Cookables, the Cookables were in an invalid state, and were either not cooked or could not be cooked. See the log for details."), NumSkippedCookables + NumFailedToCook, InNumTotalCookables);
+		}
+		FHoudiniEngineUtils::CreateSlateNotification(Notification);
+		HOUDINI_LOG_ERROR(TEXT("%s"), *Notification);
+	}
+	else if(InNumTotalCookables > 0)
+	{
+		Notification = TEXT("Done: Refining Houdini proxy meshes to static meshes.");
+		HOUDINI_LOG_MESSAGE(TEXT("%s"), *Notification);
+	}
+	if(InTaskProgress)
+	{
+		InTaskProgress->Destroy();
+	}
+	if(bOnPreSaveWorld && InSuccessfulCookables.Num() > 0)
+	{
+		FDelegateHandle& OnPostSaveWorldHandle = FHoudiniEngineUtils::GetOnPostSaveWorldRefineProxyMeshesHandle();
+		if(OnPostSaveWorldHandle.IsValid())
+		{
+			if(FEditorDelegates::PostSaveWorldWithContext.Remove(OnPostSaveWorldHandle))
+				OnPostSaveWorldHandle.Reset();
+		}
+
+		// Save the dirty static meshes in InSuccessfulCookables OnPostSaveWorld
+		// TODO: Remove? This may not be necessary now as we save all dirty temporary cook data in 
+		// PostSaveWorldWithContext() already (Static Meshes, Materials...)
+		OnPostSaveWorldHandle = FEditorDelegates::PostSaveWorldWithContext.AddLambda(
+			[InSuccessfulCookables, bOnPreSaveWorld, InOnPreSaveWorld](UWorld* InWorld, FObjectPostSaveContext InContext)
+			{
+				if(bOnPreSaveWorld && InOnPreSaveWorld && InOnPreSaveWorld != InWorld)
+					return;
+
+				RefineProxyMeshesHandleOnPostSaveWorld(InSuccessfulCookables, InContext.GetSaveFlags(), InWorld, InContext.SaveSucceeded());
+
+				FDelegateHandle& OnPostSaveWorldHandle = FHoudiniEngineUtils::GetOnPostSaveWorldRefineProxyMeshesHandle();
+				if(OnPostSaveWorldHandle.IsValid())
+				{
+					if(FEditorDelegates::PostSaveWorldWithContext.Remove(OnPostSaveWorldHandle))
+						OnPostSaveWorldHandle.Reset();
+				}
+			});
+	}
+
+	SetAllowPlayInEditorRefinement(InSuccessfulCookables, false);
+	SetAllowPlayInEditorRefinement(InFailedCookables, false);
+	SetAllowPlayInEditorRefinement(InSkippedCookables, false);
+
+	// Broadcast refinement result per cookable
+	for(UHoudiniCookable* const HC : InSuccessfulCookables)
+	{
+		if(OnHoudiniProxyMeshesRefinedDelegate.IsBound())
+			OnHoudiniProxyMeshesRefinedDelegate.Broadcast(HC, EHoudiniProxyRefineResult::Success);
+	}
+	for(UHoudiniCookable* const HC : InFailedCookables)
+	{
+		if(OnHoudiniProxyMeshesRefinedDelegate.IsBound())
+			OnHoudiniProxyMeshesRefinedDelegate.Broadcast(HC, EHoudiniProxyRefineResult::Failed);
+	}
+	for(UHoudiniCookable* const HC : InSkippedCookables)
+	{
+		if(OnHoudiniProxyMeshesRefinedDelegate.IsBound())
+			OnHoudiniProxyMeshesRefinedDelegate.Broadcast(HC, EHoudiniProxyRefineResult::Skipped);
+	}
+
+	// Update details to display the new inputs
+	FHoudiniEngineUtils::UpdateEditorProperties(true);
+}
+
+void
+FHoudiniEngineUtils::RefineProxyMeshesHandleOnPostSaveWorld(const TArray<UHoudiniCookable*>& InSuccessfulCookables, uint32 InSaveFlags, UWorld* InWorld, bool bInSuccess)
+{
+	TArray<UPackage*> PackagesToSave;
+
+	for(UHoudiniCookable* HC : InSuccessfulCookables)
+	{
+		if(!IsValid(HC))
+			continue;
+
+		const int32 NumOutputs = HC->GetNumOutputs();
+		for(int32 Index = 0; Index < NumOutputs; ++Index)
+		{
+			UHoudiniOutput* Output = HC->GetOutputAt(Index);
+			if(!IsValid(Output))
+				continue;
+
+			if(Output->GetType() != EHoudiniOutputType::Mesh)
+				continue;
+
+			for(auto& OutputObjectPair : Output->GetOutputObjects())
+			{
+				UObject* Obj = OutputObjectPair.Value.OutputObject;
+				if(!IsValid(Obj))
+					continue;
+
+				UStaticMesh* SM = Cast<UStaticMesh>(Obj);
+				if(!SM)
+					continue;
+
+				UPackage* Package = SM->GetOutermost();
+				if(!IsValid(Package))
+					continue;
+
+				if(Package->IsDirty() && Package->IsFullyLoaded() && Package != GetTransientPackage())
+				{
+					PackagesToSave.Add(Package);
+				}
+			}
+		}
+	}
+
+	UEditorLoadingAndSavingUtils::SavePackages(PackagesToSave, true);
+}
+
+void
+FHoudiniEngineUtils::RefineHoudiniProxyMeshesToStaticMeshesWithCookInBackgroundThread(
+	const TArray<UHoudiniCookable*>& InCookablesToCook,
+	TSharedPtr<FSlowTask, ESPMode::ThreadSafe> InTaskProgress,
+	const uint32 InNumCookablesToProcess,
+	bool bInOnPreSaveWorld,
+	UWorld* InOnPreSaveWorld,
+	const TArray<UHoudiniCookable*>& InSuccessfulCookables,
+	const TArray<UHoudiniCookable*>& InFailedCookables,
+	const TArray<UHoudiniCookable*>& InSkippedCookables)
+{
+	// Copy to a double linked list so that we can loop through
+	// to check progress of each component and remove it easily
+	// if it has completed/failed
+	TDoubleLinkedList<UHoudiniCookable*> CookList;
+	for(UHoudiniCookable* HC : InCookablesToCook)
+	{
+		CookList.AddTail(HC);
+	}
+
+	// Add the successfully cooked Cookables to the incoming successful Cookables (previously refined)
+	TArray<UHoudiniCookable*> SuccessfulCookables(InSuccessfulCookables);
+	TArray<UHoudiniCookable*> FailedCookables(InFailedCookables);
+	TArray<UHoudiniCookable*> SkippedCookables(InSkippedCookables);
+
+	bool bCancelled = false;
+	uint32 NumFailedToCook = 0;
+	while(CookList.Num() > 0 && !bCancelled)
+	{
+		TDoubleLinkedList<UHoudiniCookable*>::TDoubleLinkedListNode* Node = CookList.GetHead();
+		while(Node && !bCancelled)
+		{
+			TDoubleLinkedList<UHoudiniCookable*>::TDoubleLinkedListNode* Next = Node->GetNextNode();
+			UHoudiniCookable* HC = Node->GetValue();
+
+			if(IsValid(HC))
+			{
+				const EHoudiniAssetState State = HC->GetCurrentState();
+				const EHoudiniAssetStateResult ResultState = HC->GetCurrentStateResult();
+				bool bUpdateProgress = false;
+				if(State == EHoudiniAssetState::None)
+				{
+					// Cooked, count as success, remove node
+					CookList.RemoveNode(Node);
+					SuccessfulCookables.Add(HC);
+					bUpdateProgress = true;
+				}
+				else if(ResultState != EHoudiniAssetStateResult::None && ResultState != EHoudiniAssetStateResult::Working)
+				{
+					// Failed, remove node
+					HOUDINI_LOG_ERROR(TEXT("Failed to cook %s to obtain static mesh."), *(HC->GetPathName()));
+					CookList.RemoveNode(Node);
+					FailedCookables.Add(HC);
+					bUpdateProgress = true;
+					NumFailedToCook++;
+				}
+
+				if(bUpdateProgress && InTaskProgress.IsValid())
+				{
+					// Update progress only on the main thread, and check for cancellation request
+					bCancelled = Async(EAsyncExecution::TaskGraphMainThread, [InTaskProgress]() {
+						InTaskProgress->EnterProgressFrame(1.0f);
+						return InTaskProgress->ShouldCancel();
+						}).Get();
+				}
+			}
+			else
+			{
+				SkippedCookables.Add(HC);
+				CookList.RemoveNode(Node);
+			}
+
+			Node = Next;
+		}
+		FPlatformProcess::Sleep(0.01f);
+	}
+
+	if(bCancelled)
+	{
+		HOUDINI_LOG_WARNING(TEXT("Mesh refinement cancelled while waiting for %d Cookables to cook."), CookList.Num());
+		// Mark any remaining HCs in the cook list as skipped
+		TDoubleLinkedList<UHoudiniCookable*>::TDoubleLinkedListNode* Node = CookList.GetHead();
+		while(Node)
+		{
+			TDoubleLinkedList<UHoudiniCookable*>::TDoubleLinkedListNode* const Next = Node->GetNextNode();
+			UHoudiniCookable* HC = Node->GetValue();
+			if(HC)
+				SkippedCookables.Add(HC);
+			CookList.RemoveNode(Node);
+			Node = Next;
+		}
+	}
+
+	// Cooking is done, or failed, display the notifications on the main thread
+	Async(EAsyncExecution::TaskGraphMainThread, [InNumCookablesToProcess, InTaskProgress, bCancelled,
+		bInOnPreSaveWorld, InOnPreSaveWorld,
+		SuccessfulCookables, FailedCookables, SkippedCookables]()
+		{
+			RefineHoudiniProxyMeshesToStaticMeshesNotifyDone(
+				InNumCookablesToProcess, InTaskProgress.Get(), bCancelled,
+				bInOnPreSaveWorld, InOnPreSaveWorld,
+				SuccessfulCookables, FailedCookables, SkippedCookables);
+		});
+}
+
+FDelegateHandle FHoudiniEngineUtils::OnPostSaveWorldRefineProxyMeshesHandle = FDelegateHandle();
+
+void
+FHoudiniEngineUtils::SetAllowPlayInEditorRefinement(
+	const TArray<UHoudiniCookable*>& InCookables,
+	bool bEnabled)
+{
+#if WITH_EDITORONLY_DATA
+	for(UHoudiniCookable* Cookable : InCookables)
+	{
+		Cookable->SetAllowPlayInEditorRefinement(false);
+	}
+#endif
+}
+
+FHoudiniPerfTimer::FHoudiniPerfTimer(const FString & InText, bool bPrint)
+{
+	TotalTime = 0.0;
+	CurrentStart = -1.0;
+	Text = InText;
+	bPrintStats = bPrint;
+}
+
+FHoudiniPerfTimer::~FHoudiniPerfTimer()
+{
+	if (CurrentStart >= 0)
+	{
+		Stop();
+	}
+
+	if(bPrintStats && !Text.IsEmpty())
+	{
+		HOUDINI_LOG_MESSAGE(TEXT("Timer: %-20s %23f secs."), *Text, TotalTime);
+	}
+}
+
+
+double FHoudiniPerfTimer::GetTime()
+{
+	return TotalTime;
+}
+
+void FHoudiniPerfTimer::Start()
+{
+	CurrentStart = FPlatformTime::Seconds();
+
+}
+
+void FHoudiniPerfTimer::Stop()
+{
+	if(CurrentStart >= 0)
+	{
+		TotalTime += FPlatformTime::Seconds() - CurrentStart;
+	}
+	CurrentStart = -1.0;
+
+}
 
 TArray<char> HoudiniTCHARToUTF(const TCHAR* Text)
 {

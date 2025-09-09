@@ -26,25 +26,28 @@
 
 #include "HoudiniEditorTestLandscapes.h"
 
+#include "HoudiniCookable.h"
 #include "HoudiniParameterFloat.h"
 #include "HoudiniParameterInt.h"
 #include "HoudiniParameterToggle.h"
-#include "Landscape.h"
+
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Chaos/HeightField.h"
+#include "Landscape.h"
+
 #if WITH_DEV_AUTOMATION_TESTS
 #include "HoudiniEditorTestUtils.h"
-
-#include "Misc/AutomationTest.h"
-#include "GenericPlatform/GenericPlatformProcess.h"
-#include "Components/InstancedStaticMeshComponent.h"
 #include "HoudiniEditorUnitTestUtils.h"
-#include "LandscapeEdit.h"
 #include <HoudiniLandscapeUtils.h>
+
+#include "Components/InstancedStaticMeshComponent.h"
+#include "GenericPlatform/GenericPlatformProcess.h"
+#include "LandscapeEdit.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
 #include "LandscapeEditLayer.h"
 #endif
 #include "Misc/AutomationTest.h"
+
 
 TArray<FString> FHoudiniEditorTestLandscapes::CheckLandscapeValues(
 	TArray<float> & Results, 
@@ -312,8 +315,7 @@ bool FHoudiniEditorTestLandscapes_Simple::RunTest(const FString & Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, TEXT("/Game/TestHDAs/Landscape/Test_Landscapes"), FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Create a small landscape and check it loads.
@@ -323,10 +325,10 @@ bool FHoudiniEditorTestLandscapes_Simple::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, LandscapeSize]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", LandscapeSize, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", LandscapeSize, 1);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "grid_size", 1, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", LandscapeSize, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", LandscapeSize, 1);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "grid_size", 1, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
 			Context->StartCookingHDA();
 			return true;
 		}));
@@ -334,7 +336,7 @@ bool FHoudiniEditorTestLandscapes_Simple::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, LandscapeSize]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have one output.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -404,17 +406,16 @@ bool FHoudiniEditorTestLandscapes_GridSize::RunTest(const FString& Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, TEXT("/Game/TestHDAs/Landscape/Test_Landscapes"), FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	const FIntPoint HeightFieldSize(143,63); 
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, HeightFieldSize]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", HeightFieldSize.X, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", HeightFieldSize.Y, 1);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "grid_size", 1, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", HeightFieldSize.X, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", HeightFieldSize.Y, 1);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "grid_size", 1, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
 			Context->StartCookingHDA();
 			return true;
 		}));
@@ -423,7 +424,7 @@ bool FHoudiniEditorTestLandscapes_GridSize::RunTest(const FString& Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, HeightFieldSize]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have one output.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -495,19 +496,18 @@ bool FHoudiniEditorTestLandscapes_TargetLayers::RunTest(const FString& Parameter
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, TEXT("/Game/TestHDAs/Landscape/Test_Landscapes"), FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	const FIntPoint HeightFieldSize(63, 63);
 	
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, HeightFieldSize]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", HeightFieldSize.X, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", HeightFieldSize.Y, 1);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "grid_size", 1, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "paint_layer_1", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "paint_layer_2", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", HeightFieldSize.X, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", HeightFieldSize.Y, 1);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "grid_size", 1, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "paint_layer_1", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "paint_layer_2", true, 0);
 		// TODO: Added test for visibility layer too
 		Context->StartCookingHDA();
 		return true;
@@ -517,11 +517,13 @@ bool FHoudiniEditorTestLandscapes_TargetLayers::RunTest(const FString& Parameter
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, HeightFieldSize]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have 1 Output with 3 objects.
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
-		TArray<UHoudiniLandscapeTargetLayerOutput*> LandscapeOutputs = FHoudiniEditorUnitTestUtils::GetOutputsWithObject<UHoudiniLandscapeTargetLayerOutput>(Outputs);
+		TArray<UHoudiniLandscapeTargetLayerOutput*> LandscapeOutputs =
+			FHoudiniEditorUnitTestUtils::GetOutputsWithObject<UHoudiniLandscapeTargetLayerOutput>(Outputs);
+
 		HOUDINI_TEST_EQUAL(LandscapeOutputs.Num(), 3);
 		ALandscape* LandscapeActor = LandscapeOutputs[0]->Landscape;
 
@@ -532,15 +534,17 @@ bool FHoudiniEditorTestLandscapes_TargetLayers::RunTest(const FString& Parameter
 		FIntPoint LandscapeVertSize(LandscapeQuadSize.X + 1, LandscapeQuadSize.Y + 1);
 		HOUDINI_TEST_EQUAL_ON_FAIL(LandscapeVertSize, ExpectedGridSize, return true);
 
+		FString TempFolder = Context->GetTemporaryCookFolderOrDefault();
+
 		// Check paint layer 1.
 		{
 			FString LayerName = TEXT("paint_layer1");
 
 			ULandscapeLayerInfoObject* LayerInfo = FHoudiniEditorTestLandscapes::GetLayerInfo(LandscapeActor, LayerName);
 
-			FString TempFolder = Context->HAC->GetTemporaryCookFolderOrDefault();
 			FString ObjectPath = LayerInfo->GetPathName();
-			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(Context->HAC, ObjectPath), true);
+			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(
+				TempFolder, ObjectPath), true);
 
 			TArray<float> ExpectedResults = FHoudiniEditorTestLandscapes::CreateExpectedPaintLayer1Values(HeightFieldSize);
 			TArray<float> GeneratedValues = FHoudiniEditorTestLandscapes::GetLandscapePaintLayerValues(LandscapeActor, LayerName);
@@ -557,9 +561,9 @@ bool FHoudiniEditorTestLandscapes_TargetLayers::RunTest(const FString& Parameter
 
 			ULandscapeLayerInfoObject* LayerInfo = FHoudiniEditorTestLandscapes::GetLayerInfo(LandscapeActor, LayerName);
 
-			FString TempFolder = Context->HAC->GetTemporaryCookFolderOrDefault();
 			FString ObjectPath = LayerInfo->GetPathName();
-			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(Context->HAC, ObjectPath), true);
+			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(
+				TempFolder, ObjectPath), true);
 
 			TArray<float> ExpectedResults = FHoudiniEditorTestLandscapes::CreateExpectedPaintLayer1Values(HeightFieldSize);
 			TArray<float> GeneratedValues = FHoudiniEditorTestLandscapes::GetLandscapePaintLayerValues(LandscapeActor, LayerName);
@@ -589,20 +593,19 @@ bool FHoudiniEditorTestLandscapes_EditLayers::RunTest(const FString& Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, TEXT("/Game/TestHDAs/Landscape/Test_Landscapes"), FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	const FIntPoint HeightFieldSize(63, 63);
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, HeightFieldSize]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", HeightFieldSize.X, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "size", HeightFieldSize.Y, 1);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterInt, "grid_size", 1, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "paint_layer_1", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "paint_layer_2", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "height_edit_layer", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", HeightFieldSize.X, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", HeightFieldSize.Y, 1);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "grid_size", 1, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterFloat, "height_scale", 1.0f, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "paint_layer_1", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "paint_layer_2", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "height_edit_layer", true, 0);
 		// TODO: Added test for visibility layer too
 		Context->StartCookingHDA();
 		return true;
@@ -612,14 +615,15 @@ bool FHoudiniEditorTestLandscapes_EditLayers::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, HeightFieldSize]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have 1 Output with 3 objects.
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
-		TArray<UHoudiniLandscapeTargetLayerOutput*> LandscapeOutputs = FHoudiniEditorUnitTestUtils::GetOutputsWithObject<UHoudiniLandscapeTargetLayerOutput>(Outputs);
+		TArray<UHoudiniLandscapeTargetLayerOutput*> LandscapeOutputs =
+			FHoudiniEditorUnitTestUtils::GetOutputsWithObject<UHoudiniLandscapeTargetLayerOutput>(Outputs);
 		HOUDINI_TEST_EQUAL(LandscapeOutputs.Num(), 3);
-		ALandscape* LandscapeActor = LandscapeOutputs[0]->Landscape;
 
+		ALandscape* LandscapeActor = LandscapeOutputs[0]->Landscape;
 		const FIntPoint ExpectedGridSize = FIntPoint(63, 63);
 
 		// Check the size of the landscape is correct.
@@ -627,15 +631,16 @@ bool FHoudiniEditorTestLandscapes_EditLayers::RunTest(const FString& Parameters)
 		FIntPoint LandscapeVertSize(LandscapeQuadSize.X + 1, LandscapeQuadSize.Y + 1);
 		HOUDINI_TEST_EQUAL_ON_FAIL(LandscapeVertSize, ExpectedGridSize, return true);
 
+		FString TempFolder = Context->GetTemporaryCookFolderOrDefault();
+
 		// Check paint layer 1.
 		{
 			FString LayerName = TEXT("paint_layer1");
-
 			ULandscapeLayerInfoObject* LayerInfo = FHoudiniEditorTestLandscapes::GetLayerInfo(LandscapeActor, LayerName);
 
-			FString TempFolder = Context->HAC->GetTemporaryCookFolderOrDefault();
 			FString ObjectPath = LayerInfo->GetPathName();
-			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(Context->HAC, ObjectPath), true);
+			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(
+				TempFolder, ObjectPath), true);
 
 			TArray<float> ExpectedResults = FHoudiniEditorTestLandscapes::CreateExpectedPaintLayer1Values(HeightFieldSize);
 			TArray<float> GeneratedValues = FHoudiniEditorTestLandscapes::GetLandscapePaintLayerValues(LandscapeActor, LayerName);
@@ -652,9 +657,9 @@ bool FHoudiniEditorTestLandscapes_EditLayers::RunTest(const FString& Parameters)
 
 			ULandscapeLayerInfoObject* LayerInfo = FHoudiniEditorTestLandscapes::GetLayerInfo(LandscapeActor, LayerName);
 
-			FString TempFolder = Context->HAC->GetTemporaryCookFolderOrDefault();
 			FString ObjectPath = LayerInfo->GetPathName();
-			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(Context->HAC, ObjectPath), true);
+			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(
+				TempFolder, ObjectPath), true);
 
 			TArray<float> ExpectedResults = FHoudiniEditorTestLandscapes::CreateExpectedPaintLayer1Values(HeightFieldSize);
 			TArray<float> GeneratedValues = FHoudiniEditorTestLandscapes::GetLandscapePaintLayerValues(LandscapeActor, LayerName);
@@ -691,7 +696,8 @@ bool FHoudiniEditorTestLandscapes_ModifyExisting::RunTest(const FString& Paramet
 {
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6
 	/// Make sure we have a Houdini Session before doing anything.
-	FHoudiniEditorTestUtils::CreateSessionIfInvalidWithLatentRetries(this, FHoudiniEditorTestUtils::HoudiniEngineSessionPipeName, {}, {});
+	FHoudiniEditorTestUtils::CreateSessionIfInvalidWithLatentRetries(
+		this, FHoudiniEditorTestUtils::HoudiniEngineSessionPipeName, {}, {});
 
 	// Now create the test context.
 	FString MapName = TEXT("/Game/TestObjects/Landscapes/Test_ModifyLandscape"); 
@@ -711,7 +717,6 @@ bool FHoudiniEditorTestLandscapes_ModifyExisting::RunTest(const FString& Paramet
 		}
 	}
 
-
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		Context->StartCookingHDA();
@@ -721,10 +726,11 @@ bool FHoudiniEditorTestLandscapes_ModifyExisting::RunTest(const FString& Paramet
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, LandscapeActor]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
+
+		FString TempFolder = Context->GetTemporaryCookFolderOrDefault();
 
 		const FIntPoint ExpectedGridSize = { 190, 190 };
-
 
 		// Check the size of the landscape is correct.
 		FIntPoint LandscapeQuadSize = LandscapeActor->GetBoundingRect().Size();
@@ -738,9 +744,9 @@ bool FHoudiniEditorTestLandscapes_ModifyExisting::RunTest(const FString& Paramet
 
 			ULandscapeLayerInfoObject* LayerInfo = FHoudiniEditorTestLandscapes::GetLayerInfo(LandscapeActor, LayerName);
 
-			FString TempFolder = Context->HAC->GetTemporaryCookFolderOrDefault();
 			FString ObjectPath = LayerInfo->GetPathName();
-			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(Context->HAC, ObjectPath), false);
+			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(
+				TempFolder, ObjectPath), false);
 
 			TArray<float> ExpectedResults = FHoudiniEditorTestLandscapes::CreateExpectedPaintLayer1Values(ExpectedGridSize);
 			TArray<float> GeneratedValues = FHoudiniEditorTestLandscapes::GetLandscapeEditLayerValues(LandscapeActor, EditLayer, LayerName, ExpectedGridSize);
@@ -758,9 +764,9 @@ bool FHoudiniEditorTestLandscapes_ModifyExisting::RunTest(const FString& Paramet
 
 			ULandscapeLayerInfoObject* LayerInfo = FHoudiniEditorTestLandscapes::GetLayerInfo(LandscapeActor, LayerName);
 
-			FString TempFolder = Context->HAC->GetTemporaryCookFolderOrDefault();
 			FString ObjectPath = LayerInfo->GetPathName();
-			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(Context->HAC, ObjectPath), false);
+			HOUDINI_TEST_EQUAL(FHoudiniEditorUnitTestUtils::IsTemporary(
+				TempFolder, ObjectPath), false);
 
 			TArray<float> ExpectedResults = FHoudiniEditorTestLandscapes::CreateExpectedPaintLayer1Values(ExpectedGridSize);
 			TArray<float> GeneratedValues = FHoudiniEditorTestLandscapes::GetLandscapeEditLayerValues(LandscapeActor, EditLayer, LayerName, ExpectedGridSize);
@@ -789,8 +795,6 @@ bool FHoudiniEditorTestLandscapes_ModifyExisting::RunTest(const FString& Paramet
 			HOUDINI_TEST_EQUAL(LandscapeActor->LandscapeLayers[1].Name.ToString(), FString(TEXT("Edit Layer 1")));
 			HOUDINI_TEST_EQUAL(LandscapeActor->LandscapeLayers[2].Name.ToString(), FString(TEXT("Edit Layer 2")));
 #endif
-
-
 		}
 		return true;
 	}));

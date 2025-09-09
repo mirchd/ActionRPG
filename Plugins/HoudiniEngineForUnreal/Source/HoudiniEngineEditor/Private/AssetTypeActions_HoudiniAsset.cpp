@@ -27,26 +27,25 @@
 #include "AssetTypeActions_HoudiniAsset.h"
 
 #include "HoudiniAsset.h"
-
-#include "HoudiniEngineEditorPrivatePCH.h"
-#include "HoudiniEngineStyle.h"
+#include "HoudiniAssetEditor.h"
+#include "HoudiniCookable.h"
 #include "HoudiniEngine.h"
-#include "HoudiniAssetComponent.h"
+#include "HoudiniEngineEditor.h"
+#include "HoudiniEngineEditorPrivatePCH.h"
 #include "HoudiniEngineEditorUtils.h"
 #include "HoudiniEngineRuntimeUtils.h"
-
-#include "EditorReimportHandler.h"
-#include "HoudiniEngineEditor.h"
+#include "HoudiniEngineStyle.h"
 #include "HoudiniToolsEditor.h"
 #include "HoudiniToolTypes.h"
+
+#include "EditorFramework/AssetImportData.h"
+#include "EditorReimportHandler.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "HAL/FileManager.h"
-#include "EditorFramework/AssetImportData.h"
+#include "Internationalization/Internationalization.h"
 #include "LevelEditor.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/UObjectIterator.h"
-
-#include "Internationalization/Internationalization.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE
 
@@ -371,12 +370,12 @@ FAssetTypeActions_HoudiniAsset::ExecuteRebuildAllInstances(TArray<TWeakObjectPtr
 		FReimportManager::Instance()->Reimport(HoudiniAsset, true);
 
 		// Rebuilds all instances of that asset in the scene
-		for (TObjectIterator<UHoudiniAssetComponent> Itr; Itr; ++Itr)
+		for (TObjectIterator<UHoudiniCookable> Itr; Itr; ++Itr)
 		{
-			UHoudiniAssetComponent * Component = *Itr;
-			if (Component && (Component->GetHoudiniAsset() == HoudiniAsset))
+			UHoudiniCookable* Cookable = *Itr;
+			if (IsValid(Cookable) && (Cookable->GetHoudiniAsset() == HoudiniAsset))
 			{
-				Component->MarkAsNeedRebuild();
+				Cookable->MarkAsNeedRebuild();
 			}
 		}
 	}
@@ -432,8 +431,8 @@ FAssetTypeActions_HoudiniAsset::ExecuteApplyAssetToSelection(TArray<TWeakObjectP
 	if (!HoudiniAsset || !(HoudiniAsset->AssetImportData))
 		return;
 
-
 	FHoudiniEngineEditorUtils::InstantiateHoudiniAsset(HoudiniAsset, InType, EHoudiniToolSelectionType::HTOOL_SELECTION_WORLD_ONLY);
+
 	/*
 	// Creating a temporary tool for the selected asset
 	TSoftObjectPtr<UHoudiniAsset> HoudiniAssetPtr(HoudiniAsset);
@@ -481,6 +480,20 @@ FAssetTypeActions_HoudiniAsset::ExecuteInstantiate(TArray<TWeakObjectPtr<UHoudin
 	}
 }
 
+void 
+FAssetTypeActions_HoudiniAsset::OpenAssetEditor(const TArray<UObject*>& InObjects, TSharedPtr<class IToolkitHost> EditWithinLevelEditor)
+{
+	const EToolkitMode::Type Mode = EditWithinLevelEditor.IsValid() ? EToolkitMode::WorldCentric : EToolkitMode::Standalone;
+
+	for (auto ObjIt = InObjects.CreateConstIterator(); ObjIt; ++ObjIt)
+	{
+		if (UHoudiniAsset* HDA = Cast<UHoudiniAsset>(*ObjIt))
+		{
+			TSharedRef<FHoudiniAssetEditor> NewHDAEditor(new FHoudiniAssetEditor());
+			NewHDAEditor->InitHoudiniAssetEditor(Mode, EditWithinLevelEditor, HDA);
+		}
+	}
+}
 
 
 #undef LOCTEXT_NAMESPACE

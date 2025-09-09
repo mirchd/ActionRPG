@@ -400,7 +400,7 @@ bool
 FHoudiniDataTableTranslator::BuildDataTable(
 	const FHoudiniGeoPartObject& HGPO,
 	UHoudiniOutput* CurOutput,
-	FHoudiniPackageParams& PackageParams)
+	const FHoudiniPackageParams& PackageParams)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniDataTableTranslator::BuildDataTable);
 
@@ -782,6 +782,15 @@ FHoudiniDataTableTranslator::CreateRowStruct(const FHoudiniGeoPartObject& HGPO,
 			Package->GetOutermost()->FullyLoad();
 		}
 	}
+
+	// Iterate through objects within the package, and delete and structs, otherwise Unreal asserts.
+	ForEachObjectWithOuter(Package, [&](UObject* Obj)
+		{
+			if(Obj && Obj->IsA(UUserDefinedStruct::StaticClass()))
+			{
+				ObjectTools::DeleteSingleObject(Obj);
+			}
+		}, true);
 
 	NewStruct = FStructureEditorUtils::CreateUserDefinedStruct(Package, FName(PackageName), RF_Standalone | RF_Public);
 	TFieldIterator<FProperty> It(NewStruct);

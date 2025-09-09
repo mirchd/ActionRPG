@@ -1397,7 +1397,7 @@ HAPI_DECL HAPI_GetStringBatch( const HAPI_Session * session,
 /// @param[out]     time
 ///                 Time as a float in seconds.
 ///
-HAPI_DECL HAPI_GetTime( const HAPI_Session * session, float * time );
+HAPI_DECL HAPI_GetTime( const HAPI_Session * session, double * time );
 
 /// @brief  Sets the global time of the scene. All API calls will deal
 ///         with this time to cook.
@@ -1413,39 +1413,7 @@ HAPI_DECL HAPI_GetTime( const HAPI_Session * session, float * time );
 /// @param[in]      time
 ///                 Time as a float in seconds.
 ///
-HAPI_DECL HAPI_SetTime( const HAPI_Session * session, float time );
-
-/// @brief  Gets the global time of the scene. All API calls deal with
-///         this time to cook.
-///
-/// @ingroup Time
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[out]     time
-///                 Time as a double in seconds.
-///
-HAPI_DECL HAPI_GetTime64( const HAPI_Session * session, double * time );
-
-/// @brief  Sets the global time of the scene. All API calls will deal
-///         with this time to cook.
-///
-/// @ingroup Time
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      time
-///                 Time as a double in seconds.
-///
-HAPI_DECL HAPI_SetTime64( const HAPI_Session * session, double time );
+HAPI_DECL HAPI_SetTime( const HAPI_Session * session, double time );
 
 /// @brief  Returns whether the Houdini session will use the current time in
 ///         Houdini when cooking and retrieving data. By default this is
@@ -1521,39 +1489,6 @@ HAPI_DECL HAPI_GetTimelineOptions( const HAPI_Session * session,
 HAPI_DECL HAPI_SetTimelineOptions(
                             const HAPI_Session * session,
                             const HAPI_TimelineOptions * timeline_options );
-
-/// @brief  Gets the current global timeline options.
-///
-/// @ingroup Time
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[out]     timeline_options
-///                 The global timeline options struct.
-///
-HAPI_DECL HAPI_GetTimelineOptions64( const HAPI_Session * session,
-                                   HAPI_TimelineOptions64 * timeline_options );
-
-/// @brief  Sets the global timeline options.
-///
-/// @ingroup Time
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      timeline_options
-///                 The global timeline options struct.
-///
-HAPI_DECL HAPI_SetTimelineOptions64(
-                            const HAPI_Session * session,
-                            const HAPI_TimelineOptions64 * timeline_options );
 
 /// @brief  Gets the global compositor options.
 ///
@@ -2820,6 +2755,7 @@ HAPI_DECL HAPI_CreateHeightfieldInputVolumeNode(    const HAPI_Session * session
 ///                 The cook options. Pass in NULL to use the global
 ///                 cook options that you specified when calling
 ///                 ::HAPI_Initialize().
+///                 <!-- default NULL -->
 ///
 HAPI_DECL HAPI_CookNode( const HAPI_Session * session,
                          HAPI_NodeId node_id,
@@ -11020,8 +10956,9 @@ HAPI_DECL HAPI_GetMaterialInfo( const HAPI_Session * session,
 ///
 /// @ingroup Materials
 ///
-///         Note that you must call this first for any of the other material
-///         APIs to work.
+///         Note that you must call this method,
+///         ::HAPI_RenderCOPOutputToImage(), or ::HAPI_RenderTextureToImage()
+///         before any of the other material APIs.
 ///
 /// @param[in]      session
 ///                 The session of Houdini you are interacting with.
@@ -11035,13 +10972,41 @@ HAPI_DECL HAPI_GetMaterialInfo( const HAPI_Session * session,
 HAPI_DECL HAPI_RenderCOPToImage( const HAPI_Session * session,
                                  HAPI_NodeId cop_node_id );
 
+/// @brief  Render a single texture from a COP to an image for
+///         later extraction. COPs may have multiple outputs,
+///         so this method lets you select which output to use.
+///
+/// @ingroup Materials
+///
+///         Note that you must call this method,
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderTextureToImage()
+///         before any of the other material APIs.
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      cop_node_id
+///                 The COP node id.
+///
+/// @param[in]      cop_output_name
+///                 The name of the output to extract. Passing in
+///                 an empty string will default to the COP's first output.
+///
+HAPI_DECL HAPI_RenderCOPOutputToImage( const HAPI_Session * session,
+                                       HAPI_NodeId cop_node_id,
+                                       const char * cop_output_name );
+
 /// @brief  Render only a single texture to an image for later extraction.
 ///         An example use of this method might be to render the diffuse,
 ///         normal, and bump texture maps of a material to individual
 ///         texture files for use within the client application.
 ///
-///         Note that you must call this first for any of the other material
-///         APIs to work.
+///         Note that you must call this method,
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         before any of the other material APIs.
 ///
 /// @ingroup Materials
 ///
@@ -11067,8 +11032,9 @@ HAPI_DECL HAPI_RenderTextureToImage( const HAPI_Session * session,
 ///         resolution and default file format. This information will be
 ///         used when extracting planes to an image.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 /// @ingroup Materials
 ///
@@ -11092,8 +11058,9 @@ HAPI_DECL HAPI_GetImageInfo( const HAPI_Session * session,
 ///         This information will be used when extracting planes to
 ///         an image.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 ///         You should also first call ::HAPI_GetImageInfo() to get the
 ///         current Image Info and change only the properties
@@ -11119,8 +11086,9 @@ HAPI_DECL HAPI_SetImageInfo( const HAPI_Session * session,
 
 /// @brief  Get the number of image planes for the just rendered image.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 /// @ingroup Materials
 ///
@@ -11142,8 +11110,9 @@ HAPI_DECL HAPI_GetImagePlaneCount( const HAPI_Session * session,
 
 /// @brief  Get the names of the image planes of the just rendered image.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 ///         You should also call ::HAPI_GetImagePlaneCount() first to get
 ///         the total number of image planes so you know how large the
@@ -11176,8 +11145,9 @@ HAPI_DECL HAPI_GetImagePlanes( const HAPI_Session * session,
 
 /// @brief  Extract a rendered image to a file.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 /// @ingroup Materials
 ///
@@ -11300,8 +11270,9 @@ HAPI_DECL HAPI_GetImageFilePath( const HAPI_Session * session,
 
 /// @brief  Extract a rendered image to memory.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 ///         Also note that this function will do all the work of
 ///         extracting and compositing the image into a memory buffer
@@ -11362,8 +11333,9 @@ HAPI_DECL HAPI_ExtractImageToMemory( const HAPI_Session * session,
 /// @brief  Fill your allocated buffer with the just extracted
 ///         image buffer.
 ///
-///         Note that you must call ::HAPI_RenderTextureToImage() first for
-///         this method call to make sense.
+///         Note that you must call one of ::HAPI_RenderTextureToImage(),
+///         ::HAPI_RenderCOPToImage(), or ::HAPI_RenderCOPOutputToImage()
+///         first for this method call to make sense.
 ///
 ///         Also note that you must call ::HAPI_ExtractImageToMemory()
 ///         first in order to perform the extraction and get the
@@ -11442,6 +11414,69 @@ HAPI_DECL HAPI_GetSupportedImageFileFormats(
                                         const HAPI_Session * session,
                                         HAPI_ImageFileFormat * formats_array,
                                         int file_format_count );
+
+/// @brief  Loads some raw image data into a COP node.
+///
+///         This method expects the image data to be in linear color space.
+///         It will not do any color space conversions for you; the data
+///         must be converted beforehand.
+///
+/// @ingroup Materials
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      parent_node_id
+///                 The node that the copnet containing the texture will be
+///                 created in, or -1 if the parent is the image manager.
+///
+/// @param[in]      width
+///                 The width of the image in pixels. @p width * @p height *
+///                 channel count (implied by @p packing) should equal the size
+///                 of @p data_array.
+///
+/// @param[in]      height
+///                 The height of the image in pixels. @p width * @p height *
+///                 channel count (implied by @p packing) should equal the size
+///                 of @p data_array.
+///
+/// @param[in]      packing
+///                 How the image data is packed (single-channel, RBGA, etc).
+///
+/// @param[in]      flip_x
+///                 Whether to flip the image horizontally.
+///
+/// @param[in]      flip_y
+///                 Whether to flip the image vertically.
+///
+/// @param[in]      data_array
+///                 A float array representing the image's pixel data. Values
+///                 should be between 0.0 and 1.0. The data should be packed
+///                 according to @p packing.
+///
+/// @param[in]      start
+///                 The index of the first value of @p data_array to use.
+///                 Must be at least 0 and at most (size of @p data_array - 1).
+///                 <!-- min 0 -->
+///                 <!-- default 0 -->
+///
+/// @param[in]      length
+///                 How much of @p data_array to use. Must be at least 0
+///                 and at most (size of @p data_array - start).
+///                 <!-- min 0 -->
+///
+HAPI_DECL HAPI_CreateCOPImage( const HAPI_Session * session,
+                               HAPI_NodeId parent_node_id,
+                               const int width,
+                               const int height,
+                               const HAPI_ImagePacking packing,
+                               HAPI_Bool flip_x,
+                               HAPI_Bool flip_y,
+                               const float * data_array,
+                               int start, int length );
 
 /// @defgroup Animation
 /// Functions for working with animation.

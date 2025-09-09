@@ -44,6 +44,7 @@ class UHoudiniParameter;
 class UHoudiniInput;
 class UTOPNode;
 class UHoudiniAssetComponent;
+class UHoudiniCookable;
 class AHoudiniAssetActor;
 
 /**
@@ -341,6 +342,15 @@ public:
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Houdini|Public API")
 	UHoudiniAssetComponent* GetHoudiniAssetComponent() const;
+
+	/**
+	 * Helper function for getting the UHoudiniCookable of the HDA, if HoudiniAssetObject is a
+	 * UHoudiniCookable or an AHoudiniAssetActor.
+	 * @return The instantiated UHoudiniCookable, if HoudiniAssetObject is a
+	 * UHoudiniCookable or an AHoudiniAssetActor, otherwise nullptr. 
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Houdini|Public API")	
+	UHoudiniCookable* GetHoudiniCookable() const;
 
 	/**
 	 * Get the Temp Folder fallback as configured on asset details panel
@@ -1412,15 +1422,15 @@ protected:
 	
 	/** Handler that is bound to the wrapped HAC's state change delegate. */
 	UFUNCTION()
-	void HandleOnHoudiniAssetComponentStateChange(UHoudiniAssetComponent* InHAC, const EHoudiniAssetState InFromState, const EHoudiniAssetState InToState);
+	void HandleOnHoudiniCookableStateChange(UHoudiniCookable* InHC, const EHoudiniAssetState InFromState, const EHoudiniAssetState InToState);
 
 	/** Handler that is bound to the wrapped HAC's PostCook delegate. */
 	UFUNCTION()
-	void HandleOnHoudiniAssetComponentPostCook(UHoudiniAssetComponent* InHAC, const bool bInCookSuccess);
+	void HandleOnHoudiniCookablePostCook(UHoudiniCookable* InHC, const bool bInCookSuccess);
 
 	/** Handler that is bound to the wrapped HAC's PostBake delegate. */
 	UFUNCTION()
-	void HandleOnHoudiniAssetComponentPostBake(UHoudiniAssetComponent* InHAC, const bool bInBakeSuccess);
+	void HandleOnHoudiniCookablePostBake(UHoudiniCookable* InHC, const bool bInBakeSuccess);
 
 	/** Handler that is bound to the wrapped PDG asset link's OnPostTOPNetworkCookDelegate delegate. */
 	UFUNCTION()
@@ -1436,7 +1446,7 @@ protected:
 	 * #OnProxyMeshesRefinedDelegate is broadcast.
 	 */
 	UFUNCTION()
-	void HandleOnHoudiniProxyMeshesRefinedGlobal(UHoudiniAssetComponent* InHAC, const EHoudiniProxyRefineResult InResult);
+	void HandleOnHoudiniProxyMeshesRefinedGlobal(UHoudiniCookable* InHC, const EHoudiniProxyRefineResult InResult);
 
 	/**
 	 * Helper function for getting the instantiated asset's AHoudiniAssetActor. If there is no valid
@@ -1453,6 +1463,13 @@ protected:
 	 * @return true if the wrapped asset has a valid HoudiniAssetComponent, false otherwise.
 	 */
 	bool GetValidHoudiniAssetComponentWithError(UHoudiniAssetComponent*& OutHAC) const;
+
+	/** Helper function for getting the instantiated asset's Cookable.
+	 *If there is no valid Cookable an error is set with SetErrorMessage() and false is returned.
+	 * @param OutHAC Set to the HoudiniAssetComponent of the wrapped asset, if found.
+	 * @return true if the wrapped asset has a valid HoudiniAssetComponent, false otherwise.
+	 */
+	bool GetValidHoudiniCookableWithError(UHoudiniCookable*& OutHC) const;
 
 	/**
 	 * Helper function for getting a valid output at the specified index. If there is no valid
@@ -1591,6 +1608,10 @@ protected:
 	/** The wrapped UHoudiniAssetComponent (derived from HoudiniAssetObject when calling WrapHoudiniAssetObject()). */
 	UPROPERTY(BlueprintReadOnly, Category="Houdini|Public API")
 	TWeakObjectPtr<UHoudiniAssetComponent> CachedHoudiniAssetComponent;
+
+	/** The wrapped UHoudiniCookable (derived from HoudiniAssetObject when calling WrapHoudiniAssetObject()). */
+	UPROPERTY(BlueprintReadOnly, Category="Houdini|Public API")
+	TWeakObjectPtr<UHoudiniCookable> CachedHoudiniCookable;
 
 	/**
 	 * Delegate that is broadcast when entering the PreInstantiation state: the HDA's default parameter definitions are

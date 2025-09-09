@@ -114,7 +114,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 
 		// Returns a pointer to the input choice types
 		TArray<TSharedPtr<FString>>* GetInputTypeChoiceLabels() { return &InputTypeChoiceLabels; };
+		TArray<TSharedPtr<FString>>* GetPCGInputTypeChoiceLabels() { return &PCGInputTypeChoiceLabels; }
 		TArray<TSharedPtr<FString>>* GetBlueprintInputTypeChoiceLabels() { return &BlueprintInputTypeChoiceLabels; };
+		TArray<TSharedPtr<FString>>* GetAssetEditorInputTypeChoiceLabels() { return &AssetEditorInputTypeChoiceLabels; }
 
 		// Returns a pointer to the Houdini curve types
 		TArray<TSharedPtr<FString>>* GetHoudiniCurveTypeChoiceLabels() { return &HoudiniCurveTypeChoiceLabels; };
@@ -219,6 +221,18 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		FHoudiniToolsEditor& GetHoudiniTools() const { return *HoudiniToolsPtr; }
 
 		TSharedPtr<class SHoudiniNodeSyncPanel> GetNodeSyncPanel() { return NodeSyncPanel; }
+		
+		// Get the List of UI commands used by the various menus
+		TSharedPtr<class FUICommandList> GetHoudiniEngineCommands() { return HEngineCommands; };
+
+		// Add menu extension for our module.
+		static void AddHoudiniFileMenuExtension(FMenuBuilder& MenuBuilder);
+
+		// Add the Houdini Engine editor menu
+		static void AddHoudiniEditorMenu(FMenuBarBuilder& MenuBarBuilder);
+
+		// Add menu extension for our module.
+		static void AddHoudiniMainMenuExtension(FMenuBuilder& MenuBuilder);
 
 	protected:
 
@@ -227,15 +241,6 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 
 		// Register AssetType action. 
 		void RegisterAssetTypeAction(IAssetTools& AssetTools, TSharedRef< IAssetTypeActions > Action);
-
-		// Add menu extension for our module.
-		void AddHoudiniFileMenuExtension(FMenuBuilder& MenuBuilder);
-
-		// Add the Houdini Engine editor menu
-		void AddHoudiniEditorMenu(FMenuBarBuilder& MenuBarBuilder);
-
-		// Add menu extension for our module.
-		void AddHoudiniMainMenuExtension(FMenuBuilder & MenuBuilder);
 
 		// Adds the custom Houdini Engine commands to the world outliner context menu
 		void AddLevelViewportMenuExtender();
@@ -307,6 +312,8 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		// Widget resources: Input Type combo box labels
 		TArray<TSharedPtr<FString>> InputTypeChoiceLabels;
 		TArray<TSharedPtr<FString>> BlueprintInputTypeChoiceLabels;
+		TArray<TSharedPtr<FString>> PCGInputTypeChoiceLabels;
+		TArray<TSharedPtr<FString>> AssetEditorInputTypeChoiceLabels;
 
 		// Widget resources: Houdini Curve Type combo box labels
 		TArray<TSharedPtr<FString>> HoudiniCurveTypeChoiceLabels;

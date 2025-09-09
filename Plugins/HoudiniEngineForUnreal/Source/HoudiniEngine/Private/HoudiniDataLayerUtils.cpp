@@ -146,65 +146,6 @@ void FHoudiniDataLayerUtils::AddActorToLayer(
 }
 #endif
 
-TArray<FHoudiniAttributeDataLayer>
-FHoudiniDataLayerUtils::GetDataLayers(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_GroupType GroupType)
-{
-	TArray<FHoudiniAttributeDataLayer> Results;
-	HAPI_PartInfo PartInfo;
-	FHoudiniApi::PartInfo_Init(&PartInfo);
-	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetPartInfo(FHoudiniEngine::Get().GetSession(), NodeId, PartId, &PartInfo), {});
-
-	Results.SetNum(PartInfo.pointCount);
-
-#if HOUDINI_ENABLE_DATA_LAYERS
-	// Get a list of all groups this part MAY be a member of.
-	TArray<FString> RawGroupNames;
-	bool bResult = FHoudiniEngineUtils::HapiGetGroupNames(NodeId, PartId, GroupType, false, RawGroupNames);
-
-	TArray<int32> CreateFlags;
-
-	FHoudiniHapiAccessor Accessor;
-	Accessor.Init(NodeId, PartId, HAPI_UNREAL_ATTRIB_CREATE_DATA_LAYERS);
-	bool bSuccess = Accessor.GetAttributeData(HAPI_ATTROWNER_POINT, CreateFlags);
-	int bDefaultCreateFlags = 0;
-	Accessor.GetAttributeFirstValue(HAPI_ATTROWNER_DETAIL, bDefaultCreateFlags);
-
-	// Check each group to see if we're a member.
-	FString NamePrefix = TEXT(HOUDINI_DATA_LAYER_PREFIX);
-	for(FString DataLayerName : RawGroupNames)
-	{
-		// Is a group that specifies an unreal data layer?
-		if(!DataLayerName.StartsWith(NamePrefix))
-			continue;
-
-		// Is a member of the group?
-
-		TArray<int32> GroupMembership;
-
-		bool bAllEqual = false;
-		FHoudiniEngineUtils::HapiGetGroupMembership(NodeId, PartInfo, GroupType, DataLayerName, GroupMembership, bAllEqual);
-
-		DataLayerName.RemoveFromStart(NamePrefix);
-
-		for (int Index  = 0; Index < GroupMembership.Num(); Index++)
-		{
-			if (GroupMembership[Index])
-			{
-				FHoudiniDataLayer Layer;
-				Layer.Name = DataLayerName;
-				if(CreateFlags.IsValidIndex(Index))
-					Layer.bCreateIfNeeded = CreateFlags[Index] != 0;
-				else
-					Layer.bCreateIfNeeded = bDefaultCreateFlags != 0;
-
-				Results[Index].DataLayers.Add(Layer);
-			}
-		}
-	}
-#endif
-	return Results;
-}
-
 TArray<FHoudiniDataLayer>
 FHoudiniDataLayerUtils::GetDataLayers(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_GroupType GroupType, int Index)
 {

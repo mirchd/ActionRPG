@@ -190,14 +190,13 @@
 
 #define HAPI_UNREAL_ATTRIB_INSTANCE							"instance"
 #define HAPI_UNREAL_ATTRIB_INSTANCE_OVERRIDE				"unreal_instance"
-#define HAPI_UNREAL_ATTRIB_SPLIT_INSTANCES					"unreal_split_instances"
+#define HAPI_UNREAL_ATRTIB_INSTANCE_ORIGIN                  "unreal_instance_origin"
 #define HAPI_UNREAL_ATTRIB_FOLIAGE_INSTANCER				"unreal_foliage"
 #define HAPI_UNREAL_ATTRIB_FOLIAGE_ATTACHMENT_TYPE          "unreal_foliage_attachment_type"
 #define HAPI_UNREAL_ATTRIB_FOLIAGE_ATTACHMENT_DISTANCE      "unreal_foliage_attachment_distance"
 #define HAPI_UNREAL_ATTRIB_INSTANCE_ROTATION				"rot"
 #define HAPI_UNREAL_ATTRIB_INSTANCE_SCALE					"scale"
 #define HAPI_UNREAL_ATTRIB_INSTANCE_POSITION				HAPI_ATTRIB_POSITION
-#define HAPI_UNREAL_ATTRIB_INSTANCE_COLOR					"unreal_instance_color"
 #define HAPI_UNREAL_ATTRIB_SPLIT_ATTR						"unreal_split_attr"
 #define HAPI_UNREAL_ATTRIB_HIERARCHICAL_INSTANCED_SM		"unreal_hierarchical_instancer"
 #define HAPI_UNREAL_ATTRIB_INSTANCE_NUM_CUSTOM_FLOATS		"unreal_num_custom_floats"
@@ -313,6 +312,14 @@
 // We only support Unreal spline outputs for now
 //#define HAPI_UNREAL_ATTRIB_OUTPUT_HOUDINI_CURVE				"houdini_output_curve"
 
+// PCG Attributes
+#define HOUDINI_PCG_PARAMS_OUTPUT_NAME                      "unreal_pcg_params"
+#define HAPI_UNREAL_ATTRIB_PCG_STEEPNESS                    "steepness"
+#define HAPI_UNREAL_ATTRIB_PCG_DENSITY                      "density"
+#define HAPI_UNREAL_ATTRIB_PCG_BOUNDING_BOX_MIN             "bounding_box_min"
+#define HAPI_UNREAL_ATTRIB_PCG_BOUNDING_BOX_MAX             "bounding_box_max"
+#define HAPI_UNREAL_ATTRIB_PCG_SEED                         "seed"
+
 // PDG Attributes
 #define HAPI_UNREAL_ATTRIB_PDG_ASSET                        "unreal_pdg_asset"
 
@@ -396,28 +403,34 @@
 #define HAPI_UNREAL_MATERIAL_TEXTURE_NORMAL             "N"
 
 // Materials Diffuse.
-#define HAPI_UNREAL_PARAM_COLOR_DIFFUSE_OGL				"ogl_diff"
 #define HAPI_UNREAL_PARAM_COLOR_DIFFUSE					"basecolor"
-
-#define HAPI_UNREAL_PARAM_TEXTURE_LAYERS_NUM			"ogl_numtex"
-
-#define HAPI_UNREAL_PARAM_MAP_DIFFUSE_OGL				"ogl_tex1"
-#define HAPI_UNREAL_PARAM_MAP_DIFFUSE_OGL_ENABLED		"ogl_use_tex1"
-
 #define HAPI_UNREAL_PARAM_MAP_DIFFUSE					"basecolor_texture"
 #define HAPI_UNREAL_PARAM_MAP_DIFFUSE_ENABLED			"basecolor_useTexture"
 
+#define HAPI_UNREAL_PARAM_COLOR_DIFFUSE_OGL				"ogl_diff"
+#define HAPI_UNREAL_PARAM_MAP_DIFFUSE_OGL				"ogl_tex1"
+#define HAPI_UNREAL_PARAM_MAP_DIFFUSE_OGL_ENABLED		"ogl_use_tex1"
+
+#define HAPI_UNREAL_PARAM_COLOR_DIFFUSE_CPM				"constantbasecolor"
+#define HAPI_UNREAL_PARAM_COLOR_DIFFUSE_CPM_DEFAULT		"default_basecolor"
+#define HAPI_UNREAL_PARAM_MAP_DIFFUSE_CPM				"basecolor"
+#define HAPI_UNREAL_PARAM_MAP_DIFFUSE_CPM_SWITCH		"basecolorswitch"
+
 #define HAPI_UNREAL_PARAM_MAP_DIFFUSE_COLOR_SPACE		"basecolor_textureColorSpace"
+
+#define HAPI_UNREAL_PARAM_TEXTURE_LAYERS_NUM			"ogl_numtex"
 
 #define HAPI_UNREAL_PARAM_MAP_DIFFUSE_USE_POINT_COLOR    "basecolor_usePointColor"
 
 // Materials Normal.
-#define HAPI_UNREAL_PARAM_MAP_NORMAL_OGL				"ogl_normalmap"
-
 //#define HAPI_UNREAL_PARAM_MAP_NORMAL					"normalTexture"
 //#define HAPI_UNREAL_PARAM_MAP_NORMAL_ENABLED			"normalUseTexture"
 #define HAPI_UNREAL_PARAM_MAP_NORMAL					"baseNormal_texture"
 #define HAPI_UNREAL_PARAM_MAP_NORMAL_ENABLED			"baseBumpAndNormal_enable"
+
+#define HAPI_UNREAL_PARAM_MAP_NORMAL_OGL				"ogl_normalmap"
+
+#define HAPI_UNREAL_PARAM_MAP_NORMAL_CPM				"normal_map"
 
 #define HAPI_UNREAL_PARAM_MAP_NORMAL_TYPE				"ogl_normalmap_type"
 #define HAPI_UNREAL_PARAM_MAP_NORMAL_TYPE_TANGENT		"Tangent Space"
@@ -426,64 +439,89 @@
 #define HAPI_UNREAL_PARAM_MAP_NORMAL_COLOR_SPACE		"normalTexColorSpace"
 
 // Materials Specular.
-#define HAPI_UNREAL_PARAM_COLOR_SPECULAR_OGL			"ogl_reflect"           //"ogl_spec"
-#define HAPI_UNREAL_PARAM_COLOR_SPECULAR				"reflect"
+#define HAPI_UNREAL_PARAM_VALUE_SPECULAR				"reflect"
+#define HAPI_UNREAL_PARAM_MAP_SPECULAR					"reflect_texture"
+#define HAPI_UNREAL_PARAM_MAP_SPECULAR_ENABLED			"reflect_useTexture"
 
+#define HAPI_UNREAL_PARAM_VALUE_SPECULAR_OGL			"ogl_reflect"           //"ogl_spec"
 #define HAPI_UNREAL_PARAM_MAP_SPECULAR_OGL				"ogl_reflect_map"       //"ogl_specmap"
 #define HAPI_UNREAL_PARAM_MAP_SPECULAR_OGL_ENABLED		"ogl_use_reflect_map"   //"ogl_use_specmap"
 
-#define HAPI_UNREAL_PARAM_MAP_SPECULAR					"reflect_texture"
-#define HAPI_UNREAL_PARAM_MAP_SPECULAR_ENABLED			"reflect_useTexture"
+#define HAPI_UNREAL_PARAM_VALUE_SPECULAR_CPM			"constantspecularamount"
+#define HAPI_UNREAL_PARAM_VALUE_SPECULAR_CPM_DEFAULT	"default_specular"
+#define HAPI_UNREAL_PARAM_MAP_SPECULAR_CPM				"specular"
+#define HAPI_UNREAL_PARAM_MAP_SPECULAR_CPM_SWITCH		"specularamountswitch"
 
 #define HAPI_UNREAL_PARAM_MAP_SPECULAR_COLOR_SPACE		"reflect_textureColorSpace"
 
 // Materials Roughness.
-#define HAPI_UNREAL_PARAM_VALUE_ROUGHNESS_OGL			"ogl_rough"
 #define HAPI_UNREAL_PARAM_VALUE_ROUGHNESS				"rough"
+#define HAPI_UNREAL_PARAM_MAP_ROUGHNESS					"rough_texture"
+#define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_ENABLED			"rough_useTexture"
 
+#define HAPI_UNREAL_PARAM_VALUE_ROUGHNESS_OGL			"ogl_rough"
 #define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_OGL				"ogl_roughmap"
 #define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_OGL_ENABLED		"ogl_use_roughmap"
 
-#define HAPI_UNREAL_PARAM_MAP_ROUGHNESS					"rough_texture"
-#define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_ENABLED			"rough_useTexture"
+#define HAPI_UNREAL_PARAM_VALUE_ROUGHNESS_CPM			"constantspecularroughness"
+#define HAPI_UNREAL_PARAM_VALUE_ROUGHNESS_CPM_DEFAULT	"default_specular_roughness"
+#define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_CPM				"roughness"
+#define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_CPM_SWITCH		"specularoughnessswitch"  // CPM misspelt this parameter
 
 #define HAPI_UNREAL_PARAM_MAP_ROUGHNESS_COLOR_SPACE		"rough_textureColorSpace"
 
 // Materials Metallic.
 #define HAPI_UNREAL_PARAM_VALUE_METALLIC				"metallic"
-#define HAPI_UNREAL_PARAM_VALUE_METALLIC_OGL			"ogl_metallic"
+#define HAPI_UNREAL_PARAM_MAP_METALLIC					"metallic_texture"
+#define HAPI_UNREAL_PARAM_MAP_METALLIC_ENABLED			"metallic_useTexture"
 
+#define HAPI_UNREAL_PARAM_VALUE_METALLIC_OGL			"ogl_metallic"
 #define HAPI_UNREAL_PARAM_MAP_METALLIC_OGL				"ogl_metallicmap"
 #define HAPI_UNREAL_PARAM_MAP_METALLIC_OGL_ENABLED		"ogl_use_metallicmap"
 
-#define HAPI_UNREAL_PARAM_MAP_METALLIC					"metallic_texture"
-#define HAPI_UNREAL_PARAM_MAP_METALLIC_ENABLED			"metallic_useTexture"
+#define HAPI_UNREAL_PARAM_VALUE_METALLIC_CPM			"constantmetalness"
+#define HAPI_UNREAL_PARAM_VALUE_METALLIC_CPM_DEFAULT	"default_metalness"
+#define HAPI_UNREAL_PARAM_MAP_METALLIC_CPM				"metalness"
+#define HAPI_UNREAL_PARAM_MAP_METALLIC_CPM_SWITCH		"metalnessswitch"
 
 #define HAPI_UNREAL_PARAM_MAP_METALLIC_COLOR_SPACE		"metallic_textureColorSpace"
 
 // Materials Emissive.
-#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_OGL			"ogl_emit"
 #define HAPI_UNREAL_PARAM_VALUE_EMISSIVE				"emitcolor"
-#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_INTENSITY_OGL  "ogl_emit_intensity"
 #define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_INTENSITY		"emitint"
+#define HAPI_UNREAL_PARAM_MAP_EMISSIVE					"emitcolor_texture"
+#define HAPI_UNREAL_PARAM_MAP_EMISSIVE_ENABLED			"emitcolor_useTexture"
 
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_OGL			"ogl_emit"
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_INTENSITY_OGL  "ogl_emit_intensity"
 #define HAPI_UNREAL_PARAM_MAP_EMISSIVE_OGL				"ogl_emissionmap"
 #define HAPI_UNREAL_PARAM_MAP_EMISSIVE_OGL_ENABLED		"ogl_use_emissionmap"
 
-#define HAPI_UNREAL_PARAM_MAP_EMISSIVE					"emitcolor_texture"
-#define HAPI_UNREAL_PARAM_MAP_EMISSIVE_ENABLED			"emitcolor_useTexture"
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_CPM					"constantemissioncolor"
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_CPM_DEFAULT			"default_emission_color"
+#define HAPI_UNREAL_PARAM_MAP_EMISSIVE_CPM						"emission_color"
+#define HAPI_UNREAL_PARAM_MAP_EMISSIVE_CPM_SWITCH				"emissioncolorswitch"
+
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_INTENSITY_CPM			"constantemissionamount"
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_INTENSITY_CPM_DEFAULT	"default_emission_amount"
+#define HAPI_UNREAL_PARAM_MAP_EMISSIVE_INTENSITY_CPM			"emission"
+#define HAPI_UNREAL_PARAM_MAP_EMISSIVE_INTENSITY_CPM_SWITCH		"emissionamountswitch"
 
 #define HAPI_UNREAL_PARAM_MAP_EMISSIVE_COLOR_SPACE		"emitcolor_textureColorSpace"
 
 // Materials Opacity.
-#define HAPI_UNREAL_PARAM_ALPHA_OGL						"ogl_alpha"
 #define HAPI_UNREAL_PARAM_ALPHA							"opac"
+#define HAPI_UNREAL_PARAM_MAP_OPACITY					"opaccolor_texture"
+#define HAPI_UNREAL_PARAM_MAP_OPACITY_ENABLED			"opaccolor_useTexture"
 
+#define HAPI_UNREAL_PARAM_ALPHA_OGL						"ogl_alpha"
 #define HAPI_UNREAL_PARAM_MAP_OPACITY_OGL				"ogl_opacitymap"
 #define HAPI_UNREAL_PARAM_MAP_OPACITY_OGL_ENABLED		"ogl_use_opacitymap"
 
-#define HAPI_UNREAL_PARAM_MAP_OPACITY					"opaccolor_texture"
-#define HAPI_UNREAL_PARAM_MAP_OPACITY_ENABLED			"opaccolor_useTexture"
+#define HAPI_UNREAL_PARAM_ALPHA_CPM						"constantopacity"
+#define HAPI_UNREAL_PARAM_ALPHA_CPM_DEFAULT				"default_opacity_amount"
+#define HAPI_UNREAL_PARAM_MAP_OPACITY_CPM				"opacity"
+#define HAPI_UNREAL_PARAM_MAP_OPACITY_CPM_SWITCH		"opacityswitch"
 
 // Number of GUID characters to keep for packages
 #define PACKAGE_GUID_LENGTH								8

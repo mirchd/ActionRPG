@@ -27,6 +27,7 @@
 #include "HoudiniOutput.h"
 
 #include "HoudiniAssetComponent.h"
+#include "HoudiniCookable.h"
 #include "HoudiniEngineRuntimeUtils.h"
 #include "HoudiniLandscapeRuntimeUtils.h"
 #include "HoudiniSplineComponent.h"
@@ -46,7 +47,13 @@
 #include "Animation/Skeleton.h"
 #include "Templates/Tuple.h"
 #include "HoudiniFoliageUtils.h"
+#include "Engine/DataTable.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "HAL/FileManager.h"
+#include "Materials/Material.h"
+#if defined(HOUIDNI_USE_PCG)
+#include "HoudiniPCGDataObject.h"
+#endif
 
 
 FHoudiniMaterialIdentifier::FHoudiniMaterialIdentifier(
@@ -159,126 +166,6 @@ GetTypeHash(const FHoudiniOutputObjectIdentifier& HoudiniOutputObjectIdentifier)
 	return HoudiniOutputObjectIdentifier.GetTypeHash();
 }
 
-void
-FHoudiniInstancedOutput::SetVariationObjectAt(const int32 AtIndex, UObject* InObject)
-{
-	// Resize the array if needed
-	if (VariationObjects.Num() <= AtIndex)
-		VariationObjects.SetNum(AtIndex + 1);
-
-	if (VariationTransformOffsets.Num() <= AtIndex)
-		VariationTransformOffsets.SetNum(AtIndex + 1);
-
-	UObject* CurrentObject = VariationObjects[AtIndex].LoadSynchronous();
-	if (CurrentObject == InObject)
-		return;
-
-	VariationObjects[AtIndex] = InObject;
-}
-
-bool 
-FHoudiniInstancedOutput::SetTransformOffsetAt(const float Value, const int32 AtIndex, const int32 PosRotScaleIndex, const int32 XYZIndex)
-{
-	FTransform* Transform = VariationTransformOffsets.IsValidIndex(AtIndex) ? &VariationTransformOffsets[AtIndex] : nullptr;
-	if (!Transform)
-		return false;
-
-	if (PosRotScaleIndex == 0)
-	{
-		FVector Position = Transform->GetLocation();
-		if (Position[XYZIndex] == Value)
-			return false;
-		Position[XYZIndex] = Value;
-		Transform->SetLocation(Position);
-	}
-	else if (PosRotScaleIndex == 1)
-	{
-		FRotator Rotator = Transform->Rotator();
-		switch (XYZIndex)
-		{
-		case 0:
-		{
-			if (Rotator.Roll == Value)
-				return false;
-			Rotator.Roll = Value;
-			break;
-		}
-
-		case 1:
-		{
-			if (Rotator.Pitch == Value)
-				return false;
-			Rotator.Pitch = Value;
-			break;
-		}
-
-		case 2:
-		{
-			if (Rotator.Yaw == Value)
-				return false;
-			Rotator.Yaw = Value;
-			break;
-		}
-		}
-		Transform->SetRotation(Rotator.Quaternion());
-	}
-	else if (PosRotScaleIndex == 2)
-	{
-		FVector Scale = Transform->GetScale3D();
-		if (Scale[XYZIndex] == Value)
-			return false;
-
-		Scale[XYZIndex] = Value;
-		Transform->SetScale3D(Scale);
-	}
-
-	MarkChanged(true);
-
-	return true;
-}
-
-float 
-FHoudiniInstancedOutput::GetTransformOffsetAt(const int32 AtIndex, const int32 PosRotScaleIndex, const int32 XYZIndex)
-{
-	FTransform* Transform = VariationTransformOffsets.IsValidIndex(AtIndex) ? &VariationTransformOffsets[AtIndex] : nullptr;
-	if (!Transform)
-		return 0.0f;
-
-	if (PosRotScaleIndex == 0)
-	{
-		FVector Position = Transform->GetLocation();
-		return Position[XYZIndex];
-	}
-	else if (PosRotScaleIndex == 1)
-	{
-		FRotator Rotator = Transform->Rotator();
-		switch (XYZIndex)
-		{
-			case 0:
-			{
-				return Rotator.Roll;
-			}
-
-			case 1:
-			{
-				return Rotator.Pitch;
-			}
-
-			case 2:
-			{
-				return Rotator.Yaw;
-			}
-		}
-	}
-	else if (PosRotScaleIndex == 2)
-	{
-		FVector Scale = Transform->GetScale3D();
-		return Scale[XYZIndex];
-	}
-
-	return 0.0f;
-}
-
 // ----------------------------------------------------
 // FHoudiniOutputObjectIdentifier
 // ----------------------------------------------------
@@ -293,7 +180,7 @@ FHoudiniOutputObjectIdentifier::FHoudiniOutputObjectIdentifier()
 }
 
 FHoudiniOutputObjectIdentifier::FHoudiniOutputObjectIdentifier(
-	const int32& InObjectId, const int32& InGeoId, const int32& InPartId, const FString& InSplitIdentifier)
+	int32 InObjectId, int32 InGeoId, int32 InPartId, const FString& InSplitIdentifier)
 {
 	ObjectId = InObjectId;
 	GeoId = InGeoId;
@@ -653,6 +540,7 @@ UHoudiniOutput::UHoudiniOutput(const FObjectInitializer & ObjectInitializer)
 	: Super(ObjectInitializer)
 	, Type(EHoudiniOutputType::Invalid)
 	, StaleCount(0)
+	, bCreateSceneComponents(true)
 	, bLandscapeWorldComposition(false)
 	, bIsEditableNode(false)
 	, bHasEditableNodeBuilt(false)
@@ -776,12 +664,15 @@ UHoudiniOutput::GetBounds() const
 				    CurCurveBound += Trans.GetLocation();
 			    }
 
-			    UHoudiniAssetComponent* OuterHAC = Cast<UHoudiniAssetComponent>(GetOuter());
-			    if (IsValid(OuterHAC))
-				    BoxBounds += CurCurveBound.MoveTo(OuterHAC->GetComponentLocation());
+				UHoudiniCookable* OuterHC = Cast<UHoudiniCookable>(GetOuter());
+				if (IsValid(OuterHC))
+				{
+					USceneComponent* OuterComp = OuterHC->GetComponent();
+					if (IsValid(OuterComp))
+						BoxBounds += CurCurveBound.MoveTo(OuterComp->GetComponentLocation());
+				}
 			}
 		}
-
 	}
 	break;
 
@@ -839,8 +730,10 @@ UHoudiniOutput::Clear()
 		    USceneComponent* SceneComp = Cast<USceneComponent>(Component);
 		    if (IsValid(SceneComp))
 		    {
-			    SceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-			    SceneComp->UnregisterComponent();
+				if(SceneComp->GetOwner())
+					SceneComp->UnregisterComponent();
+
+			    SceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);			    
 			    SceneComp->DestroyComponent();
 		    }
 
@@ -864,8 +757,10 @@ UHoudiniOutput::Clear()
 		USceneComponent* ProxyComp = Cast<USceneComponent>(CurrentOutputObject.Value.ProxyComponent);
 		if (IsValid(ProxyComp))
 		{
+			if (ProxyComp->GetOwner())
+				ProxyComp->UnregisterComponent();
+
 			ProxyComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-			ProxyComp->UnregisterComponent();
 			ProxyComp->DestroyComponent();
 		}
 
@@ -1068,6 +963,8 @@ UHoudiniOutput::UpdateOutputType()
 	int32 LandscapeSplineCount = 0;
 	int32 AnimSequenceCount = 0;
 	int32 SkeletonCount = 0;
+	int32 CopCount = 0;
+	int32 PCGCount = 0;
 
 	for (auto& HGPO : HoudiniGeoPartObjects)
 	{
@@ -1100,6 +997,11 @@ UHoudiniOutput::UpdateOutputType()
 		case EHoudiniPartType::SkeletalMeshShape:
 			SkeletonCount++;
 			break;
+		case EHoudiniPartType::Cop:
+			CopCount++;
+			break;
+		case EHoudiniPartType::PCG:
+			PCGCount++;
 		default:
 		case EHoudiniPartType::Invalid:
 			break;
@@ -1145,6 +1047,14 @@ UHoudiniOutput::UpdateOutputType()
 	else if (LandscapeSplineCount > 0)
 	{
 		Type = EHoudiniOutputType::LandscapeSpline;
+	}
+	else if (CopCount > 0)
+	{
+		Type = EHoudiniOutputType::Cop;
+	}
+	else if (PCGCount > 0)
+	{
+		Type = EHoudiniOutputType::PCG;
 	}
 	else
 	{
@@ -1225,7 +1135,15 @@ UHoudiniOutput::OutputTypeToString(const EHoudiniOutputType& InOutputType)
 		case EHoudiniOutputType::LandscapeSpline:
 			OutputTypeStr = TEXT("LandscapeSpline");
 			break;
-
+		case EHoudiniOutputType::AnimSequence:
+			OutputTypeStr = TEXT("AnimSequence");
+			break;
+		case EHoudiniOutputType::Cop:
+			OutputTypeStr = TEXT("Cop");
+			break;
+		case EHoudiniOutputType::PCG:
+			OutputTypeStr = TEXT("PCG");
+			break;
 		default:
 		case EHoudiniOutputType::Invalid:
 			OutputTypeStr = TEXT("Invalid");
@@ -1350,15 +1268,17 @@ void DestroyComponent(UObject * Component)
 	{
 		// Remove from the HoudiniAssetActor
 		if (SceneComponent->GetOwner())
+		{
 			SceneComponent->GetOwner()->RemoveOwnedComponent(SceneComponent);
+			SceneComponent->UnregisterComponent();
+		}
 
 		SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-		SceneComponent->UnregisterComponent();
 		SceneComponent->DestroyComponent();
 	}
 }
 
-void FHoudiniOutputObject::DestroyCookedData()
+void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 {
 	//--------------------------------------------------------------------------------------------------------------------
 	// Destroy all components
@@ -1384,10 +1304,74 @@ void FHoudiniOutputObject::DestroyCookedData()
 	for(UObject* Component : ComponentsToDestroy)
 	{
 		USceneComponent* SceneComponent = Cast<USceneComponent>(Component);
-		SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-		SceneComponent->UnregisterComponent();
+		if(SceneComponent->GetOwner())
+			SceneComponent->UnregisterComponent();
+
+		SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);		
 		SceneComponent->DestroyComponent();
 	}
+
+
+	//--------------------------------------------------------------------------------------------------------------------
+	// Delete output packages, if they exist
+	//--------------------------------------------------------------------------------------------------------------------
+
+#if WITH_EDITOR
+
+	bool bClearAssets = (ClearFlags & EHoudiniClearFlags::EHoudiniClear_Assets) == EHoudiniClearFlags::EHoudiniClear_Assets;
+
+	if(bClearAssets && IsValid(OutputObject))
+	{
+		TArray<FString> PackagesDeleted;
+
+		bool bCanDelete = false;
+		if(OutputObject->IsA<UStaticMesh>() ||
+			OutputObject->IsA<UMaterial>())
+		{
+			bCanDelete = true;
+		}
+
+		if (bCanDelete)
+		{
+			if(UPackage* Package = OutputObject->GetPackage())
+			{
+				TArray<UObject*> ObjectsToDelete;
+				ObjectsToDelete.Add(Package);
+				GetObjectsWithOuter(Package, ObjectsToDelete, true);
+
+				// Use ObjectTools to delete
+				ObjectTools::DeleteObjectsUnchecked(ObjectsToDelete);
+
+				// Also delete the package file from disk
+				FString PackagePath = Package->GetPathName();
+				FString FilePath = FPackageName::LongPackageNameToFilename(PackagePath, FPackageName::GetAssetPackageExtension());
+
+				FString DirectoryPath = FPaths::GetPath(FilePath);
+
+				TArray<FString> Files;
+				TArray<FString> SubDirs;
+				IFileManager::Get().FindFiles(Files, *(DirectoryPath / TEXT("*")), true, false);
+				IFileManager::Get().FindFiles(SubDirs, *(DirectoryPath / TEXT("*")), false, true);
+
+				if(Files.IsEmpty() && SubDirs.IsEmpty())
+				{
+					IFileManager::Get().DeleteDirectory(*DirectoryPath, false, true);
+				}
+			}
+		}
+	}
+
+	bool bClearLandscapeLayers = (ClearFlags & EHoudiniClearFlags::EHoudiniClear_LandscapeLayers) == EHoudiniClearFlags::EHoudiniClear_LandscapeLayers;
+	UHoudiniLandscapeTargetLayerOutput* LayerOutput = Cast<UHoudiniLandscapeTargetLayerOutput>(OutputObject);
+	
+	if (bClearLandscapeLayers && IsValid(LayerOutput))
+	{
+		// For now, only delete layers we created.
+		if (LayerOutput->bLayerWasCreated)
+			FHoudiniLandscapeRuntimeUtils::DeleteEditLayer(LayerOutput->Landscape, FName(LayerOutput->CookedEditLayer));
+	}
+
+#endif
 
 	//--------------------------------------------------------------------------------------------------------------------
 	// Remove spline output
@@ -1401,10 +1385,38 @@ void FHoudiniOutputObject::DestroyCookedData()
 	}
 
 	//--------------------------------------------------------------------------------------------------------------------
+	// If we overwrite a package that contains a data table, Unreal can assert if it points an old RowStruct. So
+	// a workaround is to point the Data Table to a temp structure before its deleted.
+	//--------------------------------------------------------------------------------------------------------------------
+
+	if(UDataTable* Table = Cast<UDataTable>(OutputObject.Get()))
+	{
+		if (Table->RowStruct)
+		{
+			Table->RowStruct = Cast<UScriptStruct>(StaticDuplicateObject(Table->RowStruct, GetTransientPackage()));
+			Table->RowStruct->SetFlags(RF_Transient);
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------------------------------
 	// Destroy all objects
 	//--------------------------------------------------------------------------------------------------------------------
 
-	if (IsValid(OutputObject))
+	if (UHoudiniLandscapeTargetLayerOutput * LandscapeOutput = Cast<UHoudiniLandscapeTargetLayerOutput>(OutputObject))
+	{
+		// We can only clean up new landscapes. Modifications to existing landscapes are destructive, so not much
+		// we can do...
+
+		if (LandscapeOutput->bCreatedLandscape)
+		{
+			if(IsValid(LandscapeOutput->Landscape))
+			{
+				LandscapeOutput->Landscape->Destroy();
+				LandscapeOutput->Landscape = nullptr;
+			}
+		}
+	}
+	else if (IsValid(OutputObject))
 	{
 #if WITH_EDITOR
 		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
@@ -1437,16 +1449,18 @@ void FHoudiniOutputObject::DestroyCookedData()
 		}
 	}
 	OutputActors.Empty();
+
 }
 
 
-void UHoudiniOutput::DestroyCookedData()
+void UHoudiniOutput::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UHoudiniOutput::DestroyCookedData);
 	for (auto It : OutputObjects)
 	{
 		FHoudiniOutputObject* FoundOutputObject = &It.Value;
-		FoundOutputObject->DestroyCookedData();
+		FoundOutputObject->DestroyCookedData(ClearFlags);
 	}
 	OutputObjects.Empty();
 }
+

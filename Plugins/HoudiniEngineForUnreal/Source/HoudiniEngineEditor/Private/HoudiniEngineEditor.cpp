@@ -34,6 +34,7 @@
 #include "HoudiniAssetBroker.h"
 #include "HoudiniAssetComponent.h"
 #include "HoudiniAssetComponentDetails.h"
+#include "HoudiniCookableDetails.h"
 #include "HoudiniEditorNodeSyncSubsystem.h"
 #include "HoudiniEngine.h"
 #include "HoudiniEngineCommands.h"
@@ -90,11 +91,16 @@
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 	#include "Subsystems/PlacementSubsystem.h"
 #endif
+#if defined(HOUDINI_USE_PCG)
+#include "HoudiniPCGDetails.h"
+#endif
 #include "Templates/SharedPointer.h"
 #include "UnrealEdGlobals.h"
 #include "Toolkits/AssetEditorModeUILayer.h"
 #include "Widgets/Docking/SDockTab.h"
-
+#if defined(HOUIDNI_USE_PCG)
+#include "HoudiniPCGComponent.h"
+#endif
 #if WITH_EDITOR
 	#include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructure.h"
 	#include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
@@ -290,11 +296,24 @@ FHoudiniEngineEditor::RegisterDetails()
 	// Register details presenter for our component type and runtime settings.
 	PropertyModule.RegisterCustomClassLayout(
 		TEXT("HoudiniAssetComponent"),
-		FOnGetDetailCustomizationInstance::CreateStatic(&FHoudiniAssetComponentDetails::MakeInstance));
+		FOnGetDetailCustomizationInstance::CreateStatic(&FHoudiniCookableDetails::MakeInstance));
+
+	PropertyModule.RegisterCustomClassLayout(
+		TEXT("HoudiniAssetActor"),
+		FOnGetDetailCustomizationInstance::CreateStatic(&FHoudiniCookableDetails::MakeInstance));
+
+	PropertyModule.RegisterCustomClassLayout(
+		TEXT("HoudiniCookable"),
+		FOnGetDetailCustomizationInstance::CreateStatic(&FHoudiniCookableDetails::MakeInstance));
 
 	PropertyModule.RegisterCustomClassLayout(
 		TEXT("HoudiniRuntimeSettings"),
 		FOnGetDetailCustomizationInstance::CreateStatic(&FHoudiniRuntimeSettingsDetails::MakeInstance));
+#if defined(HOUDINI_USE_PCG)
+	PropertyModule.RegisterCustomClassLayout(
+		TEXT("HoudiniPCGSettings"),
+		FOnGetDetailCustomizationInstance::CreateStatic(&UHoudiniPCGSettingsCustomization::MakeInstance));
+#endif
 }
 
 void
@@ -307,6 +326,9 @@ FHoudiniEngineEditor::UnregisterDetails()
 
 		PropertyModule.UnregisterCustomClassLayout(TEXT("HoudiniAssetComponent"));
 		PropertyModule.UnregisterCustomClassLayout(TEXT("HoudiniRuntimeSettings"));
+#if defined(HOUDINI_USE_PCG)
+		PropertyModule.UnregisterCustomClassLayout(TEXT("HoudiniPCGSettings"));
+#endif
 	}
 }
 
@@ -721,13 +743,13 @@ FHoudiniEngineEditor::ExtendMenu()
 		"FileLoadAndSave", 
 		EExtensionHook::After,
 		HEngineCommands,
-		FMenuExtensionDelegate::CreateRaw(this, &FHoudiniEngineEditor::AddHoudiniFileMenuExtension));
+		FMenuExtensionDelegate::CreateStatic(&FHoudiniEngineEditor::AddHoudiniFileMenuExtension));
 		
 	MainMenuExtender->AddMenuBarExtension(
 		"Edit",
 		EExtensionHook::After,
 		HEngineCommands,
-		FMenuBarExtensionDelegate::CreateRaw(this, &FHoudiniEngineEditor::AddHoudiniEditorMenu));
+		FMenuBarExtensionDelegate::CreateStatic(&FHoudiniEngineEditor::AddHoudiniEditorMenu));
 
 	// Add our menu extender
 	FLevelEditorModule& LevelEditorModule = FModuleManager::LoadModuleChecked<FLevelEditorModule>("LevelEditor");
@@ -754,7 +776,7 @@ FHoudiniEngineEditor::AddHoudiniEditorMenu(FMenuBarBuilder& MenuBarBuilder)
 	MenuBarBuilder.AddPullDownMenu(
 		LOCTEXT("HoudiniLabel", "Houdini Engine"),
 		LOCTEXT("HoudiniMenu_ToolTip", "Open the Houdini Engine menu"),
-		FNewMenuDelegate::CreateRaw(this, &FHoudiniEngineEditor::AddHoudiniMainMenuExtension),
+		FNewMenuDelegate::CreateStatic(&FHoudiniEngineEditor::AddHoudiniMainMenuExtension),
 		"View");
 }
 
@@ -910,15 +932,21 @@ FHoudiniEngineEditor::RegisterSectionMappings()
 	CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_OUTPUTS);
 	Section->AddCategory(*CatName);
 
-	// Categories manually defined in HoudiniAssetComponent.h
-	CatName = TEXT("HoudiniMeshGeneration");
+	// HoudiniNodeSync
+	CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_NODESYNC);
 	Section->AddCategory(*CatName);
 
-	CatName = TEXT("HoudiniProxyMeshGeneration");
+	// HoudiniAsset
+	CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_HDA);
 	Section->AddCategory(*CatName);
 
-	CatName = TEXT("HoudiniAsset");
-	Section->AddCategory(*CatName);	
+	// HoudiniMeshGeneration
+	CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_MESHGEN);
+	Section->AddCategory(*CatName);
+
+	// HoudiniProxyMeshGeneration
+	//CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_PROXY);
+	//Section->AddCategory(*CatName);
 }
 
 void 
@@ -944,10 +972,18 @@ FHoudiniEngineEditor::InitializeWidgetResource()
 	InputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::World))));
 	InputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::Curve))));
 
+	PCGInputTypeChoiceLabels.Reset();
+	PCGInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::Geometry))));
+	PCGInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::World))));
+	PCGInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::PCGInput))));
 
 	BlueprintInputTypeChoiceLabels.Reset();
 	BlueprintInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::Geometry))));
 	BlueprintInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::Curve))));
+
+	AssetEditorInputTypeChoiceLabels.Reset();
+	AssetEditorInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::Geometry))));
+	AssetEditorInputTypeChoiceLabels.Add(MakeShareable(new FString(UHoudiniInput::InputTypeToString(EHoudiniInputType::World))));
 
 	// Choice labels for all Houdini curve types
 	HoudiniCurveTypeChoiceLabels.Reset();
@@ -1004,6 +1040,7 @@ FHoudiniEngineEditor::InitializeWidgetResource()
 	HoudiniEngineBakeTypeOptionLabels.Reset();
 	HoudiniEngineBakeTypeOptionLabels.Add(MakeShareable(new FString(FHoudiniEngineEditor::GetStringFromHoudiniEngineBakeOption(EHoudiniEngineBakeOption::ToActor))));
 	HoudiniEngineBakeTypeOptionLabels.Add(MakeShareable(new FString(FHoudiniEngineEditor::GetStringFromHoudiniEngineBakeOption(EHoudiniEngineBakeOption::ToBlueprint))));
+	HoudiniEngineBakeTypeOptionLabels.Add(MakeShareable(new FString(FHoudiniEngineEditor::GetStringFromHoudiniEngineBakeOption(EHoudiniEngineBakeOption::ToAsset))));
 
 	// Option labels for Houdini Engine PDG bake options
 	HoudiniEnginePDGBakeSelectionOptionLabels.Reset();
@@ -1295,49 +1332,54 @@ FHoudiniEngineEditor::ExtendContextMenu()
 		TArray< FContentBrowserMenuExtender_SelectedAssets >& CBMenuExtenderDelegates = ContentBrowserModule.GetAllAssetViewContextMenuExtenders();
 
 		CBMenuExtenderDelegates.Add(FContentBrowserMenuExtender_SelectedAssets::CreateLambda([this](const TArray<FAssetData>& SelectedAssets)
+		{
+			TSharedRef<FExtender> Extender(new FExtender());
+
+			bool bShouldExtendAssetActions = true;
+			for (const FAssetData& Asset : SelectedAssets)
 			{
-				TSharedRef<FExtender> Extender(new FExtender());
-
-				bool bShouldExtendAssetActions = true;
-				for (const FAssetData& Asset : SelectedAssets)
-				{
-					// TODO: Foliage Types? BP ?
+				// TODO: Foliage Types? BP ?
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-						if ((Asset.AssetClassPath != USkeletalMesh::StaticClass()->GetClassPathName()) && (Asset.AssetClassPath != UStaticMesh::StaticClass()->GetClassPathName()) && (Asset.AssetClassPath != UAnimSequence::StaticClass()->GetClassPathName()))
+				if ((Asset.AssetClassPath != USkeletalMesh::StaticClass()->GetClassPathName())
+					&& (Asset.AssetClassPath != UStaticMesh::StaticClass()->GetClassPathName())
+					&& (Asset.AssetClassPath != UAnimSequence::StaticClass()->GetClassPathName())
+					&& (Asset.AssetClassPath != UTexture2D::StaticClass()->GetClassPathName()))
 #else
-						if ((Asset.AssetClass != USkeletalMesh::StaticClass()->GetFName()) && (Asset.AssetClass != UStaticMesh::StaticClass()->GetFName()) && (Asset.AssetClass != UAnimSequence::StaticClass()->GetFName()))					
+				if ((Asset.AssetClass != USkeletalMesh::StaticClass()->GetFName()) 
+					&& (Asset.AssetClass != UStaticMesh::StaticClass()->GetFName()) 
+					&& (Asset.AssetClass != UAnimSequence::StaticClass()->GetFName())
+					&& (Asset.AssetClass != UTexture2D::StaticClass()->GetFName()))
 #endif
-					{
-						bShouldExtendAssetActions = false;
-						break;
-					}
-				}
-
-				if (bShouldExtendAssetActions)
 				{
-					Extender->AddMenuExtension(
-						"GetAssetActions",
-						EExtensionHook::After,
-						nullptr,
-						FMenuExtensionDelegate::CreateLambda(
-							[SelectedAssets, this](FMenuBuilder& MenuBuilder)
-							{
-								MenuBuilder.AddMenuEntry(
-									LOCTEXT("CB_Extension_SendToHoudini", "Send To Houdini"),
-									LOCTEXT("CB_Extension_SendToHoudini_Tooltip", "Send this asset to houdini"),
-									FSlateIcon(FHoudiniEngineStyle::GetStyleSetName(), "HoudiniEngine.HoudiniEngineLogo"),
-									FUIAction(
-										FExecuteAction::CreateLambda([SelectedAssets, this]() { SendToHoudini_CB(SelectedAssets); }),
-										FCanExecuteAction::CreateLambda([=] { return (SelectedAssets.Num() > 0); })
-									)
-								);
-							})
-					);
+					bShouldExtendAssetActions = false;
+					break;
 				}
-
-				return Extender;
 			}
-		));
+
+			if (bShouldExtendAssetActions)
+			{
+				Extender->AddMenuExtension(
+					"GetAssetActions",
+					EExtensionHook::After,
+					nullptr,
+					FMenuExtensionDelegate::CreateLambda(
+						[SelectedAssets, this](FMenuBuilder& MenuBuilder)
+						{
+							MenuBuilder.AddMenuEntry(
+								LOCTEXT("CB_Extension_SendToHoudini", "Send To Houdini"),
+								LOCTEXT("CB_Extension_SendToHoudini_Tooltip", "Send this asset to houdini"),
+								FSlateIcon(FHoudiniEngineStyle::GetStyleSetName(), "HoudiniEngine.HoudiniEngineLogo"),
+								FUIAction(
+									FExecuteAction::CreateLambda([SelectedAssets, this]() { SendToHoudini_CB(SelectedAssets); }),
+									FCanExecuteAction::CreateLambda([=] { return (SelectedAssets.Num() > 0); })
+								)
+							);
+						})
+				);
+			}
+
+			return Extender;
+		}));
 		ContentBrowserExtenderDelegateHandle = CBMenuExtenderDelegates.Last().GetHandle();
 
 	}
@@ -1798,6 +1840,10 @@ FHoudiniEngineEditor::GetStringFromHoudiniEngineBakeOption(EHoudiniEngineBakeOpt
 	case EHoudiniEngineBakeOption::ToBlueprint:
 		Str = "Blueprint";
 		break;
+
+	case EHoudiniEngineBakeOption::ToAsset:
+		Str = "Asset";
+		break;
 	}
 
 	return Str;
@@ -1878,6 +1924,9 @@ FHoudiniEngineEditor::StringToHoudiniEngineBakeOption(const FString & InString)
 
 	if (InString == "Blueprint")
 		return EHoudiniEngineBakeOption::ToBlueprint;
+
+	if (InString == "Asset")
+		return EHoudiniEngineBakeOption::ToAsset;
 
 	return EHoudiniEngineBakeOption::ToActor;
 }
@@ -1976,7 +2025,7 @@ FHoudiniEngineEditor::HandleOnBeginPIE()
 
 				// If the session wasn't stopped - we just need to start ticking again
 				if (!FHoudiniEngine::Get().IsTicking())
-					FHoudiniEngine::Get().StartTicking();
+					FHoudiniEngine::Get().StartTicking(true);
 
 				FEditorDelegates::EndPIE.Remove(EndPIEEditorDelegateHandle);
 			});
@@ -2073,6 +2122,7 @@ FHoudiniEngineEditor::OnSpawnNodeSyncTab(const FSpawnTabArgs& SpawnTabArgs)
 	//.Icon(FHoudiniEngineStyle::Get()->GetBrush("HoudiniEngine.HoudiniEngineLogo"))
 	[
 		SAssignNew(NodeSyncPanel, SHoudiniNodeSyncPanel)
+		.IsAssetEditor(false)
 	];
 
 	SpawnedTab->SetTabIcon(FHoudiniEngineStyle::Get()->GetBrush("HoudiniEngine.HoudiniEngineLogo"));
@@ -2093,6 +2143,5 @@ TSharedRef<SDockTab> FHoudiniEngineEditor::OnSpawnHoudiniToolsTab(const FSpawnTa
 
 	return SpawnedTab;
 }
-
 
 #undef LOCTEXT_NAMESPACE

@@ -74,7 +74,7 @@ UHoudiniPresetActorFactory::GetAssetFromActorInstance(AActor * Instance)
 	AHoudiniAssetActor * HoudiniAssetActor = CastChecked<AHoudiniAssetActor>(Instance);
 
 	check(HoudiniAssetActor->GetHoudiniAssetComponent());
-	return HoudiniAssetActor->GetHoudiniAssetComponent()->HoudiniAsset;
+	return HoudiniAssetActor->GetHoudiniAssetComponent()->HoudiniAsset_DEPRECATED;
 }
 
 void
@@ -88,29 +88,34 @@ UHoudiniPresetActorFactory::PostSpawnActor(UObject* InObject, AActor* NewActor)
 	}
 
 	UHoudiniAsset* HoudiniAsset = Preset->SourceHoudiniAsset;
-	if (HoudiniAsset)
+	if (!HoudiniAsset)
+		return;
+
+	AHoudiniAssetActor* HoudiniAssetActor = CastChecked<AHoudiniAssetActor>(NewActor);
+	UHoudiniCookable* HoudiniCookable = HoudiniAssetActor->GetHoudiniCookable();
+	UHoudiniAssetComponent* HoudiniAssetComponent = HoudiniAssetActor->GetHoudiniAssetComponent();
+
+	check(HoudiniAssetComponent);
+
+	FHoudiniEngineUtils::AddHoudiniLogoToComponent(HoudiniAssetComponent);
+
+	if (HoudiniAssetActor->IsUsedForPreview())
+		return;
+
+	if (HoudiniCookable)
 	{
-		AHoudiniAssetActor* HoudiniAssetActor = CastChecked<AHoudiniAssetActor>(NewActor);
-		UHoudiniAssetComponent* HoudiniAssetComponent = HoudiniAssetActor->GetHoudiniAssetComponent();
-		check(HoudiniAssetComponent);
+		HoudiniCookable->SetHoudiniAsset(HoudiniAsset);
+		FHoudiniEngineRuntime::Get().RegisterHoudiniCookable(HoudiniCookable);
 
-		FHoudiniEngineUtils::AddHoudiniLogoToComponent(HoudiniAssetComponent);
-
-		if (!HoudiniAssetActor->IsUsedForPreview())
+		// Apply the preset once the Cookable has reached the PreCookCallback
+		// (which is when both the inputs and parameters have been initialized).
+		HoudiniCookable->QueuePreCookCallback([Preset](UHoudiniCookable* InHC)
 		{
-			HoudiniAssetComponent->SetHoudiniAsset(HoudiniAsset);
-			FHoudiniEngineRuntime::Get().RegisterHoudiniComponent(HoudiniAssetComponent);
-
-			// Apply the preset once the HoudiniAssetComponent has reached the PreCookCallback (which is when
-			// both the HAC inputs and parameters have been initialized).
-			HoudiniAssetComponent->QueuePreCookCallback([Preset](UHoudiniAssetComponent* InHoudiniAssetComponent)
+			if (IsValid(InHC) && IsValid(Preset))
 			{
-				if (IsValid(InHoudiniAssetComponent) && IsValid(Preset))
-				{
-					FHoudiniToolsEditor::ApplyPresetToHoudiniAssetComponent(Preset, InHoudiniAssetComponent);
-				}
-			});
-		}
+				FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(Preset, InHC);
+			}
+		});
 	}
 }
 
@@ -128,18 +133,21 @@ UHoudiniPresetActorFactory::PostCreateBlueprint(UObject* InObject, AActor * CDO)
 	UHoudiniAsset* HoudiniAsset = Preset->SourceHoudiniAsset;
 	if (HoudiniAsset)
 	{
-		AHoudiniAssetActor * HoudiniAssetActor = CastChecked< AHoudiniAssetActor >(CDO);
-		UHoudiniAssetComponent * HoudiniAssetComponent = HoudiniAssetActor->GetHoudiniAssetComponent();
+		AHoudiniAssetActor* HoudiniAssetActor = CastChecked< AHoudiniAssetActor >(CDO);
+		UHoudiniAssetComponent* HoudiniAssetComponent = HoudiniAssetActor->GetHoudiniAssetComponent();
 		check(HoudiniAssetComponent);
 
-		FHoudiniEngineUtils::AddHoudiniLogoToComponent(HoudiniAssetComponent);
+		UHoudiniCookable* Cookable = HoudiniAssetActor->GetHoudiniCookable();
+		check(Cookable);
 
+		FHoudiniEngineUtils::AddHoudiniLogoToComponent(HoudiniAssetComponent);
 		if (!HoudiniAssetActor->IsUsedForPreview())
 		{
-			HoudiniAssetComponent->SetHoudiniAsset(HoudiniAsset);
-			FHoudiniEngineRuntime::Get().RegisterHoudiniComponent(HoudiniAssetComponent);
+			Cookable->SetHoudiniAsset(HoudiniAsset);
+			FHoudiniEngineRuntime::Get().RegisterHoudiniCookable(Cookable);
+
 			// We probably need to wait for a cook before we can apply the preset?
-			FHoudiniToolsEditor::ApplyPresetToHoudiniAssetComponent(Preset, HoudiniAssetComponent);
+			FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(Preset, Cookable);
 		}
 	}
 }

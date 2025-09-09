@@ -26,7 +26,7 @@
 
 #include "HoudiniLandscapeUtils.h"
 #include "LandscapeEdit.h"
-#include "HoudiniAssetComponent.h"
+#include "HoudiniCookable.h"
 #include "Landscape.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
 #include "UObject/UObjectGlobals.h"
@@ -70,19 +70,17 @@ FHoudiniLandscapeUtils::GetEditLayers(UHoudiniOutput& Output)
 }
 
 TSet<FString>
-FHoudiniLandscapeUtils::GetCookedLandscapeLayers(UHoudiniAssetComponent& HAC, ALandscape& Landscape)
+FHoudiniLandscapeUtils::GetCookedLandscapeLayers(UHoudiniCookable& HC, ALandscape& Landscape)
 {
 	TSet<FString> Layers;
-
-	for(int OutputIndex = 0; OutputIndex < HAC.GetNumOutputs(); OutputIndex++)
+	for(int OutputIndex = 0; OutputIndex < HC.GetNumOutputs(); OutputIndex++)
 	{
-		UHoudiniOutput* Output 	= HAC.GetOutputAt(OutputIndex);
+		UHoudiniOutput* Output 	= HC.GetOutputAt(OutputIndex);
 		if (!IsValid(Output))
 			continue;
 
-		TSet<UHoudiniLandscapeTargetLayerOutput * > LandscapeEditLayers = GetEditLayers(*Output);
-
-		for(UHoudiniLandscapeTargetLayerOutput * Layer : LandscapeEditLayers)
+		TSet<UHoudiniLandscapeTargetLayerOutput*> LandscapeEditLayers = GetEditLayers(*Output);
+		for(UHoudiniLandscapeTargetLayerOutput* Layer : LandscapeEditLayers)
 		{
 			if (Layer->Landscape == &Landscape)
 				Layers.Add(Layer->CookedEditLayer);
@@ -92,10 +90,10 @@ FHoudiniLandscapeUtils::GetCookedLandscapeLayers(UHoudiniAssetComponent& HAC, AL
 }
 
 void
-FHoudiniLandscapeUtils::SetNonCookedLayersVisibility(UHoudiniAssetComponent& HAC, ALandscape& Landscape, bool bVisible)
+FHoudiniLandscapeUtils::SetNonCookedLayersVisibility(UHoudiniCookable& HC, ALandscape& Landscape, bool bVisible)
 {
 	FString LayerName;
-	TSet<FString> CookedLayers = GetCookedLandscapeLayers(HAC, Landscape);
+	TSet<FString> CookedLayers = GetCookedLandscapeLayers(HC, Landscape);	
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
 	TArrayView<const FLandscapeLayer> Layers = Landscape.GetLayersConst();
 	for (int LayerIndex = 0; LayerIndex < Landscape.GetLayersConst().Num(); LayerIndex++)
@@ -132,10 +130,10 @@ FHoudiniLandscapeUtils::SetNonCookedLayersVisibility(UHoudiniAssetComponent& HAC
 }
 
 void
-FHoudiniLandscapeUtils::SetCookedLayersVisibility(UHoudiniAssetComponent& HAC, ALandscape& Landscape, bool bVisible)
+FHoudiniLandscapeUtils::SetCookedLayersVisibility(UHoudiniCookable& HC, ALandscape& Landscape, bool bVisible)
 {
 	FString LayerName;
-	TSet<FString> CookedLayers = GetCookedLandscapeLayers(HAC, Landscape);
+	TSet<FString> CookedLayers = GetCookedLandscapeLayers(HC, Landscape);
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
 	TArrayView<const FLandscapeLayer> Layers = Landscape.GetLayersConst();
 	for (int LayerIndex = 0; LayerIndex < Landscape.GetLayersConst().Num(); LayerIndex++)
@@ -257,8 +255,10 @@ const FLandscapeLayer*
 #else
 FLandscapeLayer*
 #endif
-FHoudiniLandscapeUtils::GetOrCreateEditLayer(ALandscape* Landscape, const FName& LayerName)
+FHoudiniLandscapeUtils::GetOrCreateEditLayer(ALandscape* Landscape, const FName& LayerName, bool* bCreated)
 {
+	if (bCreated)
+		*bCreated = false;
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
 	const FLandscapeLayer* UnrealEditLayer = GetEditLayer(Landscape, LayerName);
 #else
@@ -278,8 +278,9 @@ FHoudiniLandscapeUtils::GetOrCreateEditLayer(ALandscape* Landscape, const FName&
 #else
 		UnrealEditLayer = Landscape->GetLayer(EditLayerIndex);
 #endif
+		if (bCreated)
+		*bCreated = true;
 	}
-
 	return UnrealEditLayer;
 }
 
@@ -500,7 +501,7 @@ FHoudiniLayersToUnrealLandscapeMapping
 FHoudiniLandscapeUtils::ResolveLandscapes(
 	const FString& CookedLandscapePrefix,
 	const FHoudiniPackageParams& PackageParams, 
-	UHoudiniAssetComponent* HAC,
+	const FHoudiniLandscapeSettings& LandscapeSettings,
 	TMap<FString, ALandscape*>& LandscapeMap,
 	TArray<FHoudiniHeightFieldPartData>& Parts, 
 	UWorld * World, 
@@ -622,8 +623,7 @@ FHoudiniLandscapeUtils::ResolveLandscapes(
 			// Adjust the transform of the Landscape actor we are creating if this is a single tile.
 			LocalHeightFieldTransform = GetLandscapeActorTransformFromTileTransform(LocalHeightFieldTransform, HeightPart->TileInfo.GetValue());
 		}
-		FTransform HACTransform = HAC->GetComponentToWorld();
-		FTransform LandscapeTransform = LocalHeightFieldTransform * HACTransform;
+		FTransform LandscapeTransform = LocalHeightFieldTransform * LandscapeSettings.LocalToWorldTransform;
 		LandscapeActor->SetActorTransform(LandscapeTransform);
 
 		//---------------------------------------------------------------------------------------------------------------------------------
@@ -1559,6 +1559,16 @@ FHoudiniLandscapeUtils::ApplySegmentsToLandscapeEditLayers(
 	}
 
 	return bSuccess;
+}
+
+void FHoudiniLandscapeUtils::DeleteCookedLayer(UHoudiniLandscapeTargetLayerOutput* Layer)
+{
+	int32 EditLayerIndex = Layer->Landscape->GetLayerIndex(FName(Layer->CookedEditLayer));
+	if(EditLayerIndex == INDEX_NONE)
+		return;
+
+	Layer->Landscape->DeleteLayer(EditLayerIndex);
+
 }
 
 void FHoudiniLandscapeUtils::ApplyLocks(UHoudiniLandscapeTargetLayerOutput* Output)

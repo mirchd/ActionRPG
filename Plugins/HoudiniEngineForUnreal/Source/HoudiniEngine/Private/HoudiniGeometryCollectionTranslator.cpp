@@ -1,6 +1,7 @@
 #include "HoudiniGeometryCollectionTranslator.h"
 
 #include "HoudiniApi.h"
+#include "HoudiniCookable.h"
 #include "HoudiniEngine.h"
 #include "HoudiniEngineRuntimeUtils.h"
 #include "HoudiniEngineString.h"
@@ -126,10 +127,10 @@ FHoudiniGeometryCollectionTranslator::SetupGeometryCollectionComponentFromOutput
 
 			GeometryCollectionActor->GetGeometryCollectionComponent()->SetRestCollection(GeometryCollection);
 
-			UHoudiniAssetComponent* HAC = FHoudiniEngineUtils::GetOuterHoudiniAssetComponent(HoudiniOutput);
-			if (IsValid(HAC))
+			UHoudiniCookable* HC = FHoudiniEngineUtils::GetOuterHoudiniCookable(HoudiniOutput);
+			if (IsValid(HC) && HC->GetComponent())
 			{
-				GeometryCollectionActor->AttachToComponent(HAC, FAttachmentTransformRules::KeepWorldTransform);
+				GeometryCollectionActor->AttachToComponent(HC->GetComponent(), FAttachmentTransformRules::KeepWorldTransform);
 			}
 
 			ActorTransform = ParentComponent->GetOwner()->GetTransform();
@@ -414,7 +415,10 @@ FHoudiniGeometryCollectionTranslator::CreateNewGeometryActor(
 
 	// copy transform of original static mesh actor to this new actor
 	NewActor->SetActorLabel(InActorName);
-	NewActor->SetActorTransform(InTransform);
+	// Only copy position, or else we might end up with double rotations afterwards
+	// if the parent Actor is rotated as well.
+	NewActor->SetActorLocation(InTransform.GetLocation());
+	//NewActor->SetActorTransform(InTransform);
 	
 	return NewActor;
 }

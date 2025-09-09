@@ -30,6 +30,8 @@ using System.IO;
 
 public class HoudiniEngineEditor : ModuleRules
 {
+	private int HOUDINI_USE_PCG  = 0;
+		
     public HoudiniEngineEditor( ReadOnlyTargetRules Target ) : base( Target )
     {
         bPrecompile = true;
@@ -81,7 +83,8 @@ public class HoudiniEngineEditor : ModuleRules
                 "FoliageEdit",
                 "Chaos",
                 "GeometryCollectionEngine",
-                "MaterialEditor"
+                "MaterialEditor",
+                "ToolMenus"
             }
         );
 
@@ -117,10 +120,24 @@ public class HoudiniEngineEditor : ModuleRules
                 "ToolWidgets",
                 "EditorFramework",
                 "DataLayerEditor",
-                "TraceAnalysis"
+                "TraceAnalysis",
+                "PhysicsCore",
+                "KismetWidgets",
+                "AdvancedPreviewScene"
             }
         );
         
+        if (HOUDINI_USE_PCG == 1)
+        {
+            PrivateDependencyModuleNames.AddRange(
+                new string[]
+                {
+                    "PCG"
+                }
+            );
+			PrivateDefinitions.Add("HOUDINI_USE_PCG=1");
+		}
+		
         if (Target.Version.MajorVersion == 5 && (Target.Version.MinorVersion == 0 || Target.Version.MinorVersion == 1))
 		{
 			PrivateDependencyModuleNames.AddRange(

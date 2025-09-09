@@ -28,6 +28,7 @@
 
 #include "CoreMinimal.h"
 #include "IDetailCustomization.h"
+#include "HoudiniCookableDetails.h"
 #include "HoudiniPDGDetails.h"
 #include "HoudiniOutputDetails.h"
 #include "HoudiniParameterDetails.h"
@@ -49,40 +50,16 @@ public:
 	// Create an instance of this detail layout class.
 	static TSharedRef<IDetailCustomization> MakeInstance();
 
-	// Adds a text row that indicate the status of the Houdini Session
-	static void AddSessionStatusRow(IDetailCategoryBuilder& InCategory);
-
-	static bool GetSessionStatusAndColor(FString& OutStatusString, FLinearColor& OutStatusColor);
-
 private:
-
-	// Adds a text row indicate we're using a Houdini indie license
-	void AddIndieLicenseRow(IDetailCategoryBuilder& InCategory);
-
-	// Adds a text row indicate we're using a Houdini Edu license
-	void AddEducationLicenseRow(IDetailCategoryBuilder& InCategory);
-
-	// Adds a category for baking options
-	void AddBakeMenu(IDetailCategoryBuilder& InCategory, UHoudiniAssetComponent* HAC);
 
 	// Handler for double clicking the static mesh thumbnail, opens the editor.
 	FReply OnThumbnailDoubleClick(
 		const FGeometry& InMyGeometry, const FPointerEvent& InMouseEvent, UObject* Object);
 
-	// TSharedPtr<SWidget> ConstructActionMenu(TWeakObjectPtr<UHoudiniAssetComponent> HAC);
-	
 	// Components which are being customized.
 	TArray<TWeakObjectPtr<UHoudiniAssetComponent>> HoudiniAssetComponents;
 
-	// Structure holding the output's details
-	TSharedPtr<FHoudiniOutputDetails, ESPMode::NotThreadSafe> OutputDetails;
 
-	// Structure holding the parameter's details
-	TSharedPtr<FHoudiniParameterDetails, ESPMode::NotThreadSafe> ParameterDetails;
-
-	// Structure holding the PDG Asset Link's details
-	TSharedPtr<FHoudiniPDGDetails, ESPMode::NotThreadSafe> PDGDetails;
-
-	// Structure holding the HoudiniAsset details
-	TSharedPtr<FHoudiniEngineDetails, ESPMode::NotThreadSafe> HoudiniEngineDetails;
+	// Structure holding the Cookable details
+	TSharedPtr<FHoudiniCookableDetails> CookableDetails;
 };

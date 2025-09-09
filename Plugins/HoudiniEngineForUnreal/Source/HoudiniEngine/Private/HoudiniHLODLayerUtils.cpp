@@ -67,25 +67,6 @@ FHoudiniHLODLayerUtils::GetHLODLayers(HAPI_NodeId NodeId, HAPI_PartId PartId, HA
 }
 
 TArray<FHoudiniHLODLayer>
-FHoudiniHLODLayerUtils::GetHLODLayers(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_AttributeOwner Owner)
-{
-	TArray<FString> HLODNames;
-	FHoudiniHapiAccessor Accessor(NodeId, PartId, HAPI_UNREAL_ATTRIB_HLOD_LAYER);
-	Accessor.GetAttributeData(Owner, HLODNames);
-	if(HLODNames.IsEmpty())
-		return {};
-
-	TArray<FHoudiniHLODLayer> Results;
-	Results.SetNum(HLODNames.Num());
-	for (int Index = 0; Index < HLODNames.Num(); Index++)
-	{
-		Results[Index].Name = HLODNames[Index];
-	}
-
-	return Results;
-}
-
-TArray<FHoudiniHLODLayer>
 FHoudiniHLODLayerUtils::GetHLODLayers(HAPI_NodeId NodeId, HAPI_PartId PartId)
 {
 	TArray<FHoudiniHLODLayer> Results;

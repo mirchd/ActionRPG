@@ -93,3 +93,26 @@ UHoudiniParameterToggle::SetDefaultValues()
 		DefaultValues.Add(Values[Idx]);
 	}
 }
+
+bool
+UHoudiniParameterToggle::SetValuesIfChanged(const TArray<int>& NewValues)
+{
+	// Sets the new values, and returns true if any (or number) of parameters changed.
+	if(NewValues.Num() != Values.Num())
+	{
+		Values = NewValues;
+		bHasChanged = true;
+		return true;
+	}
+
+	for(int Index = 0; Index < NewValues.Num(); Index++)
+	{
+		if(Values[Index] != NewValues[Index])
+		{
+			Values = NewValues;
+			bHasChanged = true;
+			return true;
+		}
+	}
+	return false;
+}

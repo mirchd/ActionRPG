@@ -34,7 +34,7 @@
 #include "HAPI/HAPI_Common.h"
 #include "UObject/Class.h"
 
-class UHoudiniAssetComponent;
+class UHoudiniCookable;
 class UHoudiniLandscapeTargetLayerOutput;
 class UHoudiniOutput;
 class ALandscape;
@@ -217,17 +217,23 @@ struct FHoudiniLandscapeSplineApplyLayerData
     TArray<TObjectPtr<ULandscapeSplineSegment>> SegmentsToApply;
 };
 
+struct FHoudiniLandscapeSettings
+{
+    FTransform LocalToWorldTransform = FTransform::Identity;
+    bool bUseTempLayers = false;
+    FString TempLayerSuffix;
+};
 
 struct HOUDINIENGINE_API FHoudiniLandscapeUtils
 {
 	
-    static TSet<FString> GetCookedLandscapeLayers(UHoudiniAssetComponent& HAC, ALandscape& Landscape);
+    static TSet<FString> GetCookedLandscapeLayers(UHoudiniCookable& HC, ALandscape& Landscape);
 
     static TSet<UHoudiniLandscapeTargetLayerOutput *> GetEditLayers(UHoudiniOutput& Output);
 
-    static void SetNonCookedLayersVisibility(UHoudiniAssetComponent& HAC, ALandscape& Landscape,  bool bVisible);
+    static void SetNonCookedLayersVisibility(UHoudiniCookable& HC, ALandscape& Landscape,  bool bVisible);
 
-    static void SetCookedLayersVisibility(UHoudiniAssetComponent& HAC, ALandscape& Landscape, bool bVisible);
+    static void SetCookedLayersVisibility(UHoudiniCookable& HC, ALandscape& Landscape, bool bVisible);
     
 	static void RealignHeightFieldData(TArray<float>& Data, float ZeroPoint, float Scale);
 
@@ -248,11 +254,11 @@ struct HOUDINIENGINE_API FHoudiniLandscapeUtils
 
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
     static const FLandscapeLayer* GetEditLayer(ALandscape* Landscape, const FName& LayerName);
-    static const FLandscapeLayer* GetOrCreateEditLayer(ALandscape* Landscape, const FName& LayerName);
+    static const FLandscapeLayer* GetOrCreateEditLayer(ALandscape* Landscape, const FName& LayerName, bool* bCreated=nullptr);
     static const FLandscapeLayer* MoveEditLayerAfter(ALandscape* Landscape, const FName& LayerName, const FName& AfterLayerName);
 #else
     static FLandscapeLayer* GetEditLayer(ALandscape* Landscape, const FName& LayerName);
-    static FLandscapeLayer* GetOrCreateEditLayer(ALandscape* Landscape, const FName& LayerName);
+    static FLandscapeLayer* GetOrCreateEditLayer(ALandscape* Landscape, const FName& LayerName, bool* bCreated = nullptr);
     static FLandscapeLayer* MoveEditLayerAfter(ALandscape* Landscape, const FName& LayerName, const FName& AfterLayerName);
 #endif
 
@@ -260,8 +266,8 @@ struct HOUDINIENGINE_API FHoudiniLandscapeUtils
 
     static FHoudiniLayersToUnrealLandscapeMapping ResolveLandscapes(const FString & CookedLandscapePrefix, 
 			const FHoudiniPackageParams& PackageParams, 
-            UHoudiniAssetComponent* HAC, 
-            TMap<FString,ALandscape*>& LandsscapeMap, 
+			const FHoudiniLandscapeSettings& LandscapeSettings,
+            TMap<FString,ALandscape*>& LandscapeMap, 
             TArray<FHoudiniHeightFieldPartData>& Parts, 
             UWorld* World, 
             const TArray<ALandscapeProxy*>& LandscapeInputs);
@@ -334,6 +340,8 @@ struct HOUDINIENGINE_API FHoudiniLandscapeUtils
     static FHoudiniExtents GetLandscapeExtents(ALandscapeProxy * Landscape);
 
     static void ApplyLocks(UHoudiniLandscapeTargetLayerOutput* Output);
+
+    static void DeleteCookedLayer(UHoudiniLandscapeTargetLayerOutput * Layer);
 
     //-------------------
     // Landscape splines

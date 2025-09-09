@@ -85,9 +85,6 @@ UHoudiniRuntimeSettings::UHoudiniRuntimeSettings( const FObjectInitializer & Obj
 	DefaultBakeFolder = HAPI_UNREAL_DEFAULT_BAKE_FOLDER;
 	bUsePresetsForParameters = true;
 
-	// Instances
-	bEnableDeprecatedInstanceVariations = false;
-
 	// Parameter options
 	//bTreatRampParametersAsMultiparms = false;
 
@@ -141,7 +138,6 @@ UHoudiniRuntimeSettings::UHoudiniRuntimeSettings( const FObjectInitializer & Obj
 	RecomputeNormalsFlag = HRSRF_OnlyIfMissing;
 	RecomputeTangentsFlag = HRSRF_OnlyIfMissing;
 	bUseMikkTSpace = true;
-	bBuildAdjacencyBuffer = true; // v1 default false
 
 	bComputeWeightedNormals = false;
 	bBuildReversedIndexBuffer = true;

@@ -112,16 +112,6 @@ struct HOUDINIENGINE_API FUnrealMeshTranslator
 			UStaticMesh const* StaticMesh,
 			UStaticMeshComponent const* StaticMeshComponent);
 
-		// Convert the Mesh using FRawMesh
-		static bool CreateInputNodeForRawMesh(
-			const HAPI_NodeId& NodeId,
-			const FStaticMeshSourceModel& SourceModel,
-			const int32& LODIndex,
-			const bool&	DoExportLODs,
-			bool bInExportMaterialParametersAsAttributes,
-			UStaticMesh* StaticMesh,
-			UStaticMeshComponent* StaticMeshComponent);
-
 		static bool CreateInputNodeForBox(
 			HAPI_NodeId& OutBoxNodeId,
 			const HAPI_NodeId& InParentNodeID,
@@ -202,5 +192,5 @@ struct HOUDINIENGINE_API FUnrealMeshTranslator
 
 		// Gets the simple physical Material path for the mesh component overrides or,
 		// if not set, from the body setup
-		static FString GetSimplePhysicalMaterialPath(UMeshComponent const* MeshComponent, UBodySetup const* BodySetup);
+		static FString GetSimplePhysicalMaterialPath(UBodySetup const* BodySetup);
 };

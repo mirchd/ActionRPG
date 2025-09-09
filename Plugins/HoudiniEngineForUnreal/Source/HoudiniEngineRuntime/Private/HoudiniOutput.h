@@ -34,6 +34,10 @@
 #include "Misc/StringFormatArg.h"
 #include "HoudiniGenericAttribute.h"
 #include "UObject/SoftObjectPtr.h"
+#if defined(HOUDINI_USE_PCG)
+#include "PCGParamData.h"
+#include "Data/PCGSplineData.h"
+#endif
 #include "HoudiniOutput.generated.h"
 
 class UFoliageType;
@@ -45,6 +49,41 @@ class ULandscapeSplineSegment;
 class USkeleton;
 class ALandscapeSplineActor;
 struct FHoudiniDataLayer;
+
+enum class EHoudiniClearFlags : uint32
+{
+	EHoudiniClear_Actors = 1 << 1,
+	EHoudiniClear_Assets = 1 << 2,
+	EHoudiniClear_LandscapeLayers = 1 << 3,
+};
+
+// Overloaded operators for setting flags  
+inline EHoudiniClearFlags operator|(EHoudiniClearFlags A, EHoudiniClearFlags B)
+{
+	return static_cast<EHoudiniClearFlags>(static_cast<uint32>(A) | static_cast<uint32>(B));
+}
+
+inline EHoudiniClearFlags& operator|=(EHoudiniClearFlags& A, EHoudiniClearFlags B)
+{
+	A = A | B;
+	return A;
+}
+
+inline EHoudiniClearFlags operator&(EHoudiniClearFlags A, EHoudiniClearFlags B)
+{
+	return static_cast<EHoudiniClearFlags>(static_cast<uint32>(A) & static_cast<uint32>(B));
+}
+
+inline EHoudiniClearFlags& operator&=(EHoudiniClearFlags& A, EHoudiniClearFlags B)
+{
+	A = A & B;
+	return A;
+}
+
+inline EHoudiniClearFlags operator~(EHoudiniClearFlags A)
+{
+	return static_cast<EHoudiniClearFlags>(~static_cast<uint32>(A));
+}
 
 
 UENUM()
@@ -113,6 +152,7 @@ public:
 	FName EditLayerName;
 };
 
+class UHoudiniOutput;
 
 USTRUCT()
 struct HOUDINIENGINERUNTIME_API FHoudiniExtents
@@ -247,6 +287,10 @@ public:
 	UPROPERTY()
 	TArray<FHoudiniGenericAttribute> PropertyAttributes;
 
+	UPROPERTY()
+	bool bLayerWasCreated = false;
+
+
 };
 
 UCLASS()
@@ -349,7 +393,7 @@ struct HOUDINIENGINERUNTIME_API FHoudiniOutputObjectIdentifier
 public:
 	// Constructors
 	FHoudiniOutputObjectIdentifier();
-	FHoudiniOutputObjectIdentifier(const int32& InObjectId, const int32& InGeoId, const int32& InPartId, const FString& InSplitIdentifier);
+	FHoudiniOutputObjectIdentifier(int32 InObjectId, int32 InGeoId, int32 InPartId, const FString& InSplitIdentifier);
 
 	// Return hash value for this object, used when using this object as a key inside hashing containers.
 	uint32 GetTypeHash() const;
@@ -433,65 +477,17 @@ struct HOUDINIENGINERUNTIME_API FHoudiniInstancedOutput
 {
 	GENERATED_USTRUCT_BODY()
 
-public:
-
 	void MarkChanged(const bool InChanged) { bChanged = InChanged; };
 
-	void SetVariationObjectAt(const int32 AtIndex, UObject* InObject);
-
-	bool SetTransformOffsetAt(const float Value, const int32 AtIndex, const int32 PosRotScaleIndex, const int32 XYZIndex);
-
-	float GetTransformOffsetAt(const int32 AtIndex, const int32 PosRotScaleIndex, const int32 XYZIndex);
-
-#if WITH_EDITOR
-	void SwitchUniformScaleLock() { bUniformScaleLocked = !bUniformScaleLocked; };
-	bool IsUnformScaleLocked() const { return bUniformScaleLocked; };
-#endif
-
-public:
-
-	// Original object used by the instancer.
 	UPROPERTY()
-	TSoftObjectPtr<UObject> OriginalObject = nullptr;
+	TSoftObjectPtr<UObject> InstancedObject = nullptr;
 
 	UPROPERTY()
-	int32 OriginalObjectIndex = -1;
-	
-	// Original Instance transforms
-	UPROPERTY()
-	TArray<FTransform> OriginalTransforms;
-
-	// Variation objects currently used for instancing
-	UPROPERTY()
-	TArray<TSoftObjectPtr<UObject>> VariationObjects;
-
-	// Transform offsets, one for each variation.
-	UPROPERTY()
-	TArray<FTransform> VariationTransformOffsets;
-
-	// Index of the variation used for each transform
-	UPROPERTY()
-	TArray<int32> TransformVariationIndices;
-
-	// Original Indices of the variation instances
-	UPROPERTY()
-	TArray<int32> OriginalInstanceIndices;
+	int NumInstances = 0;
 
 	// Indicates this instanced output's component should be recreated
 	UPROPERTY()
 	bool bChanged = false;
-
-	// Indicates this instanced output is stale and should be removed
-	UPROPERTY()
-	bool bStale = false;
-
-	// Indicates if change the scale of Transform Offset of this object uniformly
-#if WITH_EDITORONLY_DATA
-	UPROPERTY()
-	bool bUniformScaleLocked = false;
-#endif
-	// TODO
-	// Color overrides??
 };
 
 // Parameters used to create the level instance.
@@ -506,6 +502,16 @@ struct HOUDINIENGINERUNTIME_API FHoudiniLevelInstanceParams
 	UPROPERTY()
 	FString OutputName;
 };
+
+inline uint32 GetTypeHash(const FHoudiniLevelInstanceParams& Params)
+{
+	return (GetTypeHash((int32)Params.Type) + 23 * GetTypeHash(Params.OutputName));
+}
+
+inline bool operator==(const FHoudiniLevelInstanceParams& p1, const FHoudiniLevelInstanceParams& p2)
+{
+	return p1.Type == p2.Type && p1.OutputName == p2.OutputName;
+}
 
 USTRUCT()
 struct HOUDINIENGINERUNTIME_API FHoudiniBakedOutputObject
@@ -579,6 +585,10 @@ struct HOUDINIENGINERUNTIME_API FHoudiniBakedOutputObject
 		UPROPERTY()
 		TMap<FName, FString> LandscapeLayers;
 
+		// For landscapes this is the layers we created.
+		UPROPERTY()
+		TArray<FString> CreatedLandscapeLayers;
+
 		// Positions of Foliage instances; used for removal on rebake.
 		UPROPERTY()
 		TArray<FVector> FoliageInstancePositions;
@@ -606,6 +616,10 @@ struct HOUDINIENGINERUNTIME_API FHoudiniBakedOutputObject
 		// For skeletal meshes, this is the physics that was baked for the skeletal mesh.
 		UPROPERTY()
 		FString BakedPhysicsAsset;
+
+		// PCG Output Object. Referenced asa UObject so it compiles in non-PCG builds.
+		UPROPERTY()
+		TObjectPtr<UObject> PCGOutputData;
 
 };
 
@@ -636,14 +650,6 @@ struct FHoudiniDataLayer
 	bool bCreateIfNeeded = false;
 };
 
-USTRUCT()
-struct FHoudiniAttributeDataLayer
-{
-	GENERATED_USTRUCT_BODY()
-
-	UPROPERTY()
-	TArray<FHoudiniDataLayer> DataLayers;
-};
 
 USTRUCT()
 struct FHoudiniHLODLayer
@@ -661,7 +667,7 @@ struct HOUDINIENGINERUNTIME_API FHoudiniOutputObject
 
 	public:
 
-		void DestroyCookedData();
+		void DestroyCookedData(EHoudiniClearFlags ClearFlags);
 
 		// The main output object
 		UPROPERTY()
@@ -783,7 +789,7 @@ class HOUDINIENGINERUNTIME_API UHoudiniOutput : public UObject
 
 public:
 
-	void DestroyCookedData();
+	void DestroyCookedData(EHoudiniClearFlags ClearFlags);
 
 	//------------------------------------------------------------------------------------------------
 	// Accessors
@@ -916,7 +922,6 @@ protected:
 	virtual void PostLoad() override;
 
 protected:
-
 	// Indicates the type of output we're dealing with
 	UPROPERTY()
 	EHoudiniOutputType Type;
@@ -944,6 +949,9 @@ protected:
 
 	// Indicates the number of stale HGPO
 	int32 StaleCount;
+
+	UPROPERTY()
+	bool bCreateSceneComponents = true;
 
 	UPROPERTY()
 	bool bLandscapeWorldComposition;

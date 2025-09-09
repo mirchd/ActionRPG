@@ -65,7 +65,9 @@
 #include "Engine/Brush.h"
 
 #include "Kismet/KismetSystemLibrary.h"
-
+#if defined(HOUDINI_USE_PCG)
+#include "PCGData.h"
+#endif
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 	#include "GeometryCollection/GeometryCollectionActor.h"
 	#include "GeometryCollection/GeometryCollectionComponent.h"
@@ -78,8 +80,9 @@
 #include "LevelInstance/LevelInstanceActor.h"
 #include "PackedLevelActor/PackedLevelActor.h"
 #include "EngineUtils.h"
-
-
+#if defined(HOUDINI_USE_PCG)
+#include "HoudiniPCGDataObject.h"
+#endif
 //-----------------------------------------------------------------------------------------------------------------------------
 // Constructors
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -417,8 +420,8 @@ UHoudiniInputHoudiniSplineComponent::UHoudiniInputHoudiniSplineComponent(const F
 //
 UHoudiniInputHoudiniAsset::UHoudiniInputHoudiniAsset(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
-	, AssetOutputIndex(-1)
-	, AssetId(-1)
+	, OutputIndex(-1)
+	, NodeId(-1)
 {
 	bInputNodeHandleOverridesNodeIds = false;
 }
@@ -688,7 +691,29 @@ UHoudiniInputCameraComponent::GetCameraComponent()
 UHoudiniAssetComponent*
 UHoudiniInputHoudiniAsset::GetHoudiniAssetComponent()
 {
-	return Cast<UHoudiniAssetComponent>(InputObject.LoadSynchronous());
+	UObject* InObj = InputObject.LoadSynchronous();
+	UHoudiniCookable* HC = Cast<UHoudiniCookable>(InObj);
+	if (IsValid(HC))
+	{
+		return Cast<UHoudiniAssetComponent>(HC->GetComponent());
+	}
+	
+	return Cast<UHoudiniAssetComponent>(InObj);
+}
+
+UHoudiniCookable*
+UHoudiniInputHoudiniAsset::GetHoudiniCookable()
+{
+	UObject* InObj = InputObject.LoadSynchronous();	
+	UHoudiniCookable* HC = Cast<UHoudiniCookable>(InObj);
+	if (IsValid(HC))
+		return HC;
+	
+	UHoudiniAssetComponent* HAC = Cast<UHoudiniAssetComponent>(InObj);
+	if (!IsValid(HAC))
+		return nullptr;
+
+	return HAC->GetCookable();	
 }
 
 AActor*
@@ -890,7 +915,7 @@ UHoudiniInputObject::CreateTypedInputObject(UObject * InObject, UObject* InOuter
 				AHoudiniAssetActor* HoudiniActor = Cast<AHoudiniAssetActor>(InObject);
 				if (HoudiniActor)
 				{
-					HoudiniInputObject = UHoudiniInputHoudiniAsset::Create(HoudiniActor->GetHoudiniAssetComponent(), InOuter, InName, InInputSettings);
+					HoudiniInputObject = UHoudiniInputHoudiniAsset::Create(HoudiniActor->GetHoudiniCookable(), InOuter, InName, InInputSettings);
 				}
 				else
 				{
@@ -900,8 +925,20 @@ UHoudiniInputObject::CreateTypedInputObject(UObject * InObject, UObject* InOuter
 			break;
 
 		case EHoudiniInputObjectType::HoudiniAssetComponent:
-			HoudiniInputObject = UHoudiniInputHoudiniAsset::Create(InObject, InOuter, InName, InInputSettings);
+		case EHoudiniInputObjectType::HoudiniCookable:
+			{
+				UHoudiniCookable* OuterHC = Cast<UHoudiniCookable>(InObject->GetOuter());
+				if (IsValid(OuterHC))
+				{
+					HoudiniInputObject = UHoudiniInputHoudiniAsset::Create(InObject, InOuter, InName, InInputSettings);
+				}
+				else
+				{
+					HoudiniInputObject = nullptr;
+				}
+			}		
 			break;
+
 		case EHoudiniInputObjectType::Actor:
 		case EHoudiniInputObjectType::GeometryCollectionActor_Deprecated:
 			HoudiniInputObject = UHoudiniInputActor::Create(InObject, InOuter, InName, InInputSettings);
@@ -922,7 +959,11 @@ UHoudiniInputObject::CreateTypedInputObject(UObject * InObject, UObject* InOuter
 		case EHoudiniInputObjectType::DataTable:
 			HoudiniInputObject = UHoudiniInputDataTable::Create(InObject, InOuter, InName, InInputSettings);
 			break;
-		
+
+		case EHoudiniInputObjectType::PCGData:
+			HoudiniInputObject = UHoudiniInputPCGData::Create(InObject, InOuter, InName, InInputSettings);
+			break;
+
 		case EHoudiniInputObjectType::FoliageType_InstancedStaticMesh:
 			HoudiniInputObject = UHoudiniInputFoliageType_InstancedStaticMesh::Create(InObject, InOuter, InName, InInputSettings);
 			break;
@@ -959,6 +1000,10 @@ UHoudiniInputObject::CreateTypedInputObject(UObject * InObject, UObject* InOuter
 
 		case EHoudiniInputObjectType::PackedLevelActor:
 			HoudiniInputObject = UHoudiniInputPackedLevelActor::Create(InObject, InOuter, InName, InInputSettings);
+			break;
+
+		case EHoudiniInputObjectType::Texture:
+			HoudiniInputObject = UHoudiniInputTexture::Create(InObject, InOuter, InName, InInputSettings);
 			break;
 
 		case EHoudiniInputObjectType::Invalid:
@@ -1062,18 +1107,26 @@ UHoudiniInputCameraComponent::Create(UObject * InObject, UObject* InOuter, const
 UHoudiniInputObject *
 UHoudiniInputHoudiniAsset::Create(UObject * InObject, UObject* InOuter, const FString& InName, const FHoudiniInputObjectSettings& InInputSettings)
 {
-	UHoudiniAssetComponent * InHoudiniAssetComponent = Cast<UHoudiniAssetComponent>(InObject);
-	if (!InHoudiniAssetComponent)
-		return nullptr;
+	UHoudiniCookable* InHC = Cast<UHoudiniCookable>(InObject);
+	if (!IsValid(InHC))
+	{
+		UHoudiniAssetComponent* InHoudiniAssetComponent = Cast<UHoudiniAssetComponent>(InObject);
+		if (!InHoudiniAssetComponent)
+			return nullptr;
 
-	FString InputObjectNameStr = "HoudiniInputObject_HAC_" + InName;
+		InHC = Cast<UHoudiniCookable>(InHoudiniAssetComponent->GetOuter());
+		if (!IsValid(InHC))
+			return nullptr;
+	}
+
+	FString InputObjectNameStr = "HoudiniInputObject_HC_" + InName;
 	FName InputObjectName = MakeUniqueObjectName(InOuter, UHoudiniInputHoudiniAsset::StaticClass(), *InputObjectNameStr);
 
 	// We need to create a new object
 	UHoudiniInputHoudiniAsset * HoudiniInputObject = NewObject<UHoudiniInputHoudiniAsset>(
 		InOuter, UHoudiniInputHoudiniAsset::StaticClass(), InputObjectName, RF_Public | RF_Transactional);
 
-	HoudiniInputObject->Type = EHoudiniInputObjectType::HoudiniAssetComponent;
+	HoudiniInputObject->Type = EHoudiniInputObjectType::HoudiniCookable; // TODO: EHoudiniInputObjectType::HoudiniAssetComponent
 
 	HoudiniInputObject->Update(InObject, InInputSettings);
 	HoudiniInputObject->bHasChanged = true;
@@ -2062,16 +2115,20 @@ UHoudiniInputHoudiniAsset::Update(UObject * InObject, const FHoudiniInputObjectS
 {
 	Super::Update(InObject, InSettings);
 
-	UHoudiniAssetComponent* HAC = Cast<UHoudiniAssetComponent>(InObject);
-
-	ensure(HAC);
-
-	if (HAC)
+	UHoudiniCookable* HC = Cast<UHoudiniCookable>(InObject);
+	if (!IsValid(HC))
 	{
-		// TODO: Allow selection of the asset output
-		AssetOutputIndex = 0;
-		AssetId = HAC->GetAssetId();
-	}
+		// TODO: Cookable - unecessary - remove me
+		UHoudiniAssetComponent* HAC = Cast<UHoudiniAssetComponent>(InObject);
+		HC = HAC ? Cast<UHoudiniCookable>(HAC->GetOuter()) : nullptr;
+	}		
+
+	if (!IsValid(HC))
+		return;
+
+	// TODO: Allow selection of the asset output
+	OutputIndex = 0;
+	NodeId = HC->GetNodeId();
 }
 
 
@@ -3092,6 +3149,10 @@ UHoudiniInputObject::GetInputObjectTypeFromObject(UObject* InObject)
 		{
 			return EHoudiniInputObjectType::HoudiniAssetComponent;
 		}
+		else if (InObject->IsA(UHoudiniCookable::StaticClass()))
+		{
+			return EHoudiniInputObjectType::HoudiniCookable;
+		}
 		else if (InObject->IsA(UCameraComponent::StaticClass()))
 		{
 			return EHoudiniInputObjectType::CameraComponent;
@@ -3174,6 +3235,16 @@ UHoudiniInputObject::GetInputObjectTypeFromObject(UObject* InObject)
 		else if (InObject->IsA(UDataTable::StaticClass()))
 		{
 			return EHoudiniInputObjectType::DataTable;
+		}
+#if defined(HOUDINI_USE_PCG)
+		else if(InObject->IsA(UHoudiniPCGDataCollection::StaticClass()))
+		{
+			return EHoudiniInputObjectType::PCGData;
+		}
+#endif
+		else if (InObject->IsA(UTexture2D::StaticClass()))
+		{
+			return EHoudiniInputObjectType::Texture;
 		}
 		else
 		{
@@ -3539,6 +3610,40 @@ UHoudiniInputObject::GetChangedObjectsAndValidNodes(TArray<UHoudiniInputObject*>
 	return false;
 }
 
+UHoudiniInputPCGData::UHoudiniInputPCGData(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+
+}
+
+UHoudiniInputObject*
+UHoudiniInputPCGData::Create(UObject* InObject, UObject* InOuter, const FString& InName, const FHoudiniInputObjectSettings& InInputSettings)
+{
+	FString InputObjectNameStr = "HoudiniInputObject_PCG_" + InName;
+	FName InputObjectName = MakeUniqueObjectName(InOuter, UHoudiniInputPCGData::StaticClass(), *InputObjectNameStr);
+
+	// We need to create a new object
+	UHoudiniInputPCGData* HoudiniInputObject = NewObject<UHoudiniInputPCGData>(
+		InOuter, UHoudiniInputPCGData::StaticClass(), InputObjectName, RF_Public | RF_Transactional);
+
+	HoudiniInputObject->Type = EHoudiniInputObjectType::PCGData;
+	HoudiniInputObject->Update(InObject, InInputSettings);
+	HoudiniInputObject->bHasChanged = true;
+	HoudiniInputObject->SetTransform(FTransform::Identity);
+	return HoudiniInputObject;
+}
+
+UHoudiniPCGDataCollection*
+UHoudiniInputPCGData::GetPCGData() const
+{
+#if defined(HOUDINI_USE_PCG)
+	return Cast<UHoudiniPCGDataCollection>(InputObject.LoadSynchronous());
+#else
+	return nullptr;
+#endif
+}
+
+
 //
 UHoudiniInputDataTable::UHoudiniInputDataTable(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -3704,4 +3809,33 @@ UHoudiniInputSplineMeshComponent::HasComponentChanged(const FHoudiniInputObjectS
 	}
 
 	return false;
+}
+
+UHoudiniInputTexture::UHoudiniInputTexture(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	bInputNodeHandleOverridesNodeIds = false;
+}
+
+UHoudiniInputObject*
+UHoudiniInputTexture::Create(UObject* InObject, UObject* InOuter, const FString& InName, const FHoudiniInputObjectSettings& InInputSettings)
+{
+	FString InputObjectNameStr = "HoudiniInputObject_Texture_" + InName;
+	FName InputObjectName = MakeUniqueObjectName(InOuter, UHoudiniInputTexture::StaticClass(), *InputObjectNameStr);
+
+	// We need to create a new object
+	UHoudiniInputTexture* HoudiniInputObject = NewObject<UHoudiniInputTexture>(
+		InOuter, UHoudiniInputTexture::StaticClass(), InputObjectName, RF_Public | RF_Transactional);
+
+	HoudiniInputObject->Type = EHoudiniInputObjectType::Texture;
+	HoudiniInputObject->Update(InObject, InInputSettings);
+	HoudiniInputObject->bHasChanged = true;
+
+	return HoudiniInputObject;
+}
+
+UTexture2D*
+UHoudiniInputTexture::GetTexture() const
+{
+	return Cast<UTexture2D>(InputObject.LoadSynchronous());
 }

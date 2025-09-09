@@ -33,6 +33,12 @@
 #include "HoudiniEngineUtils.h"
 #include "HoudiniApi.h"
 
+static TAutoConsoleVariable<float> CVarHoudiniEngineAccessorTimers(
+	TEXT("HoudiniEngine.AccessorStats"),
+	0.0,
+	TEXT("When non-zero, the plugin will output stats about attributes. 1 == on, 2 == more detail.\n")
+);
+
 #define THRIFT_MAX_CHUNKSIZE			10 * 1024 * 1024
 
 struct FHoudiniRawAttributeData
@@ -409,6 +415,11 @@ template<typename DataType> bool FHoudiniHapiAccessor::GetAttributeArrayData(con
 
 template<typename DataType> bool FHoudiniHapiAccessor::GetAttributeData(const HAPI_AttributeInfo& AttributeInfo, TArray<DataType>& Results, int IndexStart, int IndexCount)
 {
+	bool bDoTimings = CVarHoudiniEngineAccessorTimers.GetValueOnAnyThread() != 0.0;
+
+	FHoudiniPerfTimer Timer(TEXT(""), bDoTimings);
+	Timer.Start();
+
 	if (!AttributeInfo.exists)
 		return false;
 
@@ -416,6 +427,7 @@ template<typename DataType> bool FHoudiniHapiAccessor::GetAttributeData(const HA
 		IndexCount = AttributeInfo.count;
 
 	int TotalCount;
+	bool bSuccess = false;
 	if (IsHapiArrayType(AttributeInfo.storage))
 	{
 		if(!bCanBeArray)
@@ -433,7 +445,7 @@ template<typename DataType> bool FHoudiniHapiAccessor::GetAttributeData(const HA
 
 		TArray<int> Sizes;
 		Results.SetNum(AttributeInfo.totalArrayElements);
-		return GetAttributeArrayData(AttributeInfo, Results, Sizes, 0, 1);
+		bSuccess = GetAttributeArrayData(AttributeInfo, Results, Sizes, 0, 1);
 
 	}
 	else
@@ -441,10 +453,20 @@ template<typename DataType> bool FHoudiniHapiAccessor::GetAttributeData(const HA
 		TotalCount = IndexCount * AttributeInfo.tupleSize;
 		Results.SetNum(TotalCount);
 
-		return GetAttributeData(AttributeInfo, Results.GetData(), IndexStart, IndexCount);
+		bSuccess = GetAttributeData(AttributeInfo, Results.GetData(), IndexStart, IndexCount);
 
 	}
 
+	Timer.Stop();
+	if((Timer.GetTime() > 0.0) && bDoTimings)
+	{
+		FString AttrText = this->AttributeName.GetData();
+		double SizeInMb = (sizeof(DataType) * AttributeInfo.tupleSize * IndexCount) / 1000000.0;
+		double MbPerSec = SizeInMb / Timer.GetTime();
+		HOUDINI_LOG_MESSAGE(TEXT("Received %s, %.3f MB in %.3f seconds (%.3fMB/s)"), *AttrText, SizeInMb, Timer.GetTime(), MbPerSec);
+	}
+
+	return bSuccess;
 }
 
 template<typename DataType>
@@ -653,6 +675,10 @@ bool FHoudiniHapiAccessor::SetAttributeDataMultiSession(const HAPI_AttributeInfo
 {
 	H_SCOPED_FUNCTION_DYNAMIC_LABEL(FString::Printf(TEXT("FHoudiniAttributeAccessor::SetAttributeDataMultiSession (%s)"), ANSI_TO_TCHAR(AttributeName.GetData())));
 
+	bool bDoTiming = CVarHoudiniEngineAccessorTimers.GetValueOnAnyThread() != 0.0;
+	FHoudiniPerfTimer Timer(TEXT(""), bDoTiming);
+	Timer.Start();
+
 	if (IndexCount == -1)
 		IndexCount = AttributeInfo.count;
 
@@ -680,6 +706,16 @@ bool FHoudiniHapiAccessor::SetAttributeDataMultiSession(const HAPI_AttributeInfo
 
 	bool bSuccess = ExecuteTasksWithSessions(Tasks, NumSessions);
 
+	Timer.Stop();
+	if((Timer.GetTime() > 0.0) && bDoTiming)
+	{
+		FString AttrText = this->AttributeName.GetData();
+		double SizeInMb = (sizeof(DataType) * AttributeInfo.tupleSize * IndexCount) / 1000000.0;
+		double MbPerSec = SizeInMb / Timer.GetTime();
+		HOUDINI_LOG_MESSAGE(TEXT("Sent %s, %.3f MB in %.3f seconds (%.3fMB/s)"), *AttrText, SizeInMb, Timer.GetTime(), MbPerSec);
+	}
+
+
 	return bSuccess;
 }
 
@@ -693,6 +729,13 @@ HAPI_Result FHoudiniHapiAccessor::SendHapiData(const HAPI_Session* Session, cons
 		RunLengths = FHoudiniEngineUtils::RunLengthEncode(Data, AttributeInfo.tupleSize, IndexCount);
 
 	HAPI_Result Result = HAPI_RESULT_FAILURE;
+
+	bool bDoTimings = CVarHoudiniEngineAccessorTimers.GetValueOnAnyThread() == 2.0;
+
+	FString TimerName = UTF8_TO_TCHAR(this->AttributeName.GetData());
+	FHoudiniPerfTimer Timer(FString::Printf(TEXT("Transmission Time %s"), *TimerName), bDoTimings);
+
+	Timer.Start();
 
 	if (RunLengths.Num() > 0)
 	{
@@ -756,7 +799,7 @@ HAPI_Result FHoudiniHapiAccessor::SendHapiData(const HAPI_Session* Session, cons
 			if (Result != HAPI_RESULT_SUCCESS)
 				return Result;
 		}
-		return HAPI_RESULT_SUCCESS;
+		Result = HAPI_RESULT_SUCCESS;
 	}
 	else
 	{
@@ -810,6 +853,9 @@ HAPI_Result FHoudiniHapiAccessor::SendHapiData(const HAPI_Session* Session, cons
 			FHoudiniEngineUtils::FreeRawStringMemory(StringDataArray);
 		}
 	}
+
+	Timer.Stop();
+
 	return Result;
 }
 
@@ -1529,18 +1575,18 @@ TArray<FString> FHoudiniHapiAccessor::GetAttributeNames(HAPI_AttributeOwner Owne
 
 
 #define IMPLEMENT_HOUDINI_ACCESSOR(DATA_TYPE)\
-	template bool FHoudiniHapiAccessor::GetAttributeFirstValue(HAPI_AttributeOwner Owner, DATA_TYPE& Result);\
-	template bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, TArray<DATA_TYPE>& Results, int IndexStart, int IndexCount);\
-	template bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, DATA_TYPE * Results, int IndexStart, int IndexCount);\
-	template bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, int TupleSize, TArray<DATA_TYPE>& Results, int IndexStart, int IndexCount);\
-	template bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, int TupleSize, DATA_TYPE * Results, int IndexStart, int IndexCount);\
-	template bool FHoudiniHapiAccessor::GetAttributeData(const HAPI_AttributeInfo& AttributeInfo, TArray<DATA_TYPE>& Results, int IndexStart , int IndexCount);\
-	template bool FHoudiniHapiAccessor::SetAttributeData(const HAPI_AttributeInfo& AttributeInfo, const DATA_TYPE* Data, int IndexStart, int IndexCount) const;\
-	template bool FHoudiniHapiAccessor::SetAttributeDataViaSession(const HAPI_Session* Session, const HAPI_AttributeInfo& AttributeInfo, const DATA_TYPE* Data, int IndexStart, int IndexCount) const;\
-	template bool FHoudiniHapiAccessor::SetAttributeData(const HAPI_AttributeInfo& AttributeInfo, const TArray<DATA_TYPE>& Data);\
-	template bool FHoudiniHapiAccessor::SetAttributeUniqueData(const HAPI_AttributeInfo& AttributeInfo, const DATA_TYPE& Data);\
-	template bool FHoudiniHapiAccessor::SetAttributeArrayData(const HAPI_AttributeInfo& InAttributeInfo, const TArray<DATA_TYPE>& InStringArray, const TArray<int>& SizesFixedArray);\
-	template bool FHoudiniHapiAccessor::GetAttributeArrayData(HAPI_AttributeOwner Owner, TArray<DATA_TYPE>& StringArray, TArray<int>& SizesFixedArray, int IndexStart, int IndexCount);
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeFirstValue(HAPI_AttributeOwner Owner, DATA_TYPE& Result);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, TArray<DATA_TYPE>& Results, int IndexStart, int IndexCount);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, DATA_TYPE * Results, int IndexStart, int IndexCount);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, int TupleSize, TArray<DATA_TYPE>& Results, int IndexStart, int IndexCount);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeData(HAPI_AttributeOwner Owner, int TupleSize, DATA_TYPE * Results, int IndexStart, int IndexCount);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeData(const HAPI_AttributeInfo& AttributeInfo, TArray<DATA_TYPE>& Results, int IndexStart , int IndexCount);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::SetAttributeData(const HAPI_AttributeInfo& AttributeInfo, const DATA_TYPE* Data, int IndexStart, int IndexCount) const;\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::SetAttributeDataViaSession(const HAPI_Session* Session, const HAPI_AttributeInfo& AttributeInfo, const DATA_TYPE* Data, int IndexStart, int IndexCount) const;\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::SetAttributeData(const HAPI_AttributeInfo& AttributeInfo, const TArray<DATA_TYPE>& Data);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::SetAttributeUniqueData(const HAPI_AttributeInfo& AttributeInfo, const DATA_TYPE& Data);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::SetAttributeArrayData(const HAPI_AttributeInfo& InAttributeInfo, const TArray<DATA_TYPE>& InStringArray, const TArray<int>& SizesFixedArray);\
+	template HOUDINIENGINE_API bool FHoudiniHapiAccessor::GetAttributeArrayData(HAPI_AttributeOwner Owner, TArray<DATA_TYPE>& StringArray, TArray<int>& SizesFixedArray, int IndexStart, int IndexCount);
 
 IMPLEMENT_HOUDINI_ACCESSOR(uint8);
 IMPLEMENT_HOUDINI_ACCESSOR(int8);

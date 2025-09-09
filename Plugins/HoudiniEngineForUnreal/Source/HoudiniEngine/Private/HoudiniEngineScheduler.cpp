@@ -96,6 +96,8 @@ FHoudiniEngineScheduler::TaskDescription(
 void
 FHoudiniEngineScheduler::TaskInstantiateAsset(const FHoudiniEngineTask & Task)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineScheduler::TaskInstantiateAsset);
+
 	FString AssetN;
 	FHoudiniEngineString(Task.AssetHapiName).ToFString(AssetN);
 
@@ -168,8 +170,23 @@ FHoudiniEngineScheduler::TaskInstantiateAsset(const FHoudiniEngineTask & Task)
 	LastUpdateTime = FPlatformTime::Seconds();
 
 	// We instantiate without cooking.
-	Result = FHoudiniApi::CreateNode(
-		FHoudiniEngine::Get().GetSession(), -1, &AssetNameString[0], nullptr, false, &AssetId);
+
+	std::string StdString;
+	const char* NativeNodeLabel = nullptr;
+
+	if (!Task.NodeLabelPrefix.IsEmpty())
+	{
+		FString NodeLabel = Task.NodeLabelPrefix;
+		NodeLabel += FString(AssetNameString.c_str());
+		FHoudiniEngineUtils::SanitizeHAPIVariableName(NodeLabel);
+		StdString = TCHAR_TO_UTF8(*NodeLabel);
+	}
+
+	if(!StdString.empty())
+		NativeNodeLabel = StdString.c_str();
+
+	Result = FHoudiniApi::CreateNode(FHoudiniEngine::Get().GetSession(), -1, &AssetNameString[0], NativeNodeLabel, false, &AssetId);
+
 	if (Result != HAPI_RESULT_SUCCESS)
 	{
 		AddResponseMessageTaskInfo(
@@ -270,6 +287,8 @@ FHoudiniEngineScheduler::TaskInstantiateAsset(const FHoudiniEngineTask & Task)
 void
 FHoudiniEngineScheduler::TaskCookAsset(const FHoudiniEngineTask & Task)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineScheduler::TaskCookAsset);
+
 	if (!FHoudiniEngineUtils::IsInitialized())
 	{
 		HOUDINI_LOG_ERROR(
@@ -461,6 +480,8 @@ FHoudiniEngineScheduler::TaskCookAsset(const FHoudiniEngineTask & Task)
 void
 FHoudiniEngineScheduler::TaskDeleteAsset(const FHoudiniEngineTask & Task)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineScheduler::TaskDeleteAsset);
+
 	HOUDINI_LOG_MESSAGE(
 		TEXT("HAPI Asynchronous Destruction Started for %s. ")
 		TEXT("AssetId = %d"),
@@ -503,6 +524,8 @@ FHoudiniEngineScheduler::AddResponseMessageTaskInfo(
 void
 FHoudiniEngineScheduler::ProcessQueuedTasks()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniEngineScheduler::ProcessQueuedTasks);
+
 	while (!bStopping)
 	{
 		while (true)

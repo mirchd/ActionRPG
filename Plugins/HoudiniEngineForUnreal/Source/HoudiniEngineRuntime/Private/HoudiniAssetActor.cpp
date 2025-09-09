@@ -26,6 +26,7 @@
 
 #include "HoudiniAssetActor.h"
 #include "HoudiniAssetComponent.h"
+#include "HoudiniCookable.h"
 #include "HoudiniEngineRuntime.h"
 #include "HoudiniNodeSyncComponent.h"
 #include "HoudiniAsset.h"
@@ -40,12 +41,42 @@ AHoudiniAssetActor::AHoudiniAssetActor(const FObjectInitializer & ObjectInitiali
 	//PrimaryActorTick.bCanEverTick = true;
 	//PrimaryActorTick.bStartWithTickEnabled = true;
 
-	// Create Houdini component and attach it to a root component.
-	HoudiniAssetComponent =
-		ObjectInitializer.CreateDefaultSubobject<UHoudiniAssetComponent>(this, TEXT("HoudiniAssetComponent"));
+	bool bUseCookable = true;
+	if (!bUseCookable)
+	{
+		// Create Houdini component and attach it to a root component.
+		HoudiniAssetComponent =
+			ObjectInitializer.CreateDefaultSubobject<UHoudiniAssetComponent>(this, TEXT("HoudiniAssetComponent"));
+
+		HoudiniCookable = nullptr;
+	}
+	else
+	{
+		HoudiniCookable =
+			ObjectInitializer.CreateDefaultSubobject<UHoudiniCookable>(this, TEXT("HoudiniCookable"));
+
+		// Create Houdini component with the Cookable as outer
+		HoudiniAssetComponent =
+			ObjectInitializer.CreateDefaultSubobject<UHoudiniAssetComponent>(HoudiniCookable, TEXT("HoudiniAssetCookableComponent"));
+
+		if (HoudiniCookable)
+		{
+			// HoudiniAssetActor support all cookable features
+			HoudiniCookable->SetHoudiniAssetSupported(true);
+			HoudiniCookable->SetParameterSupported(true);
+			HoudiniCookable->SetInputSupported(true);
+			HoudiniCookable->SetOutputSupported(true);
+			HoudiniCookable->SetComponentSupported(true);
+			HoudiniCookable->SetPDGSupported(true);
+			HoudiniCookable->SetBakingSupported(true);
+			HoudiniCookable->SetProxySupported(true);
+
+			// Assign the HAC to the Cookable
+			HoudiniCookable->SetComponent(HoudiniAssetComponent);
+		}
+	}
 
 	//HoudiniAssetComponent->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
-
 	RootComponent = HoudiniAssetComponent;
 }
 
@@ -56,33 +87,62 @@ AHoudiniAssetActor::SetNodeSyncActor(bool bNodeSyncActor)
 	if (IsNodeSyncActor() == bNodeSyncActor)
 		return;
 
-	// Destroy the existing component
+	// TODO: COOKABLE CHECK ME!
+	if (bNodeSyncActor)
+	{
+		// Already a nodesync component
+		if (HoudiniAssetComponent->IsA<UHoudiniNodeSyncComponent>())
+			return;
+	}
+	else
+	{
+		// Already NOT a nodesync component
+		if (!HoudiniAssetComponent->IsA<UHoudiniNodeSyncComponent>())
+			return;
+	}
+		
+	// Remove and destroy the existing component
+	RemoveInstanceComponent(HoudiniAssetComponent);
 	HoudiniAssetComponent->DestroyComponent();
-
+	
+	// Get our cookable as it will be the outer
+	UHoudiniCookable* MyCookable = GetHoudiniCookable();
 	if (bNodeSyncActor)
 	{
 		// Create a new NodeSyncComponent to replace it
-		HoudiniAssetComponent = NewObject<UHoudiniNodeSyncComponent>(this);
-		RootComponent = HoudiniAssetComponent;
-	
-		HoudiniAssetComponent->RegisterComponent();
-		//HoudiniAssetComponent->AttachToActor(this);
-		AddInstanceComponent(HoudiniAssetComponent);
+		HoudiniAssetComponent = NewObject<UHoudiniNodeSyncComponent>(MyCookable);
 
-		FHoudiniEngineRuntime::Get().RegisterHoudiniComponent(HoudiniAssetComponent);
+		// Update our cookable to reflect node sync feature support
+		MyCookable->SetHoudiniAssetSupported(false);
+		MyCookable->SetInputSupported(false);
+		MyCookable->SetParameterSupported(false);
+		MyCookable->SetPDGSupported(false);
+		//MyCookable->SetCanDeleteHoudiniNodes(false);
 	}
 	else
 	{
 		// Create a new HoudiniAssetComponent to replace it
-		HoudiniAssetComponent = NewObject<UHoudiniAssetComponent>(this);
-		RootComponent = HoudiniAssetComponent;
+		HoudiniAssetComponent = NewObject<UHoudiniAssetComponent>(MyCookable);
 
-		HoudiniAssetComponent->RegisterComponent();
-		//HoudiniAssetComponent->AttachToActor(this);
-		AddInstanceComponent(HoudiniAssetComponent);
-
-		FHoudiniEngineRuntime::Get().RegisterHoudiniComponent(HoudiniAssetComponent);
+		// Re-enable disabled node sync features
+		MyCookable->SetHoudiniAssetSupported(true);
+		MyCookable->SetInputSupported(true);
+		MyCookable->SetParameterSupported(true);
+		MyCookable->SetPDGSupported(true);
+		//MyCookable->SetCanDeleteHoudiniNodes(true);
 	}
+
+	// Set/Register/Add the new component
+	RootComponent = HoudiniAssetComponent;
+	HoudiniAssetComponent->RegisterComponent();
+	AddInstanceComponent(HoudiniAssetComponent);
+
+	// Update our cookable's component
+	MyCookable->SetComponent(HoudiniAssetComponent);
+
+	// TODO: Not necessary?
+	FHoudiniEngineRuntime::Get().RegisterHoudiniCookable(MyCookable);
+	//FHoudiniEngineRuntime::Get().RegisterHoudiniComponent(HoudiniAssetComponent);
 }
 
 // Indicates if this Actor is a NodeSyncActor
@@ -99,15 +159,21 @@ AHoudiniAssetActor::GetHoudiniAssetComponent() const
 	return HoudiniAssetComponent;
 }
 
+UHoudiniCookable*
+AHoudiniAssetActor::GetHoudiniCookable() const
+{
+	return HoudiniCookable;
+}
+
 #if WITH_EDITOR
 bool
 AHoudiniAssetActor::GetReferencedContentObjects(TArray<UObject*>& Objects) const
 {
 	Super::GetReferencedContentObjects(Objects);
 
-	if (IsValid(HoudiniAssetComponent))
+	if (IsValid(HoudiniCookable))
 	{
-		UHoudiniAsset* HoudiniAsset = HoudiniAssetComponent->GetHoudiniAsset();
+		UHoudiniAsset* HoudiniAsset = HoudiniCookable->GetHoudiniAsset();
 		if (IsValid(HoudiniAsset))
 			Objects.AddUnique(HoudiniAsset);
 	}
@@ -122,8 +188,12 @@ AHoudiniAssetActor::PostEditChangeProperty(FPropertyChangedEvent & PropertyChang
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
+	if (!IsValid(HoudiniCookable))
+		return;
+
 	// Some property changes need to be forwarded to the component (ie Transform)
-	if (!IsValid(HoudiniAssetComponent))
+	USceneComponent* SC = HoudiniCookable->GetComponent();
+	if (!IsValid(SC))
 		return;
 
 	FProperty* Property = PropertyChangedEvent.MemberProperty;
@@ -131,11 +201,11 @@ AHoudiniAssetActor::PostEditChangeProperty(FPropertyChangedEvent & PropertyChang
 		return;
 
 	FName PropertyName = Property->GetFName();
-	if (PropertyName == HoudiniAssetComponent->GetRelativeLocationPropertyName()
-		|| PropertyName == HoudiniAssetComponent->GetRelativeRotationPropertyName()
-		|| PropertyName == HoudiniAssetComponent->GetRelativeScale3DPropertyName())
+	if (PropertyName == SC->GetRelativeLocationPropertyName()
+		|| PropertyName == SC->GetRelativeRotationPropertyName()
+		|| PropertyName == SC->GetRelativeScale3DPropertyName())
 	{
-		HoudiniAssetComponent->SetHasComponentTransformChanged(true);
+		HoudiniCookable->SetHasComponentTransformChanged(true);
 	}
 }
 #endif
@@ -154,7 +224,7 @@ AHoudiniAssetActor::IsUsedForPreview() const
 UHoudiniPDGAssetLink*
 AHoudiniAssetActor::GetPDGAssetLink() const
 {
-	return IsValid(HoudiniAssetComponent) ? HoudiniAssetComponent->GetPDGAssetLink() : nullptr;
+	return IsValid(HoudiniCookable) ? HoudiniCookable->GetPDGAssetLink() : nullptr;
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -319,8 +319,9 @@ SSelectHoudiniPathDialog::FillHoudiniNodeInfo(FHoudiniNodeInfoPtr InNodeInfo)
 		InNodeInfo->NodeType = TEXT("SHOP");
 		break;
 
-	case HAPI_NODETYPE_COP:
-		InNodeInfo->NodeType = TEXT("COP");
+	case HAPI_NODETYPE_COP2:
+		InNodeInfo->NodeType = TEXT("COP2");
+		bLookForChildrens = true;
 		break;
 
 	case HAPI_NODETYPE_VOP:
@@ -333,6 +334,11 @@ SSelectHoudiniPathDialog::FillHoudiniNodeInfo(FHoudiniNodeInfoPtr InNodeInfo)
 
 	case HAPI_NODETYPE_TOP:
 		InNodeInfo->NodeType = TEXT("TOP");
+		bLookForChildrens = true;
+		break;
+
+	case HAPI_NODETYPE_COP:
+		InNodeInfo->NodeType = TEXT("COP");
 		bLookForChildrens = true;
 		break;
 	}

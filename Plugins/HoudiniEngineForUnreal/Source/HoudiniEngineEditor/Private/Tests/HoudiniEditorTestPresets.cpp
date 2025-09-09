@@ -26,24 +26,28 @@
 
 #include "HoudiniEditorTestPresets.h"
 
+#include "HoudiniCookable.h"
 #include "HoudiniEngineEditorUtils.h"
 #include "HoudiniParameterFloat.h"
-#include "Components/SkeletalMeshComponent.h"
-#include "Engine/SkeletalMesh.h"
 #include "HoudiniParameterInt.h"
 #include "HoudiniParameterString.h"
 #include "HoudiniParameterToggle.h"
 #include "HoudiniPreset.h"
-#include "Chaos/HeightField.h"
-#if WITH_DEV_AUTOMATION_TESTS
-#include "HoudiniEditorTestUtils.h"
 
-#include "Misc/AutomationTest.h"
-#include "GenericPlatform/GenericPlatformProcess.h"
-#include "Components/InstancedStaticMeshComponent.h"
-#include "HoudiniEditorUnitTestUtils.h"
+#include "Chaos/HeightField.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+	#include "HoudiniEditorTestUtils.h"
+	#include "HoudiniEditorUnitTestUtils.h"
+
+	#include "Misc/AutomationTest.h"
+	#include "GenericPlatform/GenericPlatformProcess.h"
+	#include "Components/InstancedStaticMeshComponent.h"
+
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION > 1
-#include "Engine/SkinnedAssetCommon.h"
+	#include "Engine/SkinnedAssetCommon.h"
 #endif
 
 IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestPresetLoading, "Houdini.UnitTests.Presets.Loading",
@@ -66,10 +70,18 @@ bool FHoudiniEditorTestPresetLoading::RunTest(const FString& Parameters)
 
 	volatile bool * bPresetInstantiated = new bool(false);
 
-	Preset->PostInstantiationCallbacks.Add([bPresetInstantiated, Context](const UHoudiniPreset* Preset, UHoudiniAssetComponent* HAC)
+	Preset->PostInstantiationCallbacks.Add([bPresetInstantiated, Context](const UHoudiniPreset* Preset, UObject* InObject)
 	{
 		*bPresetInstantiated = true;
-		Context->HAC = HAC;
+
+		UHoudiniCookable* HC = Cast<UHoudiniCookable>(InObject);
+		if (HC)
+			Context->SetCookable(HC);
+		else
+		{
+			UHoudiniAssetComponent* HAC = Cast<UHoudiniAssetComponent>(InObject);
+			Context->SetHAC(HAC);
+		}
 	});
 
 
@@ -84,13 +96,24 @@ bool FHoudiniEditorTestPresetLoading::RunTest(const FString& Parameters)
 
 		Preset->PostInstantiationCallbacks.Empty();
 
-		HOUDINI_TEST_NOT_NULL_ON_FAIL(Context->HAC, return true);
+		HOUDINI_TEST_NOT_NULL_ON_FAIL(Context->GetHAC(), return true);
 
 		TMap<FString, UHoudiniParameter*> Parameters;
-		for(int Index = 0; Index < Context->HAC->GetNumParameters();Index++)
+		if (Context->GetCookable())
 		{
-			auto * Parameter = Context->HAC->GetParameterAt(Index);
-			Parameters.Add(Parameter->GetParameterName(), Parameter);
+			for (int Index = 0; Index < Context->GetCookable()->GetNumParameters(); Index++)
+			{
+				auto* Parameter = Context->GetCookable()->GetParameterAt(Index);
+				Parameters.Add(Parameter->GetParameterName(), Parameter);
+			}
+		}
+		else
+		{
+			for (int Index = 0; Index < Context->GetHAC()->GetNumParameters(); Index++)
+			{
+				auto* Parameter = Context->GetHAC()->GetParameterAt(Index);
+				Parameters.Add(Parameter->GetParameterName(), Parameter);
+			}
 		}
 
 		UHoudiniParameter * * Parm = nullptr;

@@ -348,7 +348,7 @@ FHoudiniSkeletalMeshTranslator::CreateUnrealData(FHoudiniSkeletalMeshBuildSettin
 		BuildSettings.SKMesh->AllocateResourceForRendering();
 		RenderData = BuildSettings.SKMesh->GetResourceForRendering();
 	}
-
+		
 	bool bBuildSuccess = MeshBuilderModule.BuildSkeletalMesh(*RenderData, SkeletalMeshBuildParameters);
 #else
 	bool bBuildSuccess = MeshBuilderModule.BuildSkeletalMesh(SkeletalMeshBuildParameters);

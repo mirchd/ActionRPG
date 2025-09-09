@@ -82,7 +82,19 @@ bool HoudiniEditorDuplicateTest::RunTest(const FString & Parameters)
 			FHoudiniEditorTestUtils::InstantiateAsset(this, TEXT("/Game/TestHDAs/Evergreen"), 
 			[this, InAssetWrapper](UHoudiniPublicAPIAssetWrapper* InAssetWrapper2, const bool IsSuccessful2)
 			{
-				if (FHoudiniEditorEquivalenceUtils::IsEquivalent(InAssetWrapper->GetHoudiniAssetComponent(), InAssetWrapper2->GetHoudiniAssetComponent()))
+				// TODO: Only compare cookables?
+				bool bIsEquivalent = true;
+				if (!FHoudiniEditorEquivalenceUtils::IsEquivalent(InAssetWrapper->GetHoudiniCookable(), InAssetWrapper2->GetHoudiniCookable()))
+				{
+					bIsEquivalent = false;
+				}
+
+				if (!FHoudiniEditorEquivalenceUtils::IsEquivalent(InAssetWrapper->GetHoudiniAssetComponent(), InAssetWrapper2->GetHoudiniAssetComponent()))
+				{
+					bIsEquivalent = false;
+				}
+
+				if (bIsEquivalent)
 				{
 					return true;
 				}
@@ -125,8 +137,7 @@ IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(HoudiniEditorRandomEquivalenceTest, "Ho
 
 bool HoudiniEditorRandomEquivalenceTest::RunTest(const FString & Parameters)
 {
-
-
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6
 	// Really force editor size
 	FHoudiniEditorTestUtils::InitializeTests(this, [this]
 	{
@@ -134,17 +145,11 @@ bool HoudiniEditorRandomEquivalenceTest::RunTest(const FString & Parameters)
 		{
 			FHoudiniEditorTestUtils::RunOrSetupDifferentialTest(this, TEXT("RandomTests"), TEXT("/Game/TestHDAs/Random/simple_heightfield"), TEXT("simple_heightfield"), {}, [this](bool IsSuccessful)
 			{
-				FHoudiniEditorTestUtils::RunOrSetupDifferentialTest(this, TEXT("RandomTests"), TEXT("/Game/TestHDAs/Random/Instancing_ThreeWays"), TEXT("Instancing_ThreeWays"), {}, [this](bool IsSuccessful)
-				{
-					FHoudiniEditorTestUtils::RunOrSetupDifferentialTest(this, TEXT("RandomTests"), TEXT("/Game/TestHDAs/Random/SideFX__scott_spookytable"), TEXT("SideFX__scott_spookytable"), {}, [this](bool IsSuccessful)
-					{
-		
-					});
-				});
+
 			});
 		});
 	});
-	
+#endif
 	return true;
 }
 

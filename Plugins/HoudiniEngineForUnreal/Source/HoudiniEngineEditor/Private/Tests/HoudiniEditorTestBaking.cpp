@@ -26,17 +26,19 @@
 
 #include "HoudiniEditorTestBaking.h"
 
+#include "HoudiniCookable.h"
 #include "HoudiniParameterInt.h"
 #include "HoudiniParameterToggle.h"
+
 #include "Chaos/HeightField.h"
+
 #if WITH_DEV_AUTOMATION_TESTS
 #include "HoudiniEditorTestUtils.h"
-
-#include "Misc/AutomationTest.h"
-#include "GenericPlatform/GenericPlatformProcess.h"
-#include "Components/InstancedStaticMeshComponent.h"
 #include "HoudiniEditorUnitTestUtils.h"
 
+#include "Components/InstancedStaticMeshComponent.h"
+#include "GenericPlatform/GenericPlatformProcess.h"
+#include "Misc/AutomationTest.h"
 
 IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestInstancesMeshes, "Houdini.UnitTests.Baking.Meshes",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext  | EAutomationTestFlags::ProductFilter)
@@ -54,14 +56,13 @@ bool FHoudiniEditorTestInstancesMeshes::RunTest(const FString& Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestBaking::BakingHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
-  AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
+	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "meshes", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instance_meshes", false, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instance_actors", false, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "meshes", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instance_meshes", false, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instance_actors", false, 0);
 
 		Context->StartCookingHDA();
 		return true;
@@ -70,7 +71,7 @@ bool FHoudiniEditorTestInstancesMeshes::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 2, return true);
@@ -82,10 +83,9 @@ bool FHoudiniEditorTestInstancesMeshes::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		FHoudiniBakeSettings BakeSettings;
+		Context->Bake(BakeSettings);
 
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
-
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		// There should be two outputs as we have two meshes.
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 2, return true);
 
@@ -119,9 +119,9 @@ bool FHoudiniEditorTestInstancesMeshes::RunTest(const FString& Parameters)
 
 		FHoudiniBakeSettings BakeSettings;
 		BakeSettings.ActorBakeOption = EHoudiniEngineActorBakeOption::OneActorPerHDA;
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
+		Context->Bake(BakeSettings);
 
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		// There should be two outputs as we have two meshes.
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 2, return true);
 
@@ -159,7 +159,8 @@ bool FHoudiniEditorTestInstancesMeshes::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestBakingGrouped, "Houdini.UnitTests.Baking.MultipleComponentsOneActor",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext  | EAutomationTestFlags::ProductFilter)
 
-bool FHoudiniEditorTestBakingGrouped::RunTest(const FString& Parameters)
+bool 
+FHoudiniEditorTestBakingGrouped::RunTest(const FString& Parameters)
 {
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Test baking multiple components to a single actor
@@ -171,15 +172,15 @@ bool FHoudiniEditorTestBakingGrouped::RunTest(const FString& Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestBaking::BakingHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "meshes", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instance_meshes", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instance_actors", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "geometry_collections", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "meshes", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instance_meshes", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instance_actors", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "geometry_collections", true, 0);
+
 		Context->StartCookingHDA();
 		return true;
 	}));
@@ -187,7 +188,7 @@ bool FHoudiniEditorTestBakingGrouped::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL(Outputs.Num(), 7);
@@ -205,9 +206,10 @@ bool FHoudiniEditorTestBakingGrouped::RunTest(const FString& Parameters)
 	{
 		FHoudiniBakeSettings BakeSettings;
 		BakeSettings.ActorBakeOption = EHoudiniEngineActorBakeOption::OneActorPerHDA;
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
 
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		Context->Bake(BakeSettings);
+
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		// There should be two outputs as we have two meshes.
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 7, return true);
 
@@ -247,14 +249,13 @@ bool FHoudiniEditorTestBakingGroupedToBlueprint::RunTest(const FString& Paramete
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestBaking::BakingHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "meshes", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instance_meshes", true, 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instance_actors", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "meshes", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instance_meshes", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instance_actors", true, 0);
 
 		Context->StartCookingHDA();
 		return true;
@@ -263,7 +264,7 @@ bool FHoudiniEditorTestBakingGroupedToBlueprint::RunTest(const FString& Paramete
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 4, return true);
@@ -279,9 +280,14 @@ bool FHoudiniEditorTestBakingGroupedToBlueprint::RunTest(const FString& Paramete
 	{
 		FHoudiniBakeSettings BakeSettings;
 		BakeSettings.ActorBakeOption = EHoudiniEngineActorBakeOption::OneActorPerHDA;
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, EHoudiniEngineBakeOption::ToBlueprint, Context->HAC->bRemoveOutputAfterBake);
+		if (Context->GetCookable())
+			Context->GetCookable()->SetHoudiniEngineBakeOption(EHoudiniEngineBakeOption::ToBlueprint);
+		else
+			Context->GetHAC()->SetHoudiniEngineBakeOption(EHoudiniEngineBakeOption::ToBlueprint);
 
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		Context->Bake(BakeSettings);
+
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		// There should be two outputs as we have two meshes.
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 4, return true);
 
@@ -294,7 +300,7 @@ bool FHoudiniEditorTestBakingGroupedToBlueprint::RunTest(const FString& Paramete
 				FHoudiniBakedOutputObject& OutputObject = It.Value;
 
 				UBlueprint* Blueprint = Cast<UBlueprint>(StaticLoadObject(UObject::StaticClass(), nullptr, *OutputObject.Blueprint));
-				UWorld * World = Context->HAC->GetHACWorld();
+				UWorld * World = Context->GetWorld();
 				AActor* Actor = World->SpawnActor<AActor>(Blueprint->GeneratedClass, FVector::ZeroVector, FRotator::ZeroRotator);
 
 				HOUDINI_TEST_NOT_NULL_ON_FAIL(Actor, continue);

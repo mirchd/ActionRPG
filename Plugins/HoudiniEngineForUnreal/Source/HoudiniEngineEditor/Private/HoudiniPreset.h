@@ -184,7 +184,7 @@ struct FHoudiniPresetMultiParmValues : public FHoudiniPresetBase
 	virtual FString ToString() override { return FString::Format(TEXT("Number of Elements: {0}"), { Count }); }
 
 	UPROPERTY(EditAnywhere, Category = "Houdini Preset")
-	int Count = 0;
+	int Count = 0;;
 };
 
 USTRUCT(BlueprintType)
@@ -565,7 +565,7 @@ public:
 
 	// Callback for when this preset has been instantiated.
 	// Used for testing.
-	TArray< TFunction<void(const UHoudiniPreset*, UHoudiniAssetComponent *)> > PostInstantiationCallbacks;
+	TArray< TFunction<void(const UHoudiniPreset*, UObject *)> > PostInstantiationCallbacks;
 
 
 };

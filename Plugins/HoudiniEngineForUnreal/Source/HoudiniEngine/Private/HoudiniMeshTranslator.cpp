@@ -27,6 +27,7 @@
 #include "HoudiniMeshTranslator.h"
 
 #include "HoudiniApi.h"
+#include "HoudiniCookable.h"
 #include "HoudiniEngine.h"
 #include "HoudiniOutput.h"
 #include "HoudiniGenericAttribute.h"
@@ -46,7 +47,6 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "Engine/StaticMesh.h"
 #include "PackageTools.h"
-#include "RawMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
 #include "MeshDescription.h"
@@ -81,12 +81,6 @@
 #include <HoudiniHLODLayerUtils.h>
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE
-
-TAutoConsoleVariable<float> CVarHoudiniEngineMeshBuildTimer(
-	TEXT("HoudiniEngine.MeshBuildTimer"),
-	0.0,
-	TEXT("When enabled, the plugin will output timings during the Mesh creation.\n")
-);
 
 bool
 FHoudiniMeshTranslator::CreateAllMeshesAndComponentsFromHoudiniOutput(
@@ -141,6 +135,14 @@ FHoudiniMeshTranslator::CreateAllMeshesAndComponentsFromHoudiniOutput(
 		{
 			FHoudiniEngineUtils::UpdateGenericPropertiesAttributes(
 				InOuterComponent, PropertyAttributes);
+
+			UHoudiniAssetComponent* HAC = Cast<UHoudiniAssetComponent>(InOuterComponent);
+			if (HAC)
+			{
+				// Also try on the HAC's cookable
+				FHoudiniEngineUtils::UpdateGenericPropertiesAttributes(
+					HAC->GetCookable(), PropertyAttributes);
+			}
 		}
 
 		CreateStaticMeshFromHoudiniGeoPartObject(
@@ -225,8 +227,17 @@ FHoudiniMeshTranslator::CreateOrUpdateAllComponents(
 			}
 			else if (NewProxyMesh && (NewProxyMesh == OldProxyMesh))
 			{
-				// Remove it from the old map to avoid its destruction
-				OldOutputObjects.Remove(OutputIdentifier);
+				if (NewOutputObj.Value.ProxyComponent == FoundOldOutputObj->ProxyComponent)
+				{
+					// Remove it from the old map to avoid its destruction
+					OldOutputObjects.Remove(OutputIdentifier);
+				}
+				else
+				{
+					// The new proxy is the same as the old one
+					// Only destroy the proxy's component
+					FoundOldOutputObj->ProxyObject = nullptr;
+				}
 			}
 		}
 	}	
@@ -330,7 +341,7 @@ FHoudiniMeshTranslator::CreateOrUpdateAllComponents(
 		}
 
 		// Check if we should create a Proxy/SMC
-		if (OutputObject.bProxyIsCurrent)
+		if (OutputObject.bProxyIsCurrent && InOutput->bCreateSceneComponents)
 		{
 			UObject *Mesh = OutputObject.ProxyObject;
 			if (!IsValid(Mesh) || !Mesh->IsA<UHoudiniStaticMesh>())
@@ -402,7 +413,7 @@ FHoudiniMeshTranslator::CreateOrUpdateAllComponents(
 
 			const FHoudiniGeoPartObject* FoundHGPO = nullptr;
 			UMeshComponent* MeshComponent = nullptr;
-			if (Mesh->IsA<UStaticMesh>())
+			if (Mesh->IsA<UStaticMesh>() && InOutput->bCreateSceneComponents)
 			{
 				TSubclassOf<UMeshComponent> ComponentType = UStaticMeshComponent::StaticClass();
 				bool bCreated = false;
@@ -444,7 +455,7 @@ FHoudiniMeshTranslator::CreateOrUpdateAllComponents(
 					}
 				}
 			}
-			else if (Mesh->IsA<USkeletalMesh>())
+			else if (Mesh->IsA<USkeletalMesh>() && InOutput->bCreateSceneComponents)
 			{
 				
 				TSubclassOf<UMeshComponent> SKComponentType = USkeletalMeshComponent::StaticClass();
@@ -1895,6 +1906,11 @@ FHoudiniMeshTranslator::CreateStaticMesh_MeshDescription()
 		}
 	}
 
+	if (NumberOfLODs > MAX_STATIC_MESH_LODS)
+	{
+		HOUDINI_LOG_ERROR(TEXT("Maximum number of LODs is %d, found %d "), MAX_STATIC_MESH_LODS, NumberOfLODs);
+		NumberOfLODs = MAX_STATIC_MESH_LODS;
+	}
 	// Update the part's material's IDS and info now
 	CreateNeededMaterials();
 
@@ -2450,7 +2466,7 @@ FHoudiniMeshTranslator::CreateStaticMesh_MeshDescription()
 					// Get default Houdini material.
 					UMaterial* MaterialDefault = FHoudiniEngine::Get().GetHoudiniDefaultMaterial(HGPO.bIsTemplated).Get();
 
-					// Reset Rawmesh material face assignments.
+					// Reset material face assignments.
 					for (int32 FaceIdx = 0; FaceIdx < SplitGroupFaceIndices.Num(); ++FaceIdx)
 					{
 						int32 SplitFaceIndex = SplitGroupFaceIndices[FaceIdx];
@@ -3106,6 +3122,17 @@ FHoudiniMeshTranslator::CreateStaticMesh_MeshDescription()
 		{
 			SM->CreateBodySetup();
 			BodySetup = SM->GetBodySetup();
+		}
+
+		// Set the default Static Mesh Generation Properties
+		if (IsValid(BodySetup))
+		{
+			// Set flag whether physics triangle mesh will use double sided faces when doing scene queries.
+			BodySetup->bDoubleSidedGeometry = StaticMeshGenerationProperties.bGeneratedDoubleSidedGeometry;
+			// Assign physical material for simple collision.
+			BodySetup->PhysMaterial = StaticMeshGenerationProperties.GeneratedPhysMaterial;
+			// Body Instance Properties
+			BodySetup->DefaultInstance.CopyBodyInstancePropertiesFrom(&StaticMeshGenerationProperties.DefaultBodyInstance);
 		}
 
 		EHoudiniSplitType SplitType = GetSplitTypeFromSplitName(CurrentObjId.SplitIdentifier);
@@ -5815,7 +5842,8 @@ FHoudiniMeshTranslator::CreateMeshComponent(UObject *InOuterComponent, const TSu
 	// Attach created static mesh component to our Houdini component.
 	MeshComponent->AttachToComponent(OuterSceneComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	MeshComponent->OnComponentCreated();
-	MeshComponent->RegisterComponent();
+	if(MeshComponent->GetOwner())
+		MeshComponent->RegisterComponent();
 
 	return MeshComponent;
 }
@@ -6570,7 +6598,7 @@ void FHoudiniMeshTranslator::ProcessMaterials(UStaticMesh* FoundStaticMesh, FHou
 			// Get default Houdini material.
 			UMaterial* MaterialDefault = FHoudiniEngine::Get().GetHoudiniDefaultMaterial(HGPO.bIsTemplated).Get();
 
-			// Reset Rawmesh material face assignments.
+			// Reset material face assignments.
 			for (int32 FaceIdx = 0; FaceIdx < SplitGroupFaceIndices.Num(); ++FaceIdx)
 			{
 				int32 SplitFaceIndex = SplitGroupFaceIndices[FaceIdx];

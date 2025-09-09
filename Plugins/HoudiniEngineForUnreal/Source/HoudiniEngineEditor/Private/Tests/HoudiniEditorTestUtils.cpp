@@ -193,9 +193,9 @@ void FHoudiniEditorTestUtils::InstantiateAsset(
 	TestObject->InAssetWrappers.Add(Wrapper); // Need to assign it to TestObject otherwise it will be garbage collected!!!
 
 	// Set properties based off test settings.
-	Wrapper->GetHoudiniAssetComponent()->bOverrideGlobalProxyStaticMeshSettings = true;
-	Wrapper->GetHoudiniAssetComponent()->bEnableProxyStaticMeshOverride = Settings.bUseProxyMesh;
-	Wrapper->GetHoudiniAssetComponent()->bEnableProxyStaticMeshRefinementOnPreSaveWorldOverride = !Settings.bUseProxyMesh;
+	Wrapper->GetHoudiniAssetComponent()->SetOverrideGlobalProxyStaticMeshSettings(true);
+	Wrapper->GetHoudiniAssetComponent()->SetEnableProxyStaticMeshOverride(Settings.bUseProxyMesh);
+	Wrapper->GetHoudiniAssetComponent()->SetEnableProxyStaticMeshRefinementOnPreSaveWorldOverride(!Settings.bUseProxyMesh);
 
 	// Bind delegates from the asset wrapper to UHoudiniEditorTestObject which we use to proxy to non-dynamic delegates
 	// like OnPreInstantiation.
@@ -209,10 +209,8 @@ void FHoudiniEditorTestUtils::InstantiateAsset(
 
 	Wrapper->Recook(); // Make sure the callback is called!
 
-	UHoudiniAssetComponent* HoudiniComponent = Wrapper->GetHoudiniAssetComponent();
 
 	const double StartTime = FPlatformTime::Seconds();
-
 	Test->AddCommand(new FFunctionLatentCommand([=]()
 	{
 		const bool IsInstantiating = TestObject->IsInstantiating;
@@ -222,7 +220,8 @@ void FHoudiniEditorTestUtils::InstantiateAsset(
 
 		double DeltaTime = CurrentTime - StartTime;
 
-		if (IsInstantiating == false && Wrapper->GetHoudiniAssetComponent()->GetAssetState() == EHoudiniAssetState::None)
+		EHoudiniAssetState CurrentState = Wrapper->GetHoudiniCookable() ? Wrapper->GetHoudiniCookable()->GetCurrentState() : Wrapper->GetHoudiniAssetComponent()->GetAssetState();
+		if (IsInstantiating == false && CurrentState == EHoudiniAssetState::None)
 		{
 			if (ErrorOnFail && CookSuccessfulResult == false)
 			{
@@ -260,7 +259,7 @@ void FHoudiniEditorTestUtils::InstantiateAsset(
 			ErrorString = FString::Printf(TEXT("TestObject->HasReachedExpectedCookCount() : %d"), TestObject->HasReachedExpectedCookCount() ? 1 : 0);
 			Test->AddError(ErrorString);
 
-			ErrorString = FString::Printf(TEXT("AssetState: %d("), static_cast<int>(Wrapper->GetHoudiniAssetComponent()->GetAssetState()));
+			ErrorString = FString::Printf(TEXT("AssetState: %d("), static_cast<int>(CurrentState));
 			Test->AddError(ErrorString);
 
 			OnFinishInstantiate(Wrapper, CookSuccessfulResult);
@@ -535,7 +534,15 @@ UHoudiniAssetComponent* FHoudiniEditorTestUtils::GetAssetComponentWithName(const
 
 	if (Out.Num() > 0)
 	{
-		return Out[0]->GetHoudiniAssetComponent();
+		UHoudiniAssetComponent* FoundHAC = Out[0]->GetHoudiniAssetComponent();
+		if (FoundHAC == nullptr)
+		{
+			UHoudiniCookable* HC = Out[0]->GetHoudiniCookable();
+			if (HC)
+				FoundHAC = Cast<UHoudiniAssetComponent>(HC->GetComponent());
+		}
+
+		return FoundHAC;
 	}
 
 	return nullptr;
@@ -816,10 +823,21 @@ void FHoudiniEditorTestUtils::RunDifferentialTest(
 				if (!FHoudiniEditorEquivalenceUtils::IsEquivalent(InAssetWrapper->GetHoudiniAssetComponent(), SceneHAC))
 				{
 					Test->AddError(FString::Printf(
-						TEXT("HDA is not equivalent. If this change is intended, then DELETE %s and %s and MOVE %s and %s to those locations, fix redirectors in the TestCached folder from the content browser and commit to dev_reg. Do not copy/paste as it will break essential DuplicateTransient references like OutputObjects."),
+						TEXT("HAC is not equivalent. If this change is intended, then DELETE %s and %s and MOVE %s and %s to those locations, fix redirectors in the TestCached folder from the content browser and commit to dev_reg. Do not copy/paste as it will break essential DuplicateTransient references like OutputObjects."),
 						*SavedLevelPath, *SavedAssetsPath, *TempLevelPath, *TempAssetsPath));
 
 				//	CreateTestTempLevel(Test, MapName, HDAAssetPath, ActorName, OnFinishedCallback, OnPreInstantiationCallback, OnPostInstantiationCallback);
+
+					return;
+				}
+
+				if (!FHoudiniEditorEquivalenceUtils::IsEquivalent(InAssetWrapper->GetHoudiniCookable(), SceneHAC->GetCookable()))
+				{
+					Test->AddError(FString::Printf(
+						TEXT("Cookable is not equivalent. If this change is intended, then DELETE %s and %s and MOVE %s and %s to those locations, fix redirectors in the TestCached folder from the content browser and commit to dev_reg. Do not copy/paste as it will break essential DuplicateTransient references like OutputObjects."),
+						*SavedLevelPath, *SavedAssetsPath, *TempLevelPath, *TempAssetsPath));
+
+					//	CreateTestTempLevel(Test, MapName, HDAAssetPath, ActorName, OnFinishedCallback, OnPreInstantiationCallback, OnPostInstantiationCallback);
 
 					return;
 				}
@@ -1172,7 +1190,10 @@ void FHoudiniEditorTestUtils::LoadMap(FHoudiniAutomationTest* Test, const FStrin
 	{
 		*HasLoadedMap = true;
 	});
-	
+
+	// Introduce an artifical delay in attempt to work around UE5.6 garbage collection issues.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+
 	Test->AddCommand(new FFunctionLatentCommand([=]()
 	{
 		const double CurrentTime = FPlatformTime::Seconds();
@@ -1266,7 +1287,8 @@ void FHoudiniEditorTestUtils::RecookAndWait(FHoudiniAutomationTest* Test, UHoudi
 
 		const double CurrentTime = FPlatformTime::Seconds();
 
-		if (TestObject->CookCount >= TestObject->ExpectedCookCount && InAssetWrapper->GetHoudiniAssetComponent()->GetAssetState() == EHoudiniAssetState::None)
+		EHoudiniAssetState CurrentState = InAssetWrapper->GetHoudiniCookable() ? InAssetWrapper->GetHoudiniCookable()->GetCurrentState() : InAssetWrapper->GetHoudiniAssetComponent()->GetAssetState();
+		if (TestObject->CookCount >= TestObject->ExpectedCookCount && CurrentState == EHoudiniAssetState::None)
 		{
 			if (CookSuccessfulResult == false)
 			{
@@ -1319,9 +1341,9 @@ bool FHoudiniEditorTestUtils::CreateSessionIfInvalid(const FName& SessionPipeNam
 	if (bSuccess)
 	{
 		// We've successfully created the Houdini Engine session,
-		// We now need to notify all the HoudiniAssetComponent that they need to re instantiate 
+		// We now need to notify all the cookables that they need to re instantiate 
 		// themselves in the new Houdini engine session.
-		FHoudiniEngineUtils::MarkAllHACsAsNeedInstantiation();
+		FHoudiniEngineUtils::MarkAllCookablesAsNeedInstantiation();
 	}
 
 	return bSuccess;

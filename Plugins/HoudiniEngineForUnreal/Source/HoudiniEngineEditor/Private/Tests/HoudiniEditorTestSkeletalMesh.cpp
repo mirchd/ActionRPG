@@ -48,6 +48,7 @@
 	#include "PhysicsEngine/BodySetup.h"
 	#include "PhysicsEngine/SkeletalBodySetup.h"
 #endif
+#include "PhysicsEngine/PhysicsAsset.h"
 
 IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestSkeletalMeshElectra, "Houdini.UnitTests.SkeletalMesh.Electra",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext  | EAutomationTestFlags::ProductFilter)
@@ -65,8 +66,7 @@ bool FHoudiniEditorTestSkeletalMeshElectra::RunTest(const FString& Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestSkeletalMeshUtils::SkeletalMeshHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Cook and Bake Electra.
@@ -74,7 +74,7 @@ bool FHoudiniEditorTestSkeletalMeshElectra::RunTest(const FString& Parameters)
 	
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
 		Context->StartCookingHDA();
 		return true;
 	}));
@@ -82,7 +82,7 @@ bool FHoudiniEditorTestSkeletalMeshElectra::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -95,13 +95,12 @@ bool FHoudiniEditorTestSkeletalMeshElectra::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		FHoudiniBakeSettings BakeSettings;
+		Context->Bake(BakeSettings);
 
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
-
-		FString BakeFolder = Context->HAC->GetBakeFolderOrDefault();
+		FString BakeFolder = Context->GetBakeFolderOrDefault();
 
 		// There should be one baked output object.
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 1, return true);
 		auto & BakedOutput = BakedOutputs[0];
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutput.BakedOutputObjects.Num(), 1, return true);
@@ -162,8 +161,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraDefaultPhysicsAsset::RunTest(const FSt
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestSkeletalMeshUtils::SkeletalMeshHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Cook and Bake Electra.
@@ -171,8 +169,8 @@ bool FHoudiniEditorTestSkeletalMeshElectraDefaultPhysicsAsset::RunTest(const FSt
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "create_default_physics_asset", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "create_default_physics_asset", true, 0);
 		Context->StartCookingHDA();
 		return true;
 	}));
@@ -180,7 +178,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraDefaultPhysicsAsset::RunTest(const FSt
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -193,13 +191,12 @@ bool FHoudiniEditorTestSkeletalMeshElectraDefaultPhysicsAsset::RunTest(const FSt
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		FHoudiniBakeSettings BakeSettings;
+		Context->Bake(BakeSettings);
 
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
-
-		FString BakeFolder = Context->HAC->GetBakeFolderOrDefault();
+		FString BakeFolder = Context->GetBakeFolderOrDefault();
 
 		// There should be one baked output object.
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 1, return true);
 		auto& BakedOutput = BakedOutputs[0];
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutput.BakedOutputObjects.Num(), 1, return true);
@@ -265,8 +262,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraCustomPhysicsAsset::RunTest(const FStr
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestSkeletalMeshUtils::SkeletalMeshHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Cook and Bake Electra.
@@ -274,8 +270,8 @@ bool FHoudiniEditorTestSkeletalMeshElectraCustomPhysicsAsset::RunTest(const FStr
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "enable_custom_physics_asset", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "enable_custom_physics_asset", true, 0);
 			Context->StartCookingHDA();
 			return true;
 		}));
@@ -283,7 +279,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraCustomPhysicsAsset::RunTest(const FStr
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have two outputs, two meshes
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -296,13 +292,12 @@ bool FHoudiniEditorTestSkeletalMeshElectraCustomPhysicsAsset::RunTest(const FStr
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			FHoudiniBakeSettings BakeSettings;
+			Context->Bake(BakeSettings);
 
-			FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
-
-			FString BakeFolder = Context->HAC->GetBakeFolderOrDefault();
+			FString BakeFolder = Context->GetBakeFolderOrDefault();
 
 			// There should be one baked output object.
-			TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+			TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 			HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 1, return true);
 			auto& BakedOutput = BakedOutputs[0];
 			HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutput.BakedOutputObjects.Num(), 1, return true);
@@ -441,8 +436,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingPhysicsAsset::RunTest(const FS
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestSkeletalMeshUtils::SkeletalMeshHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Cook and Bake Electra.
@@ -450,8 +444,8 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingPhysicsAsset::RunTest(const FS
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "use_test_physics_asset", true, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterString, "unreal_skeleton", TEXT(""), 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "use_test_physics_asset", true, 0);
 		Context->StartCookingHDA();
 		return true;
 	}));
@@ -459,7 +453,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingPhysicsAsset::RunTest(const FS
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -472,13 +466,12 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingPhysicsAsset::RunTest(const FS
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		FHoudiniBakeSettings BakeSettings;
+		Context->Bake(BakeSettings);
 
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
-
-		FString BakeFolder = Context->HAC->GetBakeFolderOrDefault();
+		FString BakeFolder = Context->GetBakeFolderOrDefault();
 
 		// There should be one baked output object.
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 1, return true);
 		auto& BakedOutput = BakedOutputs[0];
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutput.BakedOutputObjects.Num(), 1, return true);
@@ -545,8 +538,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingSkeleton::RunTest(const FStrin
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestSkeletalMeshUtils::SkeletalMeshHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Cook and Bake Electra, but use an existing Unreal Skeleton
@@ -556,7 +548,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingSkeleton::RunTest(const FStrin
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, SkeletonAssetName]()
 	{
-		SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterString, "unreal_skeleton", SkeletonAssetName, 0);
+		SET_HDA_PARAMETER(Context, UHoudiniParameterString, "unreal_skeleton", SkeletonAssetName, 0);
 		Context->StartCookingHDA();
 		return true;
 	}));
@@ -564,7 +556,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingSkeleton::RunTest(const FStrin
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -577,13 +569,12 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingSkeleton::RunTest(const FStrin
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, SkeletonAssetName]()
 	{
 		FHoudiniBakeSettings BakeSettings;
+		Context->Bake(BakeSettings);
 
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
-
-		FString BakeFolder = Context->HAC->GetBakeFolderOrDefault();
+		FString BakeFolder = Context->GetBakeFolderOrDefault();
 
 		// There should be one baked output object.
-		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->HAC->GetBakedOutputs();
+		TArray<FHoudiniBakedOutput>& BakedOutputs = Context->GetBakedOutputs();
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutputs.Num(), 1, return true);
 		auto& BakedOutput = BakedOutputs[0];
 		HOUDINI_TEST_EQUAL_ON_FAIL(BakedOutput.BakedOutputObjects.Num(), 1, return true);
@@ -616,6 +607,7 @@ bool FHoudiniEditorTestSkeletalMeshElectraExistingSkeleton::RunTest(const FStrin
 
 	return true;
 }
+
 IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestSkeletalMeshRoundtrip, "Houdini.UnitTests.SkeletalMesh.Roundtrip",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext  | EAutomationTestFlags::ProductFilter)
 
@@ -628,8 +620,7 @@ bool FHoudiniEditorTestSkeletalMeshRoundtrip::RunTest(const FString& Parameters)
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, FHoudiniEditorTestSkeletalMeshUtils::RoundtripHDA, FTransform::Identity, false));
 	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
 
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	USkeletalMesh* OrigSkeletalMesh = LoadObject<USkeletalMesh>(Context->World, TEXT("/Script/Engine.SkeletalMesh'/Game/TestObjects/SkeletalMeshes/Test_Roundtrip_SKM.Test_Roundtrip_SKM'"));
 
@@ -644,7 +635,7 @@ bool FHoudiniEditorTestSkeletalMeshRoundtrip::RunTest(const FString& Parameters)
 
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, OrigSkeletalMeshActor]()
 	{
-		UHoudiniInput* CurrentInput = Context->HAC->GetInputAt(0);
+		UHoudiniInput* CurrentInput = Context->GetInputAt(0);
 		Context->StartCookingHDA();
 		return true;
 	}));
@@ -653,7 +644,7 @@ bool FHoudiniEditorTestSkeletalMeshRoundtrip::RunTest(const FString& Parameters)
 	{
 		TArray<AActor*> Actors;
 		Actors.Add(OrigSkeletalMeshActor);
-		UHoudiniInput* CurrentInput = Context->HAC->GetInputAt(0);
+		UHoudiniInput* CurrentInput = Context->GetInputAt(0);
 		bool bChanged = true;
 		CurrentInput->SetInputType(EHoudiniInputType::World, bChanged);
 
@@ -665,7 +656,7 @@ bool FHoudiniEditorTestSkeletalMeshRoundtrip::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, OrigSkeletalMesh]()
 	{
 		TArray<UHoudiniOutput*> Outputs;
-		Context->HAC->GetOutputs(Outputs);
+		Context->GetOutputs(Outputs);
 
 		// We should have two outputs, two meshes
 		HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -727,8 +718,7 @@ bool FHoudiniEditorTestSkeletalMeshRoundtrip::RunTest(const FString& Parameters)
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 	{
 		FHoudiniBakeSettings BakeSettings;
-
-		FHoudiniEngineBakeUtils::BakeHoudiniAssetComponent(Context->HAC, BakeSettings, Context->HAC->HoudiniEngineBakeOption, Context->HAC->bRemoveOutputAfterBake);
+		Context->Bake(BakeSettings);
 
 		return true;
 	}));

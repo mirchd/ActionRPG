@@ -27,6 +27,7 @@
 #pragma once
 
 #include "HoudiniAssetComponent.h"
+#include "HoudiniCookable.h"
 #include "HoudiniPDGAssetLink.h"
 
 #include "Modules/ModuleInterface.h"
@@ -53,21 +54,22 @@ class HOUDINIENGINERUNTIME_API FHoudiniEngineRuntime : public IModuleInterface
 		static bool IsInitialized();
 
 		//
-		// Houdini Asset Component registry
+		// Houdini Cookable registry
 		//
-		// Ensure that the registered components are all still valid
-		void CleanUpRegisteredHoudiniComponents();
+		void CleanUpRegisteredHoudiniCookables();
 
-		void RegisterHoudiniComponent(UHoudiniAssetComponent* HAC, bool bAllowArchetype=false);
+		void RegisterHoudiniCookable(UHoudiniCookable* HC, bool bAllowArchetype = false);
 
-		void UnRegisterHoudiniComponent(UHoudiniAssetComponent* HAC);
-		void UnRegisterHoudiniComponent(const int32& ValidIdx);
+		void UnRegisterHoudiniCookable(UHoudiniCookable* HC);
+		void UnRegisterHoudiniCookable(const int32& ValidIdx);
 
-		bool IsComponentRegistered(UHoudiniAssetComponent* HAC) const;
-		int32 GetRegisteredHoudiniComponentCount();
-		UHoudiniAssetComponent* GetRegisteredHoudiniComponentAt(const int32& Index);
+		bool IsCookableRegistered(UHoudiniCookable* HC) const;
 
-		virtual TArray<TWeakObjectPtr<UHoudiniAssetComponent>>* GetRegisteredHoudiniComponents() { return &RegisteredHoudiniComponents; };
+		int32 GetRegisteredHoudiniCookableCount();
+
+		UHoudiniCookable* GetRegisteredHoudiniCookableAt(const int32& Index);
+
+		virtual TArray<TWeakObjectPtr<UHoudiniCookable>>* GetRegisteredHoudiniCookable() { return &RegisteredHoudiniCookables; };
 		
 		//
 		// Node deletion
@@ -75,7 +77,9 @@ class HOUDINIENGINERUNTIME_API FHoudiniEngineRuntime : public IModuleInterface
 		void MarkNodeIdAsPendingDelete(const int32& InNodeId, bool bDeleteParent = false);
 
 		int32 GetNodeIdsPendingDeleteCount();
+
 		int32 GetNodeIdsPendingDeleteAt(const int32& Index);
+
 		void RemoveNodeIdPendingDeleteAt(const int32& Index);
 
 		bool IsParentNodePendingDelete(const int32& NodeId);
@@ -104,8 +108,8 @@ class HOUDINIENGINERUNTIME_API FHoudiniEngineRuntime : public IModuleInterface
 		// Singleton instance.
 		static FHoudiniEngineRuntime * HoudiniEngineRuntimeInstance;
 
-		// 
-		TArray<TWeakObjectPtr<UHoudiniAssetComponent>> RegisteredHoudiniComponents;
+		// Array of Cookable
+		TArray<TWeakObjectPtr<UHoudiniCookable>> RegisteredHoudiniCookables;
 
 		TArray<int32> NodeIdsPendingDelete;
 

@@ -44,6 +44,7 @@
 	#include "Editor.h"
 	#include "Kismet2/BlueprintEditorUtils.h"	
 	#include "SSubobjectBlueprintEditor.h"
+	#include "PropertyEditorModule.h"
 #if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 0)
 	#include "LandscapeSplineControlPoint.h"
 #endif
@@ -432,7 +433,8 @@ FHoudiniEngineRuntimeUtils::CopyComponentProperties(UActorComponent* SourceCompo
 
 	for (UActorComponent* ModifiedComponentInstance : ComponentInstancesToReregister)
 	{
-		ModifiedComponentInstance->RegisterComponent();
+		if (ModifiedComponentInstance->GetOwner())
+			ModifiedComponentInstance->RegisterComponent();
 	}
 
 	return CopiedPropertyCount;
@@ -902,5 +904,13 @@ FHoudiniEngineRuntimeUtils::GetClassByName(const FString& InName)
 	return FindFirstObject<UClass>(*InName, EFindFirstObjectOptions::NativeFirst);
 #else
 	return FindObject<UClass>(ANY_PACKAGE, *InName);
+#endif
+}
+
+void FHoudiniEngineRuntimeUtils::ForceDetailsPanelToUpdate()
+{
+#if WITH_EDITOR
+	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	PropertyEditorModule.NotifyCustomizationModuleChanged();
 #endif
 }

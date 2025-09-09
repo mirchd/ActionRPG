@@ -32,8 +32,8 @@
 
 /*
 
-    Houdini Version: 20.5.710
-    Houdini Engine Version: 7.1.1
+    Houdini Version: 21.0.467
+    Houdini Engine Version: 8.0.2
     Unreal Version: 5.0.0
 
 */
@@ -48,6 +48,8 @@ using Microsoft.Extensions.Logging;
 
 public class HoudiniEngine : ModuleRules
 {
+
+	private int HOUDINI_USE_PCG  = 0;
 
     private void LogError(string err)
     {
@@ -78,7 +80,7 @@ public class HoudiniEngine : ModuleRules
 
     private string GetHFSPath()
     {
-        string HoudiniVersion = "20.5.710";
+        string HoudiniVersion = "21.0.467";
         bool bIsRelease = true;
         string HFSPath = "";
         string RegistryPath = "HKEY_LOCAL_MACHINE\\SOFTWARE\\Side Effects Software";
@@ -328,7 +330,8 @@ public class HoudiniEngine : ModuleRules
                 "GeometryCollectionEngine",
                 "FieldSystemEngine",
                 "BSPUtils",
-                "DataLayerEditor"
+                "DataLayerEditor",
+                "MaterialEditor"
             }
         );
 
@@ -340,6 +343,17 @@ public class HoudiniEngine : ModuleRules
                 "PhysicsUtilities"
              }
         );
+
+        if (HOUDINI_USE_PCG == 1)
+        {
+            PrivateDependencyModuleNames.AddRange(
+               new string[]
+               {
+                   "PCG"
+               }
+            );
+            PrivateDefinitions.Add("HOUDINI_USE_PCG=1");
+        }
 
         if (Target.bBuildEditor == true)
         {

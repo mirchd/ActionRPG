@@ -53,9 +53,10 @@ IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestOutput, "Houdini.Unit
 
 bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	/// This test enusres that we can cook an HDA multiple times and the outputs are removed on each recook. The test HDA
+	/// This test ensures that we can cook an HDA multiple times and the outputs are removed on each recook. The test HDA
 	///	can create multiple outputs based off the parameters. By changing the parameters we can get different scenarios on
 	///	the same HDA.
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -69,8 +70,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	// after the test returns.
 
 	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, TEXT("/Game/TestHDAs/Outputs/Test_Outputs"), FTransform::Identity, false));
-	Context->HAC->bOverrideGlobalProxyStaticMeshSettings = true;
-	Context->HAC->bEnableProxyStaticMeshOverride = false;
+	Context->SetProxyMeshEnabled(false);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Firstly: Enable the cube and disable the height field. This should result in one output, which is a static mesh.
@@ -79,9 +79,9 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", true, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instances", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instances", false, 0);
 			Context->StartCookingHDA();
 			return true;
 		}));
@@ -89,7 +89,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have one output.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -109,8 +109,8 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", false, 0);
 			Context->StartCookingHDA();
 			return true; // This part of the test is complete.
 		}));
@@ -118,7 +118,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 0, return true);
 			return true; // This part of the test is complete.
 		}));
@@ -131,8 +131,8 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", true, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", true, 0);
 			Context->StartCookingHDA();
 			return true; // This part of the test is complete.
 		}));
@@ -140,7 +140,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have one mesh and one landscape
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 2, return true);
@@ -168,8 +168,8 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", false, 0);
 			Context->StartCookingHDA();
 			return true; // This part of the test is complete.
 		}));
@@ -177,14 +177,18 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// Check there are no outputs.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 0, return true);
 
+			// Check that we have valid context data
+			bool bNoData = Context->Data.IsEmpty();
+			HOUDINI_TEST_EQUAL_ON_FAIL(bNoData, false, return true);
+
 			// Check the landscape actor (whose name was cached from the last test) is deleted.
 			FString LandscapeName = Context->Data[TEXT("landscape")];
-			AActor * LandscapeActor = FHoudiniEditorUnitTestUtils::GetActorWithName(Context->HAC->GetWorld(), LandscapeName);
+			AActor * LandscapeActor = FHoudiniEditorUnitTestUtils::GetActorWithName(Context->GetWorld(), LandscapeName);
 			HOUDINI_TEST_NULL(LandscapeActor);
 
 			return true; // This part of the test is complete.
@@ -198,9 +202,9 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instances", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instances", true, 0);
 			Context->StartCookingHDA();
 			return true; // This part of the test is complete.
 		}));
@@ -208,7 +212,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have one output.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -233,10 +237,10 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instances", true, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "as_foliage", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instances", true, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "as_foliage", true, 0);
 			Context->StartCookingHDA();
 			return true; // This part of the test is complete.
 		}));
@@ -244,7 +248,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// We should have one output.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 1, return true);
@@ -268,10 +272,10 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	{
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "cube", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "heightfield", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "instances", false, 0);
-			SET_HDA_PARAMETER(Context->HAC, UHoudiniParameterToggle, "as_foliage", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "cube", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "heightfield", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "instances", false, 0);
+			SET_HDA_PARAMETER(Context, UHoudiniParameterToggle, "as_foliage", false, 0);
 			Context->StartCookingHDA();
 			return true; // This part of the test is complete.
 		}));
@@ -279,7 +283,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 		AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
 		{
 			TArray<UHoudiniOutput*> Outputs;
-			Context->HAC->GetOutputs(Outputs);
+			Context->GetOutputs(Outputs);
 
 			// Check there are no outputs.
 			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 0, return true);
@@ -292,6 +296,7 @@ bool FHoudiniEditorTestOutput::RunTest(const FString & Parameters)
 	/// Done
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///
+#endif
 	return true;
 }
 

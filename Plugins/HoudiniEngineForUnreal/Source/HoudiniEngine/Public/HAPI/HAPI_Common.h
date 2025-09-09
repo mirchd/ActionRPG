@@ -82,8 +82,8 @@
 /// [HAPI_CACHE]
 /// Common cache names. You can see these same cache names in the
 /// Cache Manager window in Houdini (Windows > Cache Manager).
-#define HAPI_CACHE_COP2_COOK                 "COP Cook Cache"
-#define HAPI_CACHE_COP2_FLIPBOOK             "COP Flipbook Cache"
+#define HAPI_CACHE_COP2_COOK                 "Old COP Cook Cache"
+#define HAPI_CACHE_COP2_FLIPBOOK             "Composite View Cache"
 #define HAPI_CACHE_IMAGE                    "Image Cache"
 #define HAPI_CACHE_OBJ                      "Object Transform Cache"
 #define HAPI_CACHE_GL_TEXTURE               "OpenGL Texture Cache"
@@ -257,6 +257,8 @@ enum HAPI_Result
     HAPI_RESULT_DISALLOWED_NC_ASSET_WITH_LC_LICENSE     = 140,
     HAPI_RESULT_DISALLOWED_LC_ASSET_WITH_C_LICENSE      = 150,
     HAPI_RESULT_DISALLOWED_HENGINEINDIE_W_3PARTY_PLUGIN = 160,
+    HAPI_RESULT_SHARED_MEMORY_BUFFER_OVERFLOW           = 170,
+    HAPI_RESULT_INVALID_SHARED_MEMORY_BUFFER            = 180,
 
     HAPI_RESULT_ASSET_INVALID                           = 200,
     HAPI_RESULT_NODE_INVALID                            = 210,
@@ -507,11 +509,12 @@ enum HAPI_NodeType
     HAPI_NODETYPE_CHOP      = 1 << 2,
     HAPI_NODETYPE_ROP       = 1 << 3,
     HAPI_NODETYPE_SHOP      = 1 << 4,
-    HAPI_NODETYPE_COP       = 1 << 5,
+    HAPI_NODETYPE_COP2      = 1 << 5,
     HAPI_NODETYPE_VOP       = 1 << 6,
     HAPI_NODETYPE_DOP       = 1 << 7,
     HAPI_NODETYPE_TOP       = 1 << 8,
-    HAPI_NODETYPE_LOP       = 1 << 9
+    HAPI_NODETYPE_COP       = 1 << 9,
+    HAPI_NODETYPE_LOP       = 1 << 10
 };
 HAPI_C_ENUM_TYPEDEF( HAPI_NodeType )
 typedef int HAPI_NodeTypeBits;
@@ -1031,6 +1034,9 @@ enum HAPI_PDG_EventType
     /// Sent when a node finished generating
     HAPI_PDG_EVENT_NODE_GENERATED,
 
+    /// Sent when a work item's frame changes
+    HAPI_PDG_EVENT_WORKITEM_FRAME,
+
     HAPI_PDG_CONTEXT_EVENTS,
 };
 HAPI_C_ENUM_TYPEDEF( HAPI_PDG_EventType )
@@ -1138,6 +1144,8 @@ struct HAPI_API HAPI_SessionInfo
     // command line or ::HAPI_StartThriftSharedMemoryServer. This is the size of
     // the shared memory buffer in megabytes (MB).
     HAPI_Int64 sharedMemoryBufferSize;
+
+    HAPI_Bool enableSharedMemoryDataTransfer;
 };
 HAPI_C_STRUCT_TYPEDEF( HAPI_SessionInfo )
 
@@ -1175,22 +1183,12 @@ HAPI_C_STRUCT_TYPEDEF( HAPI_ThriftServerOptions )
 /// Data for global timeline, used with ::HAPI_SetTimelineOptions()
 struct HAPI_API HAPI_TimelineOptions
 {
-    float fps;
-
-    float startTime;
-    float endTime;
-};
-HAPI_C_STRUCT_TYPEDEF( HAPI_TimelineOptions )
-
-/// Data for global timeline, used with ::HAPI_SetTimelineOptions64()
-struct HAPI_API HAPI_TimelineOptions64
-{
     double fps;
 
     double startTime;
     double endTime;
 };
-HAPI_C_STRUCT_TYPEDEF( HAPI_TimelineOptions64 )
+HAPI_C_STRUCT_TYPEDEF( HAPI_TimelineOptions )
 
 // ASSETS -------------------------------------------------------------------
 
@@ -2002,25 +2000,25 @@ HAPI_C_STRUCT_TYPEDEF(HAPI_CurveInfo)
 // Curve info dealing specifically with input curves
 struct HAPI_API HAPI_InputCurveInfo
 {
-    /// The desired curve type of the curve
+    /// The desired curve type of the curve.
     /// Note that this is NOT necessarily equal to the value in HAPI_CurveInfo
-    /// in the case of curve refinement
+    /// in the case of curve refinement.
     HAPI_CurveType curveType;
 
-    /// The desired order for your input curve
+    /// The desired order for your input curve.
     /// This is your desired order, which may differ from HAPI_CurveInfo
-    /// as it will do range checks and adjust the actual order accordingly
+    /// as it will do range checks and adjust the actual order accordingly.
     int order;
 
-    /// Whether or not the curve is closed
+    /// Whether or not the curve is closed.
     /// May differ from HAPI_CurveInfo::isPeriodic depending on the curveType
-    /// (e.g. A NURBs curve is never technically closed according to HAPI_CurveInfo)
+    /// (e.g. A NURBs curve is never technically closed according to HAPI_CurveInfo).
     HAPI_Bool closed;
 
-    /// Whether or not to reverse the curve input
+    /// Whether or not to reverse the curve input.
     HAPI_Bool reverse;
 
-    // Input method type (CVs or Brekapoints)
+    // Input method type (CVs or Brekapoints).
     HAPI_InputCurveMethod inputMethod;
 
     // Parameterization - Only used when inputMethod is BREAKPOINTS

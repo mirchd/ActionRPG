@@ -32,6 +32,7 @@
 #include "FileHelpers.h"
 #include "LandscapeInfo.h"
 
+#include "HoudiniCookable.h"
 #include "HoudiniEngine.h"
 #include "HoudiniEngineUtils.h"
 #include "HoudiniGeoImporter.h"
@@ -110,7 +111,7 @@ FHoudiniPDGTranslator::CreateAllResultObjectsForPDGWorkItem(
 		AActor* WorkItemOutputActor = WROOutputActorOwner.GetOutputActor();
 		if (!IsValid(WorkItemOutputActor))
 		{
-			UWorld* World = InAssetLink->GetWorld();
+			UWorld* World = InAssetLink->GetOutputWorld();
 			if (!IsValid(World))
 				World = InAssetLink->GetOwnerActor() ? InAssetLink->GetOwnerActor()->GetWorld() : nullptr;
 
@@ -147,8 +148,8 @@ FHoudiniPDGTranslator::CreateAllResultObjectsForPDGWorkItem(
 		// NOTE: If performance becomes a problem, cache these on the TOPNode along with all the other cached landscape
 		// data.
 		TArray<ALandscapeProxy *> AllInputLandscapes;
-		UHoudiniAssetComponent* HAC = InAssetLink->GetOuterHoudiniAssetComponent();
-		FHoudiniEngineUtils::GatherLandscapeInputs(HAC, AllInputLandscapes);
+		UHoudiniCookable* HC = InAssetLink->GetOuterHoudiniCookable();
+		FHoudiniEngineUtils::GatherLandscapeInputs(HC->GetInputs(), AllInputLandscapes);
 
 		bResult = CreateAllResultObjectsFromPDGOutputs(
 			NewTOPOutputs,
@@ -193,7 +194,7 @@ FHoudiniPDGTranslator::LoadExistingAssetsAsResultObjectsForPDGWorkItem(
 	const FHoudiniPackageParams& InPackageParams,
 	TArray<TObjectPtr<UHoudiniOutput>>& InOutputs,
 	TArray<EHoudiniOutputType> InOutputTypesToProcess,
-	const TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData>* InPreBuiltInstancedOutputPartData)
+	const TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>* InPreBuiltInstancedOutputPartData)
 {
 	if (!IsValid(InAssetLink))
 	{
@@ -215,7 +216,7 @@ FHoudiniPDGTranslator::LoadExistingAssetsAsResultObjectsForPDGWorkItem(
 	AActor* WorkItemOutputActor = WROOutputActorOwner.GetOutputActor();
 	if (!IsValid(WorkItemOutputActor))
 	{
-		UWorld* World = InAssetLink->GetWorld();
+		UWorld* World = InAssetLink->GetOutputWorld();
 		if (!IsValid(World))
 			World = InAssetLink->GetOwnerActor() ? InAssetLink->GetOwnerActor()->GetWorld() : nullptr;
 
@@ -246,8 +247,8 @@ FHoudiniPDGTranslator::LoadExistingAssetsAsResultObjectsForPDGWorkItem(
 	// NOTE: If performance becomes a problem, cache these on the TOPNode along with all the other cached landscape
 	// data.
 	TArray<ALandscapeProxy *> AllInputLandscapes;
-	UHoudiniAssetComponent* HAC = InAssetLink->GetOuterHoudiniAssetComponent();
-	FHoudiniEngineUtils::GatherLandscapeInputs(HAC, AllInputLandscapes);
+	UHoudiniCookable* HC = InAssetLink->GetOuterHoudiniCookable();
+	FHoudiniEngineUtils::GatherLandscapeInputs(HC->GetInputs(), AllInputLandscapes);
 
 	const bool bInTreatExistingMaterialsAsUpToDate = true;
 	const bool bOnlyUseExistingAssets = true;
@@ -286,7 +287,7 @@ FHoudiniPDGTranslator::CreateAllResultObjectsFromPDGOutputs(
 	TArray<EHoudiniOutputType> InOutputTypesToProcess,
 	bool bInTreatExistingMaterialsAsUpToDate,
 	bool bInOnlyUseExistingAssets,
-	const TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData>* InPreBuiltInstancedOutputPartData
+	const TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>* InPreBuiltInstancedOutputPartData
 	)
 {
 	// Process the new/updated outputs via the various translators
@@ -297,13 +298,16 @@ FHoudiniPDGTranslator::CreateAllResultObjectsFromPDGOutputs(
 	TArray<UHoudiniOutput*> LandscapeOutputs;
 	TArray<UPackage*> CreatedPackages;
 
+	// TODO: COOKABLE:
+	// Make sure Outer is a Component!
+	
 	//bool bCreatedNewMaps = false;
 	UWorld* PersistentWorld = InOuterComponent->GetTypedOuter<UWorld>();
 	check(PersistentWorld);
 
 	// Fetch the HAC if the asset link is associated with one
-	UHoudiniAssetComponent const* const HAC = IsValid(InAssetLink) ? InAssetLink->GetOuterHoudiniAssetComponent() : nullptr;
-	const bool bIsHACValid = IsValid(HAC);
+	UHoudiniCookable* HC = IsValid(InAssetLink) ? InAssetLink->GetOuterHoudiniCookable() : nullptr;
+	const bool bIsHACValid = IsValid(HC);
 	
 	// Keep track of all generated houdini materials to avoid recreating them over and over
 	TMap<FHoudiniMaterialIdentifier, TObjectPtr<UMaterialInterface>> AllOutputMaterials;
@@ -343,9 +347,9 @@ FHoudiniPDGTranslator::CreateAllResultObjectsFromPDGOutputs(
 						CurOutput,
 						InPackageParams,
 						EHoudiniStaticMeshMethod::FMeshDescription,
-						HAC->bSplitMeshSupport,
-						bIsHACValid ? HAC->StaticMeshGenerationProperties : FHoudiniEngineRuntimeUtils::GetDefaultStaticMeshGenerationProperties(),
-						bIsHACValid ? HAC->StaticMeshBuildSettings : FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings(),
+						HC->GetSplitMeshSupport(),
+						bIsHACValid ? HC->GetStaticMeshGenerationProperties() : FHoudiniEngineRuntimeUtils::GetDefaultStaticMeshGenerationProperties(),
+						bIsHACValid ? HC->GetStaticMeshBuildSettings() : FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings(),
 						AllOutputMaterials,
 						InOuterComponent,
 						bInTreatExistingMaterialsAsUpToDate,
@@ -382,7 +386,7 @@ FHoudiniPDGTranslator::CreateAllResultObjectsFromPDGOutputs(
 					}
 				}
 
-				FString CookedPrefix = FHoudiniEngineUtils::GetOuterHoudiniAssetComponent(CurOutput)->GetOwner()->GetActorLabel() + "_"
+				FString CookedPrefix = FHoudiniEngineUtils::GetOuterHoudiniCookable(CurOutput)->GetOwner()->GetActorLabel() + "_"
 					 + InPackageParams.PDGTOPNodeName;
 
 				FHoudiniLandscapeTranslator::ProcessLandscapeOutput(

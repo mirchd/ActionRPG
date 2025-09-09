@@ -41,6 +41,7 @@
 #include "HoudiniDataTableTranslator.h"
 #include "HoudiniSkeletalMeshTranslator.h"
 #include "HoudiniAnimationTranslator.h"
+#include "HoudiniTextureTranslator.h"
 #include "HoudiniGeometryCollectionTranslator.h"
 #include "HoudiniSplineComponent.h"
 #include "HoudiniEngineRuntimeUtils.h"
@@ -53,6 +54,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Editor.h"
 
+#include "ImageUtils.h"  // Included for FCreateTexture2DParameters
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
 
@@ -161,7 +163,7 @@ bool UHoudiniGeoImporter::CreateObjectsFromOutputs(
 	FHoudiniPackageParams InPackageParams,
 	const FHoudiniStaticMeshGenerationProperties& InStaticMeshGenerationProperties,
 	const FMeshBuildSettings& InMeshBuildSettings,
-	TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData>* OutInstancedOutputPartData)
+	TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>* OutInstancedOutputPartData)
 {
 	//
 	// This isn't ideal but the reason we do this is because previously each 
@@ -179,6 +181,7 @@ bool UHoudiniGeoImporter::CreateObjectsFromOutputs(
 	TArray<UHoudiniOutput*> DataTableOutputs;
 	TArray<UHoudiniOutput*> SkeletalOutputs;
 	TArray<UHoudiniOutput*> AnimSequenceOutputs;
+	TArray<UHoudiniOutput*> CopTextureOutputs;
 
 	for (UHoudiniOutput* const Output : InOutputs)
 	{
@@ -207,6 +210,9 @@ bool UHoudiniGeoImporter::CreateObjectsFromOutputs(
 			break;
 		case EHoudiniOutputType::AnimSequence:
 			AnimSequenceOutputs.Add(Output);
+			break;
+		case EHoudiniOutputType::Cop:
+			CopTextureOutputs.Add(Output);
 			break;
 		}
 	}
@@ -241,6 +247,9 @@ bool UHoudiniGeoImporter::CreateObjectsFromOutputs(
 		return false;
 
 	if (!CreateAnimSequences(AnimSequenceOutputs, InPackageParams))
+		return false;
+
+	if (!CreateCopTextures(CopTextureOutputs, InPackageParams))
 		return false;
 
 	return true;
@@ -420,72 +429,6 @@ UHoudiniGeoImporter::CreateLandscapes(const TArray<UHoudiniOutput*>& InOutputs, 
 
 	HOUDINI_LOG_WARNING(TEXT("Importing a landscape directly from BGEOs is not currently supported."));
 	return false;
-
-	/*
-	// Before processing any of the output,
-	// we need to get the min/max value for all Height volumes in this output (if any)
-	float HoudiniHeightfieldOutputsGlobalMin = 0.f;
-	float HoudiniHeightfieldOutputsGlobalMax = 0.f;
-	FHoudiniLandscapeTranslator::CalcHeightGlobalZminZMax(InOutputs, HoudiniHeightfieldOutputsGlobalMin, HoudiniHeightfieldOutputsGlobalMax);
-
-	UWorld* PersistentWorld = InParent->GetWorld();
-	if(!PersistentWorld)
-		PersistentWorld = GEditor ? GEditor->GetEditorWorldContext(false).World() : nullptr;
-
-	if (!PersistentWorld)
-		return false;
-
-	for (auto& CurOutput : InOutputs)
-	{
-		if (CurOutput->GetType() != EHoudiniOutputType::Landscape)
-			continue;
-
-		FString Notification = TEXT("BGEO Importer: Creating Landscapes...");
-		FHoudiniEngine::Get().UpdateTaskSlateNotification(FText::FromString(Notification));
-
-		TArray<ALandscapeProxy*> EmptyInputLandscapes;
-		UHoudiniAssetComponent* HAC = FHoudiniEngineUtils::GetOuterHoudiniAssetComponent(CurOutput);
-
-		bool bCreatedNewMaps = false;
-		ERuntimePackageMode RuntimePackageMode = ERuntimePackageMode::CookToTemp;
-		switch(InPackageParams.PackageMode)
-		{
-			
-			case EPackageMode::Bake:
-				RuntimePackageMode = ERuntimePackageMode::Bake;
-				break;
-			case EPackageMode::CookToLevel_Invalid:
-			case EPackageMode::CookToTemp:
-			default:
-				RuntimePackageMode = ERuntimePackageMode::CookToTemp;
-				break;
-		}
-		TArray<TWeakObjectPtr<AActor>> CreatedUntrackedOutputs;
-		FHoudiniLandscapeTranslator::CreateLandscape(
-			CurOutput,
-			CreatedUntrackedOutputs,
-			EmptyInputLandscapes,
-			EmptyInputLandscapes,
-			HAC,
-			TEXT("{object_name}_"),
-			PersistentWorld,
-			HoudiniHeightfieldOutputsGlobalMin, HoudiniHeightfieldOutputsGlobalMax,
-			InPackageParams, bCreatedNewMaps,
-			RuntimePackageMode);
-
-		// Add all output objects
-		for (auto CurOutputPair : CurOutput->GetOutputObjects())
-		{
-			UObject* CurObj = CurOutputPair.Value.OutputObject;
-			if (!IsValid(CurObj))
-				continue;
-
-			OutputObjects.Add(CurObj);
-		}
-	}
-
-	return true;
-	*/
 }
 
 
@@ -769,9 +712,63 @@ UHoudiniGeoImporter::CreateAnimSequences(
 }
 
 bool
+UHoudiniGeoImporter::CreateCopTextures(
+	const TArray<UHoudiniOutput*>& InOutputs,
+	FHoudiniPackageParams InPackageParams)
+{
+	if (InOutputs.IsEmpty())
+	{
+		return true;
+	}
+
+	TArray<UPackage*> DummyPackages;
+	for (UHoudiniOutput* const CurOutput : InOutputs)
+	{
+		check(CurOutput->GetType() == EHoudiniOutputType::Cop);
+
+		FString Notification = TEXT("BGEO Importer: Creating Cop Textures...");
+		FHoudiniEngine::Get().UpdateTaskSlateNotification(FText::FromString(Notification));
+
+		const TArray<FHoudiniGeoPartObject>& GeoPartObjects = CurOutput->GetHoudiniGeoPartObjects();
+		if (GeoPartObjects.Num() <= 0)
+			continue;
+		HAPI_NodeId CopNode = GeoPartObjects[0].GeoId;
+
+		bool bRenderSuccessful = FHoudiniTextureTranslator::HapiRenderCOPTexture(CopNode);
+		if (bRenderSuccessful)
+		{
+			FCreateTexture2DParameters CreateTexture2DParameters;
+			CreateTexture2DParameters.SourceGuidHash = FGuid();
+			CreateTexture2DParameters.bUseAlpha = true;
+			CreateTexture2DParameters.CompressionSettings = TC_Default;
+			CreateTexture2DParameters.bDeferCompression = true;
+			CreateTexture2DParameters.bSRGB = true;
+
+			UTexture2D* Texture = nullptr;
+			FHoudiniTextureTranslator::CreateTexture(
+				CopNode,
+				HAPI_UNREAL_MATERIAL_TEXTURE_COLOR_ALPHA,
+				HAPI_IMAGE_DATA_INT8,
+				HAPI_IMAGE_PACKING_RGBA,
+				Texture,
+				"",
+				"",
+				InPackageParams,
+				CreateTexture2DParameters,
+				TEXTUREGROUP_World,
+				DummyPackages);
+
+			OutputObjects.Add(Texture);
+		}
+	}
+
+	return true;
+}
+
+bool
 UHoudiniGeoImporter::CreateInstancerOutputPartData(
 	const TArray<UHoudiniOutput*>& InOutputs,
-	TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancedOutputPartData>& OutInstancedOutputPartData)
+	TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>& OutInstancedOutputPartData)
 {
 	if (InOutputs.IsEmpty())
 	{
@@ -790,12 +787,10 @@ UHoudiniGeoImporter::CreateInstancerOutputPartData(
 			OutputIdentifier.PartId = HGPO.PartId;
 			OutputIdentifier.PartName = HGPO.PartName;
 			
-			OutInstancedOutputPartData.Add(OutputIdentifier, FHoudiniInstancedOutputPartData());
-			FHoudiniInstancedOutputPartData *InstancedOutputData = OutInstancedOutputPartData.Find(OutputIdentifier); 
+			OutInstancedOutputPartData.Add(OutputIdentifier, FHoudiniInstancerPartData());
+			FHoudiniInstancerPartData *InstancedOutputData = OutInstancedOutputPartData.Find(OutputIdentifier); 
 			// Create all the instancers and attach them to a fake outer component
-			TSet<UObject*> InvisibleObjects; // Not used by this function.
-			if (!FHoudiniInstanceTranslator::PopulateInstancedOutputPartData(HGPO, InOutputs, *InstancedOutputData, InvisibleObjects))
-				return false;
+			*InstancedOutputData = FHoudiniInstanceTranslator::PopulateInstancedOutputPartData(HGPO, InOutputs);
 		}
 	}
 
@@ -1137,7 +1132,8 @@ UHoudiniGeoImporter::BuildAllOutputsForNode(
 	TArray<TObjectPtr<UHoudiniOutput>>& OutNewOutputs,
 	bool bInAddOutputsToRootSet,
 	bool bInUseOutputNodes,
-	bool bGatherEditableCurves)
+	bool bGatherEditableCurves,
+	bool bCreateSceneComponents)
 {
 	bool bOutputTemplateGeos = false;
 
@@ -1147,7 +1143,7 @@ UHoudiniGeoImporter::BuildAllOutputsForNode(
 
 	// TArray<UHoudiniOutput*> OldOutputs;	
 	TMap<HAPI_NodeId, int32> OutputNodeCookCount;
-	if (!FHoudiniOutputTranslator::BuildAllOutputs(InNodeId, InOuter, OutputNodes, OutputNodeCookCount, InOldOutputs, OutNewOutputs, bOutputTemplateGeos, bInUseOutputNodes, bGatherEditableCurves))
+	if (!FHoudiniOutputTranslator::BuildAllOutputs(InNodeId, InOuter, OutputNodes, OutputNodeCookCount, InOldOutputs, OutNewOutputs, bOutputTemplateGeos, bInUseOutputNodes, bGatherEditableCurves, bCreateSceneComponents))
 	{
 		// Couldn't create the package
 		HOUDINI_LOG_ERROR(TEXT("Houdini GEO Importer: Failed to process the File SOP's outputs!"));

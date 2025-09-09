@@ -29,15 +29,15 @@
 #include "HoudiniEngineRuntime.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
 #include "HoudiniEngineRuntimeUtils.h"
+#include "HoudiniLandscapeRuntimeUtils.h"
 #include "HoudiniOutput.h"
 
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
+#include "InstancedFoliageActor.h"
 #include "Landscape.h"
 #include "UObject/MetaData.h"
-#include "HoudiniLandscapeRuntimeUtils.h"
-#include "Components/HierarchicalInstancedStaticMeshComponent.h"
-#include "InstancedFoliageActor.h"
 
 #if WITH_EDITOR
 	#include "FileHelpers.h"
@@ -519,13 +519,13 @@ UTOPNode::SetLoadedWorkResultsToDelete()
 }
 
 FGuid
-UTOPNode::GetHoudiniComponentGuid() const
+UTOPNode::GetHoudiniCookableGuid() const
 {
 	UHoudiniPDGAssetLink const* const AssetLink = GetOuterAssetLink();
 	if (!IsValid(AssetLink))
 		return FGuid();
 	
-	return AssetLink->GetOuterHoudiniComponentGuid();
+	return AssetLink->GetOuterCookableGuid();
 }
 
 void
@@ -540,7 +540,7 @@ UTOPNode::DeleteWorkResultObjectOutputs(const int32 InWorkResultArrayIndex, cons
 	
 	FTOPWorkResultObject& WRO = WorkItem.ResultObjects[InWorkResultObjectArrayIndex];
 	// Delete and clean up that WRObj
-	WRO.DestroyResultOutputs(GetHoudiniComponentGuid());
+	WRO.DestroyResultOutputs(GetHoudiniCookableGuid());
 	if (bInDeleteOutputActors)
 		WRO.GetOutputActorOwner().DestroyOutputActor();
 	WRO.State = EPDGWorkResultState::Deleted;
@@ -928,6 +928,20 @@ UHoudiniPDGAssetLink::SelectTOPNetwork(const int32& AtIndex)
 	SelectedTOPNetworkIndex = AtIndex;
 }
 
+UWorld*
+UHoudiniPDGAssetLink::GetOutputWorld()
+{
+	if(IsValid(OutputWorld))
+		return OutputWorld;
+	else
+		return GetWorld();
+}
+
+void
+UHoudiniPDGAssetLink::SetOutputWorld(UWorld * World)
+{
+	OutputWorld = World;
+}
 
 void
 UHoudiniPDGAssetLink::SelectTOPNode(UTOPNetwork* InTOPNetwork, const int32& AtIndex)
@@ -1182,10 +1196,10 @@ UHoudiniPDGAssetLink::ClearTOPNodeWorkItemResults(UTOPNode* TOPNode)
 
 	TOPNode->OnDirtyNode();
 
-	const FGuid HoudiniComponentGuid(TOPNode->GetHoudiniComponentGuid());
+	const FGuid CookableGuid(TOPNode->GetHoudiniCookableGuid());
 	for(FTOPWorkResult& CurrentWorkResult : TOPNode->WorkResult)
 	{
-		CurrentWorkResult.ClearAndDestroyResultObjects(HoudiniComponentGuid);
+		CurrentWorkResult.ClearAndDestroyResultObjects(CookableGuid);
 	}
 	TOPNode->WorkResult.Empty();
 
@@ -1230,7 +1244,7 @@ UHoudiniPDGAssetLink::ClearWorkItemResultByID(const int32& InWorkItemID, UTOPNod
 	FTOPWorkResult* WorkResult = GetWorkResultByID(InWorkItemID, InTOPNode);
 	if (WorkResult)
 	{
-		WorkResult->ClearAndDestroyResultObjects(InTOPNode->GetHoudiniComponentGuid());
+		WorkResult->ClearAndDestroyResultObjects(InTOPNode->GetHoudiniCookableGuid());
 		// TODO: Should we destroy the FTOPWorkResult struct entirely here?
 		//TOPNode.WorkResult.RemoveByPredicate
 
@@ -1267,9 +1281,9 @@ UHoudiniPDGAssetLink::GetWorkResultByID(const int32& InWorkItemID, UTOPNode* InT
 FDirectoryPath
 UHoudiniPDGAssetLink::GetTemporaryCookFolder() const
 {
-	UHoudiniAssetComponent* HAC = GetOuterHoudiniAssetComponent();
-	if (HAC)
-		return HAC->TemporaryCookFolder;
+	UHoudiniCookable* HC = GetOuterHoudiniCookable();
+	if (HC)
+		return HC->GetTemporaryCookFolder();
 	
 	FDirectoryPath TempPath;
 	TempPath.Path = FHoudiniEngineRuntime::Get().GetDefaultTemporaryCookFolder();
@@ -1277,13 +1291,13 @@ UHoudiniPDGAssetLink::GetTemporaryCookFolder() const
 }
 
 FGuid
-UHoudiniPDGAssetLink::GetOuterHoudiniComponentGuid() const
+UHoudiniPDGAssetLink::GetOuterCookableGuid() const
 {
-	UHoudiniAssetComponent const* const HAC = GetOuterHoudiniAssetComponent();
-	if (!IsValid(HAC))
+	UHoudiniCookable* HC = GetOuterHoudiniCookable();
+	if (!IsValid(HC))
 		return FGuid();
 
-	return HAC->GetComponentGUID();
+	return HC->GetCookableGUID();
 }
 
 void
@@ -1599,9 +1613,14 @@ UHoudiniPDGAssetLink::UpdatePostDuplicate()
 	}
 }
 
-UHoudiniAssetComponent* UHoudiniPDGAssetLink::GetOuterHoudiniAssetComponent() const
+UHoudiniCookable* 
+UHoudiniPDGAssetLink::GetOuterHoudiniCookable() const
 {
-	return Cast<UHoudiniAssetComponent>( GetTypedOuter<UHoudiniAssetComponent>() );
+	UHoudiniCookable* FoundHC = Cast<UHoudiniCookable>(GetTypedOuter<UHoudiniCookable>());
+	if (FoundHC)
+		return FoundHC;
+
+	return nullptr;
 }
 
 void
@@ -1864,9 +1883,19 @@ FTOPWorkResultObject::DestroyResultOutputs(const FGuid& InHoudiniComponentGuid)
 						// Make sure foliage our foliage instances have been removed
 						USceneComponent* ParentComponent = nullptr;
 						if (IsValid(OutputActor))
+						{
 							ParentComponent = Cast<USceneComponent>(OutputActor->GetRootComponent());
+						}
 						else
-							ParentComponent = Cast<USceneComponent>(HISMC->GetOuter()); 
+						{
+							ParentComponent = Cast<USceneComponent>(HISMC->GetOuter());
+							if (!ParentComponent)
+							{
+								UHoudiniCookable* OuterCookable = Cast<UHoudiniCookable>(HISMC->GetOuter());
+								ParentComponent = OuterCookable ? OuterCookable->GetComponent() : nullptr;
+							}
+						}
+							
 						if (IsValid(ParentComponent))
 						{
 							UStaticMesh* FoliageSM = HISMC->GetStaticMesh();
@@ -1910,11 +1939,13 @@ FTOPWorkResultObject::DestroyResultOutputs(const FGuid& InHoudiniComponentGuid)
 					{
 						// Remove from its actor first
 						if (SceneComponent->GetOwner())
+						{
+							SceneComponent->UnregisterComponent();
 							SceneComponent->GetOwner()->RemoveOwnedComponent(SceneComponent);
+						}
 
 						// Detach from its parent component if attached
-						SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-						SceneComponent->UnregisterComponent();
+						SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);						
 						SceneComponent->DestroyComponent();
 
 						bDidDestroyObjects = true;

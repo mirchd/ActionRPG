@@ -32,6 +32,7 @@
 #include "UObject/UObjectGlobals.h"
 #include "LandscapeDataAccess.h"
 #include "HoudiniAsset.h"
+#include "HoudiniEngine.h"
 #include "HoudiniEngineAttributes.h"
 #include "HoudiniEngineTimers.h"
 #include "HoudiniEngineUtils.h"
@@ -623,7 +624,7 @@ FHoudiniLandscapeUtils::ResolveLandscapes(
 			// Adjust the transform of the Landscape actor we are creating if this is a single tile.
 			LocalHeightFieldTransform = GetLandscapeActorTransformFromTileTransform(LocalHeightFieldTransform, HeightPart->TileInfo.GetValue());
 		}
-		FTransform LandscapeTransform = LocalHeightFieldTransform * LandscapeSettings.LocalToWorldTransform;
+		FTransform LandscapeTransform = LocalHeightFieldTransform * HeightPart->Transform * LandscapeSettings.LocalToWorldTransform;
 		LandscapeActor->SetActorTransform(LandscapeTransform);
 
 		//---------------------------------------------------------------------------------------------------------------------------------
@@ -1176,10 +1177,20 @@ FHoudiniHeightFieldData FHoudiniLandscapeUtils::FetchVolumeInUnrealSpace(
 
 	if (bFetchData)
 	{
+		// We have to fetch the volume before fetching height field data so HAPI knows which volume we're using.
+		HAPI_VolumeInfo VolumeInfo;
+		FHoudiniApi::GetVolumeInfo(FHoudiniEngine::Get().GetSession(), HeightField.GeoId, HeightField.PartId, &VolumeInfo);
+
 		FHoudiniHapiAccessor Accessor(HeightField.GeoId, HeightField.PartId, "");
+
 		bool bSuccess = Accessor.GetHeightFieldData(Result.Values, Result.GetNumPoints());
 
-		HOUDINI_CHECK_RETURN(bSuccess == true, Result);
+		if (!bSuccess)
+		{
+			HOUDINI_LOG_ERROR(TEXT("Failed to fetch height field data"));
+			Result.Values.SetNumZeroed(Result.GetNumPoints());
+
+		}
 
 		TransposeValues(Result.Values, Result.Dimensions);
 	}

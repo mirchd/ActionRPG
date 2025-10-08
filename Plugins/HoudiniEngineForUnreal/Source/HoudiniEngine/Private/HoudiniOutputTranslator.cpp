@@ -333,10 +333,10 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 
 	// TODO COOKABLE: Handle the case where the Out is NOT a component
 	// we need to split output asset creation from component creation!
+	UHoudiniCookable* OuterHC = Cast<UHoudiniCookable>(InOuter);
 	USceneComponent* InOuterComponent = Cast<USceneComponent>(InOuter);
 	if (!InOuterComponent)
 	{
-		UHoudiniCookable* OuterHC = Cast<UHoudiniCookable>(InOuter);
 		InOuterComponent = OuterHC ? OuterHC->GetComponent() : nullptr;
 	}
 
@@ -668,7 +668,9 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 
 	if (HasGeometryCollection)
 	{
-		FHoudiniGeometryCollectionTranslator::SetupGeometryCollectionComponentFromOutputs(Outputs, InOuterComponent, PackageParams, InWorld);
+		UObject* OutputOwner = OuterHC ? Cast<UObject>(OuterHC) : Cast<UObject>(InOuterComponent);
+
+		FHoudiniGeometryCollectionTranslator::SetupGeometryCollectionComponentFromOutputs(Outputs, OutputOwner, InOuterComponent, PackageParams, InWorld);
 	}
 
 	if (NumVisibleOutputs > 0)
@@ -784,7 +786,9 @@ FHoudiniOutputTranslator::UpdateDataLayersAndLevelInstanceOnOutput(
 
 
 bool
-FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(UHoudiniCookable* HC, bool bInDestroyProxies)
+FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(
+	UHoudiniCookable* HC,
+	bool bInDestroyProxies)
 {
 	if (!IsValid(HC))
 		return false;
@@ -808,9 +812,6 @@ FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(UHoudiniCoo
 
 	// Keep track of all generated houdini materials to avoid recreating them over and over
 	TMap<FHoudiniMaterialIdentifier, TObjectPtr<UMaterialInterface>> AllOutputMaterials;
-
-	bool bFoundProxies = false;
-	TArray<UHoudiniOutput*> InstancerOutputs;
 	for(int Idx = 0; Idx < HC->GetNumOutputs(); Idx++)
 	{
 		UHoudiniOutput* CurOutput = HC->GetOutputAt(Idx);
@@ -822,7 +823,6 @@ FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(UHoudiniCoo
 		{
 			if (CurOutput->HasAnyCurrentProxy())
 			{
-				bFoundProxies = true;
 				FHoudiniMeshTranslator::CreateAllMeshesAndComponentsFromHoudiniOutput(
 					CurOutput,
 					PackageParams,
@@ -832,14 +832,10 @@ FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(UHoudiniCoo
 					HC->GetStaticMeshBuildSettings(),
 					AllOutputMaterials,
 					OuterComponent,
-					true,  // bInTreatExistingMaterialsAsUpToDate
+					true, // bInTreatExistingMaterialsAsUpToDate
 					bInDestroyProxies
 				);  
 			}
-		}
-		else if (OutputType == EHoudiniOutputType::Instancer)
-		{
-			InstancerOutputs.Add(CurOutput);
 		}
 
 		for (auto& CurMat : CurOutput->AssignmentMaterialsById)
@@ -850,30 +846,8 @@ FHoudiniOutputTranslator::BuildStaticMeshesOnHoudiniProxyMeshOutputs(UHoudiniCoo
 		}
 	}
 
-	// Rebuild instancers if we built any static meshes from proxies
-	if (bFoundProxies)
-	{
-		if (bInDestroyProxies)
-		{
-			// We need to destroy the proxies for the instancer outputs before rebuilding the instancer
-			for (auto& CurOutput : InstancerOutputs)
-			{
-				for (auto& CurOutputObject : CurOutput->OutputObjects)
-				{
-					if (CurOutputObject.Value.ProxyComponent)
-						FHoudiniMeshTranslator::RemoveAndDestroyComponent(CurOutputObject.Value.ProxyComponent);
-
-					if (IsValid(CurOutputObject.Value.ProxyObject))
-					{
-						CurOutputObject.Value.ProxyObject->MarkAsGarbage();
-					}
-				}
-			}
-		}
-
-		// Rebuild the instancers
-		FHoudiniInstanceTranslator::CreateAllInstancersFromHoudiniOutputs(InstancerOutputs, HC->GetOutputs(), OuterComponent, PackageParams);
-	}
+	// Bug: 150419
+	// No need to recreate instancers when refining proxy meshes.
 
 	return true;
 }
@@ -1192,7 +1166,6 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 	// If the node is a COP node, add a Cop HoudiniOutput which only stores the node id; no geo info
 	if (AssetNodeInfo.type == HAPI_NODETYPE_COP || AssetNodeInfo.type == HAPI_NODETYPE_COP2)
 	{
-
 		FHoudiniGeoPartObject currentHGPO;
 		currentHGPO.GeoId = AssetId;
 		currentHGPO.Type = EHoudiniPartType::Cop;
@@ -1655,7 +1628,6 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 
 				if (CurrentHapiPartInfo.type == HAPI_PARTTYPE_INSTANCER)
 				{
-
 					// Check for skeletal mesh Rest Geometry (Shape, in Houdini terms))
 					FString BaseName;
 
@@ -1908,9 +1880,18 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 					break;
 
 					case HAPI_PARTTYPE_VOLUME:
-						// Volume data, likely a Heightfield height / mask	
-						CurrentPartType = EHoudiniPartType::Volume;
-						break;
+					{
+						if (FHoudiniEngineUtils::IsValidHeightfield(CurrentHapiGeoInfo.nodeId, CurrentHapiPartInfo.id))
+						{
+							// Volume data, likely a Heightfield height / mask
+							CurrentPartType = EHoudiniPartType::Volume;
+						}
+						else
+						{
+							CurrentPartType = EHoudiniPartType::Invalid;
+						}
+					}
+					break;
 
 					default:
 						// Unsupported Part Type

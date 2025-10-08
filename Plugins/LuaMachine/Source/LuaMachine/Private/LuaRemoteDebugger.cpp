@@ -629,7 +629,7 @@ uint32 FLuaRemoteDebugger::Run()
 
 					if (BytesToRemove >= 0)
 					{
-						ReceiveBuffer.RemoveAt(0, BytesToRemove, EAllowShrinking::Default);
+						ReceiveBuffer.RemoveAt(0, BytesToRemove, EAllowShrinking::Yes);
 						ReceiveBufferOffset -= BytesToRemove;
 
 						if (JsonObject)

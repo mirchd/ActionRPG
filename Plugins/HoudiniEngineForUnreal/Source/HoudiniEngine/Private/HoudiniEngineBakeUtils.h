@@ -510,6 +510,20 @@ public:
 		const FHoudiniPackageParams& PackageParams,
 		FHoudiniBakedObjectData& BakedObjectData);
 	
+	static bool BakeTexture(
+		UHoudiniCookable* InCookable,
+		int32 InOutputIndex,
+		const TArray<UHoudiniOutput*>& InAllOutputs,
+		FHoudiniEngineBakeState& InBakeState,
+		const FDirectoryPath& InBakeFolder,
+		const FHoudiniBakeSettings& BakeSettings,
+		FHoudiniBakedObjectData& BakedObjectData);
+
+	static UTexture2D* BakeTextureToPackage(
+		UTexture2D* InOriginalTexture,
+		const FHoudiniPackageParams& InPackageParams,
+		UTexture2D* InPreviousBakeTexture);
+
 	static UTexture2D * DuplicateTextureAndCreatePackage(
 		UTexture2D * Texture,
 		UTexture2D* PreviousBakeTexture,

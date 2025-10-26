@@ -255,6 +255,10 @@ FHoudiniOutputTranslator::UpdateOutputAttributesAndTags(UHoudiniCookable* InHC)
 		const TArray<FHoudiniGeoPartObject>& CurrentOutputHGPO = CurrentOutput->GetHoudiniGeoPartObjects();
 		for (auto& CurrentHGPO : CurrentOutputHGPO)
 		{
+			// We can't get generic attributes on cops - as they dont have geos
+			if (CurrentHGPO.Type == EHoudiniPartType::Cop)
+				continue;
+
 			FHoudiniEngineUtils::GetGenericAttributeList(
 				CurrentHGPO.GeoId,
 				CurrentHGPO.PartId,
@@ -399,9 +403,6 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	}
 
 	bOutHasHoudiniStaticMeshOutput = false;
-	int32 NumVisibleOutputs = 0;
-	int32 NumOutputs = Outputs.Num();
-	bool bHasLandscape = false;
 
 	// Get all our landscape inputs
 	TArray<ALandscapeProxy*> AllInputLandscapes;
@@ -424,6 +425,12 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	// (this can easily happen when using packed prims)
 	TMap<FHoudiniMaterialIdentifier, TObjectPtr<UMaterialInterface>> AllOutputMaterials;
 
+	UTexture2D* VisibleTexture = nullptr;
+	UMaterialInterface* VisibleMat = nullptr;
+	int32 NumVisibleOutputs = 0;
+	int32 NumTextureOutputs = 0;
+	int32 NumOutputs = Outputs.Num();
+	bool bHasLandscape = false;
 	for (int32 OutputIdx = 0; OutputIdx < NumOutputs; OutputIdx++)
 	{
 		UHoudiniOutput* CurOutput = Outputs[OutputIdx];
@@ -634,7 +641,22 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 				FHoudiniSkeletalMeshTranslator::ProcessSkeletalMeshOutputs(
 					CurOutput, PackageParams, AllOutputMaterials, InOuterComponent);
 
-				NumVisibleOutputs++;
+				NumVisibleOutputs += CurOutput->GetOutputObjects().Num();
+				break;
+			}
+
+			case EHoudiniOutputType::Cop:
+			{
+				FHoudiniTextureTranslator::ProcessCopOutput(CurOutput, PackageParams);
+
+				NumTextureOutputs += CurOutput->GetOutputObjects().Num();
+				for (auto& It : CurOutput->GetOutputObjects())
+				{
+					// Get the first valid texture for display purpose
+					VisibleTexture = Cast<UTexture2D>(It.Value.OutputObject);
+					if (IsValid(VisibleTexture))
+						break;
+				}
 				break;
 			}
 
@@ -677,10 +699,21 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	{
 		// If we have valid outputs, we don't need to display the houdini logo anymore...
 		FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(InOuterComponent);
+		// .. or the default COP nesh
+		FHoudiniEngineUtils::RemoveTextureMeshFromComponent(InOuterComponent);
+	}
+	else if (NumTextureOutputs > 0)
+	{
+		// Create a temporary material to display the texture
+		if (VisibleTexture)
+			VisibleMat = FHoudiniTextureTranslator::CreateDefaultCopMaterialForTexture(VisibleTexture, PackageParams);
+
+		// ... if we only have texture outputs, use a texture quad
+		FHoudiniEngineUtils::AddTextureMeshToComponent(InOuterComponent, VisibleTexture, VisibleMat);
 	}
 	else
 	{
-		// ... if we don't have any valid outputs however, we should
+		// ... if we don't have any valid outputs however, display the Houdini logo
 		FHoudiniEngineUtils::AddHoudiniLogoToComponent(InOuterComponent);
 	}
 
@@ -1168,6 +1201,7 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 	{
 		FHoudiniGeoPartObject currentHGPO;
 		currentHGPO.GeoId = AssetId;
+		currentHGPO.PartId = 0;
 		currentHGPO.Type = EHoudiniPartType::Cop;
 
 		TObjectPtr<UHoudiniOutput> Output =

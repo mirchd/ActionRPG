@@ -4707,6 +4707,10 @@ FHoudiniEngineUtils::AddHoudiniLogoToComponent(USceneComponent* InComponent)
 	if (FHoudiniEngineUtils::HasHoudiniLogo(InComponent))
 		return true;
 
+	// Remove the texture preview mesh if we have it somehow
+	if (FHoudiniEngineUtils::HasTextureMesh(InComponent))
+		FHoudiniEngineUtils::RemoveTextureMeshFromComponent(InComponent);
+
 	UStaticMesh* HoudiniLogoSM = FHoudiniEngine::Get().GetHoudiniLogoStaticMesh().Get();
 	if (!HoudiniLogoSM)
 		return false;
@@ -6009,7 +6013,8 @@ FHoudiniEngineUtils::AddMeshSocketsToStaticMesh(
 			Tag = AllSockets[nSocket].Tag;
 
 		// The actor will be stored temporarily in the socket's Tag as we need a StaticMeshComponent to add an actor to the socket
-		Tag += TEXT("|") + AllSockets[nSocket].Actor;
+		if(!AllSockets[nSocket].Actor.IsEmpty())
+			Tag += TEXT("|") + AllSockets[nSocket].Actor;
 
 		Socket->Tag = Tag;
 		Socket->bSocketCreatedAtImport = true;
@@ -7261,7 +7266,7 @@ FHoudiniEngineUtils::HapiGetCookCount(HAPI_NodeId InNodeId)
 	int32 CookCount = -1;
 	if (HAPI_RESULT_FAILURE == FHoudiniApi::GetTotalCookCount(
 		FHoudiniEngine::Get().GetSession(),
-		InNodeId, HAPI_NODETYPE_OBJ | HAPI_NODETYPE_SOP, HAPI_NODEFLAGS_NON_BYPASS, true, &CookCount))
+		InNodeId, HAPI_NODETYPE_OBJ | HAPI_NODETYPE_SOP | HAPI_NODETYPE_COP, HAPI_NODEFLAGS_NON_BYPASS, true, &CookCount))
 	{
 		return -1;
 	}

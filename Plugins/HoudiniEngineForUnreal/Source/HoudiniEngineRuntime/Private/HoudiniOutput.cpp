@@ -51,7 +51,7 @@
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "HAL/FileManager.h"
 #include "Materials/Material.h"
-#if defined(HOUIDNI_USE_PCG)
+#if defined(HOUDINI_USE_PCG)
 #include "HoudiniPCGDataObject.h"
 #endif
 
@@ -1422,12 +1422,15 @@ void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 	else if (IsValid(OutputObject))
 	{
 #if WITH_EDITOR
-		UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-		AssetEditorSubsystem->CloseAllEditorsForAsset(OutputObject);
+		if (!OutputObject->IsA<UTexture2D>())
+		{
+			// Except for the TextureEditor - close other opened asset editor as was causing crashes 
+			UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+			AssetEditorSubsystem->CloseAllEditorsForAsset(OutputObject);
+		}		
 #endif
 	}
 	OutputObject = nullptr;
-
 	ProxyObject = nullptr;
 
 	//--------------------------------------------------------------------------------------------------------------------
@@ -1452,7 +1455,6 @@ void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 		}
 	}
 	OutputActors.Empty();
-
 }
 
 

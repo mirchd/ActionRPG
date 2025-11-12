@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
+﻿// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 using UnrealBuildTool;
 
@@ -27,15 +27,10 @@ public class RealtimeMeshTests : ModuleRules
                 "Engine",
                 "Slate",
                 "SlateCore",
-                "RealtimeMeshComponent"
+                "RenderCore",
+                "RHI",
+                "RealtimeMeshComponent",
             }
         );
-
-		PrivateIncludePaths.AddRange(
-			new string[]
-			{
-				"RealtimeMeshComponent/Private"
-			}
-		);
-	}
+    }
 }

@@ -12,6 +12,7 @@
 #include "Mesh/RealtimeMeshDistanceField.h"
 #include "PhysicsEngine/AggregateGeom.h"
 #include "Containers/MpscQueue.h"
+#include "Mesh/RealtimeMeshNaniteResourcesInterface.h"
 
 
 struct FRealtimeMeshDistanceField;
@@ -19,7 +20,7 @@ enum class ERealtimeMeshSectionDrawType : uint8;
 
 namespace RealtimeMesh
 {
-	struct IRealtimeMeshNaniteResources;
+	struct IRealtimeMeshNaniteMeshResourcesImplementation;
 
 	static_assert(REALTIME_MESH_MAX_LODS <= FBitSet::BitsPerWord, "REALTIME_MESH_MAX_LODS must be less than or equal to FBitSet::BitsPerWord");
 	using FRealtimeMeshLODMask = TBitArray<TFixedAllocator<1>>;
@@ -90,9 +91,7 @@ namespace RealtimeMesh
 		TUniquePtr<FDistanceFieldVolumeData> DistanceField;
 		TUniquePtr<FCardRepresentationData> CardRepresentation;
 
-		TSharedPtr<IRealtimeMeshNaniteResources> NaniteResources;
-
-		
+		TSharedPtr<FRealtimeMeshNaniteResources> NaniteResources;
 
 		struct FCommandBatch
 		{
@@ -104,10 +103,10 @@ namespace RealtimeMesh
 
 		TSharedRef<uint8> ReferencingHandle;
 
-#if UE_ENABLE_DEBUG_DRAWING
-		// If debug drawing is enabled, we store collision data here so that collision shapes can be rendered when requested by showflags
-
-		bool bOwnerIsNull = true;
+		/* Tracks whether we have nanite data set/pending, so that the GT side can know what type of render proxy to use. */
+		bool bHasNaniteData = false;
+		
+#if UE_ENABLE_DEBUG_DRAWING		
 		/** Whether the collision data has been set up for rendering */
 		bool bHasCollisionData = false;
 
@@ -117,8 +116,8 @@ namespace RealtimeMesh
 		FCollisionResponseContainer CollisionResponse;
 		/** Cached AggGeom holding the collision shapes to render */
 		FKAggregateGeom CachedAggGeom;
-
 #endif
+		
 	public:
 		FRealtimeMeshProxy(const FRealtimeMeshSharedResourcesRef& InSharedResources);
 		virtual ~FRealtimeMeshProxy();
@@ -137,14 +136,18 @@ namespace RealtimeMesh
 		
 		TRange<float> GetScreenSizeRangeForLOD(const FRealtimeMeshLODKey& LODKey) const;
 
+		
+		void SetHasNaniteData_GT(bool bNewValue) { bHasNaniteData = bNewValue; }
+		virtual void SetNaniteResources_RT(FRealtimeMeshNaniteResourcesPtr&& InNaniteResources);
+		bool HasNaniteResources_GT() const;
+		bool HasNaniteResources_RT() const;
+		const TSharedPtr<FRealtimeMeshNaniteResources>& GetNaniteResources() const { return NaniteResources; }
+		void ClearNaniteResources_RT();
+		
 		virtual void SetDistanceField(FRealtimeMeshDistanceField&& InDistanceField);
 		bool HasDistanceFieldData() const;
 		const FDistanceFieldVolumeData* GetDistanceFieldData() const { return DistanceField.Get(); }
-		
-		virtual void SetNaniteResources(const TSharedPtr<IRealtimeMeshNaniteResources>& InNaniteResources);
-		bool HasNaniteResources() const;
-		template<typename ResourcesType>
-		TSharedPtr<ResourcesType> GetNaniteResources() const { return StaticCastSharedPtr<ResourcesType>(NaniteResources); }
+		void ClearDistanceFieldData() { DistanceField.Reset(); }
 		
 		virtual void SetCardRepresentation(FRealtimeMeshCardRepresentation&& InCardRepresentation);
 		bool HasCardRepresentation() const { return CardRepresentation.IsValid(); }

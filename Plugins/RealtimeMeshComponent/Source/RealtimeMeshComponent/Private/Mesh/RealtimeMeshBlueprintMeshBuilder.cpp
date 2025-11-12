@@ -1,13 +1,11 @@
-// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
+﻿// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 
 #include "Mesh/RealtimeMeshBlueprintMeshBuilder.h"
 #include "Engine/Engine.h"
 #include "RealtimeMeshComponentModule.h"
 #include "Core/RealtimeMeshDataStream.h"
-#if RMC_ENGINE_ABOVE_5_2
 #include "Logging/MessageLog.h"
-#endif
 
 #define LOCTEXT_NAMESPACE "RealtimeMesh"
 

@@ -70,7 +70,13 @@ namespace RealtimeMesh
 		{
 			return FRealtimeMeshNaniteResourcesPtr(new FRealtimeMeshNaniteResources(MoveTemp(InResources), InBounds));
 		}
-		
+
+		static FRealtimeMeshNaniteResourcesPtr CreateFromCopy(const ::Nanite::FResources& InResources, const FBoxSphereBounds3f& InBounds)
+		{
+			::Nanite::FResources ResourcesCopy = InResources;
+			return FRealtimeMeshNaniteResourcesPtr(new FRealtimeMeshNaniteResources(MoveTemp(ResourcesCopy), InBounds));
+		}
+
 		FRealtimeMeshNaniteResourcesPtr Clone() const
 		{			
 			return FRealtimeMeshNaniteResourcesPtr(new FRealtimeMeshNaniteResources(*this));
@@ -90,54 +96,30 @@ namespace RealtimeMesh
 			check(IsValid(OwningMesh));
 			if (!bIsInitialized)
 			{
-				// Debug logging for Nanite resource initialization
-				UE_LOG(LogRealtimeMesh, Verbose, TEXT("Initializing Nanite resources for mesh: %s (Thread: %s)"), 
-					OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"),
-					IsInRenderingThread() ? TEXT("RenderThread") : IsInGameThread() ? TEXT("GameThread") : TEXT("Other"));
-				
 				// Validate essential resource data before initialization
 				if (!HasValidData())
 				{
-					UE_LOG(LogRealtimeMesh, Warning, TEXT("Attempting to initialize Nanite resources with invalid data for mesh: %s"), 
+					UE_LOG(LogRealtimeMesh, Warning, TEXT("Attempting to initialize Nanite resources with invalid data for mesh: %s"),
 						OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"));
 					return;
 				}
-				
+
 				// Validate hierarchy nodes are present (required for Nanite streaming)
 				if (HierarchyNodes.IsEmpty())
 				{
-					UE_LOG(LogRealtimeMesh, Warning, TEXT("Missing hierarchy nodes for Nanite mesh: %s"), 
+					UE_LOG(LogRealtimeMesh, Warning, TEXT("Missing hierarchy nodes for Nanite mesh: %s"),
 						OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"));
 					return;
 				}
-				
-				// Enhanced validation with thread safety check
-				if (IsInGameThread())
-				{
-					UE_LOG(LogRealtimeMesh, Warning, TEXT("POTENTIAL ISSUE: Nanite resources being initialized on game thread for mesh: %s. Should be on render thread."), 
-						OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"));
-				}
-				
-				UE_LOG(LogRealtimeMesh, Verbose, TEXT("Nanite mesh validation: RootData=%d bytes, HierarchyNodes=%d, StreamablePages=%lld"), 
-					RootData.Num(), HierarchyNodes.Num(), StreamablePages.GetBulkDataSize());
-				
-				// Additional validation for resource integrity
+
 				if (NumClusters == 0)
 				{
-					UE_LOG(LogRealtimeMesh, Warning, TEXT("Nanite mesh has 0 clusters for mesh: %s - this may cause render issues"), 
+					UE_LOG(LogRealtimeMesh, Warning, TEXT("Nanite mesh has 0 clusters for mesh: %s - this may cause render issues"),
 						OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"));
 				}
-				
+
 				::Nanite::FResources::InitResources(OwningMesh);
 				bIsInitialized = true;
-				
-				UE_LOG(LogRealtimeMesh, Verbose, TEXT("Successfully initialized Nanite resources for mesh: %s"), 
-					OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"));
-			}
-			else
-			{
-				UE_LOG(LogRealtimeMesh, VeryVerbose, TEXT("Nanite resources already initialized for mesh: %s"), 
-					OwningMesh ? *OwningMesh->GetName() : TEXT("NULL"));
 			}
 		}
 
@@ -145,16 +127,8 @@ namespace RealtimeMesh
 		{
 			if (bIsInitialized)
 			{
-				UE_LOG(LogRealtimeMesh, Verbose, TEXT("Releasing Nanite resources (Thread: %s)"), 
-					IsInRenderingThread() ? TEXT("RenderThread") : IsInGameThread() ? TEXT("GameThread") : TEXT("Other"));
-				
 				::Nanite::FResources::ReleaseResources();
 				bIsInitialized = false;
-				UE_LOG(LogRealtimeMesh, Verbose, TEXT("Successfully released Nanite resources"));
-			}
-			else
-			{
-				UE_LOG(LogRealtimeMesh, VeryVerbose, TEXT("ReleaseResources called on uninitialized Nanite resources"));
 			}
 		}
 
@@ -164,12 +138,9 @@ namespace RealtimeMesh
 		{
 			if (!ensure(!bIsInitialized))
 			{
-				UE_LOG(LogRealtimeMesh, Warning, TEXT("Attempting to clear runtime state on initialized Nanite resources"));
 				return;
 			}
-			
-			UE_LOG(LogRealtimeMesh, VeryVerbose, TEXT("Clearing Nanite runtime state"));
-			
+
 			// Blank all the runtime state on this copy
 			static const ::Nanite::FResources NullResources;
 			RuntimeResourceID = NullResources.RuntimeResourceID;
@@ -178,7 +149,12 @@ namespace RealtimeMesh
 			ImposterIndex = NullResources.ImposterIndex;
 			NumHierarchyNodes = NullResources.NumHierarchyNodes;
 			NumResidentClusters = NullResources.NumResidentClusters;
-			PersistentHash = NullResources.PersistentHash;			
+			PersistentHash = NullResources.PersistentHash;
+#if RMC_ENGINE_ABOVE_5_6
+			// Fields added in UE 5.6
+			AssemblyTransformOffset = NullResources.AssemblyTransformOffset;
+			NumHierarchyDwords = NullResources.NumHierarchyDwords;
+#endif
 #if WITH_EDITOR
 			ResourceName = NullResources.ResourceName;
 			DDCKeyHash = NullResources.DDCKeyHash;
@@ -194,34 +170,16 @@ namespace RealtimeMesh
 	{
 		if (Resources)
 		{
-			UE_LOG(LogRealtimeMesh, VeryVerbose, TEXT("Destroying Nanite resources (Thread: %s)"), 
-				IsInRenderingThread() ? TEXT("RenderThread") : IsInGameThread() ? TEXT("GameThread") : TEXT("Other"));
-				
-			// Validate resource state before destruction
-			if (!Resources->HasValidData())
-			{
-				UE_LOG(LogRealtimeMesh, VeryVerbose, TEXT("Destroying Nanite resources with no valid data"));
-			}
-				
-			// Safety check - ensure we're not double-releasing
-			bool bWasInitialized = Resources->bIsInitialized;
-				
-			// Let the render thread release the resources safely
+			// Release resources on the current thread (will queue to render thread internally)
 			Resources->ReleaseResources();
 
-			// Then queue the class delete for after the render thread releases the resource
+			// Queue the actual delete for the render thread
 			ENQUEUE_RENDER_COMMAND(DestroyRealtimeMeshNaniteResources)(
-				[Resources, bWasInitialized](FRHICommandListImmediate&)
+				[Resources](FRHICommandListImmediate&)
 				{
-					UE_LOG(LogRealtimeMesh, VeryVerbose, TEXT("Deleting Nanite resources on render thread (was initialized: %s)"), 
-						bWasInitialized ? TEXT("true") : TEXT("false"));
 					delete Resources;
 				}
 			);
-		}
-		else
-		{
-			UE_LOG(LogRealtimeMesh, Warning, TEXT("Destroy called with null Nanite resources pointer"));
 		}
 	}
 }

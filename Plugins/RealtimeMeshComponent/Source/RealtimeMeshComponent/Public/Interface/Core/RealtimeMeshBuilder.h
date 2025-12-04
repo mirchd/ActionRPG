@@ -27,7 +27,12 @@ namespace RealtimeMesh
 		using ElementType = typename FRealtimeMeshBufferTypeTraits<Type>::ElementType;
 		using QualifiedType = InType;
 		using QualifiedElementType = typename TCopyQualifiersFromTo<InType, ElementType>::Type;
+
+#if RMC_ENGINE_ABOVE_5_7
+		static constexpr bool IsConst = std::is_const_v<InType>;
+#else
 		static constexpr bool IsConst = TIsConst<InType>::Value;
+#endif
 		static constexpr bool IsVoid = std::is_same_v<Type, void>;
 		static constexpr int32 NumElements = FRealtimeMeshBufferTypeTraits<Type>::NumElements;
 

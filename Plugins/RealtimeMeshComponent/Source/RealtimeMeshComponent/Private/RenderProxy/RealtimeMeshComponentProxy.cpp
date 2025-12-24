@@ -82,7 +82,7 @@ namespace RealtimeMesh
 			}
 			MaterialMap.SetMaterial(MaterialIndex, Mat->GetRenderProxy());
 			MaterialMap.SetMaterialSupportsDither(MaterialIndex, Mat->IsDitheredLODTransition());
-			MaterialRelevance |= Mat->GetRelevance_Concurrent(GetScene().GetFeatureLevel());
+			MaterialRelevance |= Mat->GetRelevance_Concurrent(GetFeatureLevelShaderPlatform_Checked(GetScene().GetFeatureLevel()));
 			bAnyMaterialUsesDithering = Mat->IsDitheredLODTransition();
 		}
 

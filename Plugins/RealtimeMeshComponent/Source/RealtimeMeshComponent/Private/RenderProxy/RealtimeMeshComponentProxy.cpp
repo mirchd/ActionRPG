@@ -633,7 +633,19 @@ namespace RealtimeMesh
 			return;
 		}
 
-#if RMC_ENGINE_ABOVE_5_5
+#if RMC_ENGINE_ABOVE_5_7
+		TConstArrayView<const FSceneView*> Views = Collector.GetViews();
+		const uint32 VisibilityMap = Collector.GetVisibilityMap();
+
+		// RT geometry will be generated based on first active view and then reused for all other views
+		// TODO: Expose a way for developers to control whether to reuse RT geometry or create one per-view
+		const int32 FirstActiveViewIndex = FMath::CountTrailingZeros(VisibilityMap);
+		checkf(Views.IsValidIndex(FirstActiveViewIndex), TEXT("There should be at least one active view when calling GetDynamicRayTracingInstances(...)."));
+
+		const FSceneView* FirstActiveView = Views[FirstActiveViewIndex];
+
+		const uint32 LODIndex = FMath::Max(GetLOD(FirstActiveView), (int32)GetCurrentFirstLODIdx_RenderThread());
+#elif RMC_ENGINE_ABOVE_5_5
 		const uint32 LODIndex = FMath::Max(GetLOD(Collector.GetReferenceView()), (int32)GetCurrentFirstLODIdx_RenderThread());
 #else
 		const uint32 LODIndex = FMath::Max(GetLOD(Context.ReferenceView), (int32)GetCurrentFirstLODIdx_RenderThread());
@@ -705,7 +717,9 @@ namespace RealtimeMesh
 						// TODO: Should this check material?
 						MeshBatch.bDitheredLODTransition &= false;
 						MeshBatch.CastShadow &= bCastDynamicShadow;
-#if RMC_ENGINE_ABOVE_5_5
+#if RMC_ENGINE_ABOVE_5_7
+						MeshBatch.CastShadow &= IsShadowCast(FirstActiveView);
+#elif RMC_ENGINE_ABOVE_5_5
 						MeshBatch.CastShadow &= IsShadowCast(Collector.GetReferenceView());
 #endif
 						MeshBatch.CastRayTracedShadow &= bCastDynamicShadow;
@@ -722,7 +736,17 @@ namespace RealtimeMesh
 				}
 			}
 			
-#if RMC_ENGINE_ABOVE_5_5				
+#if RMC_ENGINE_ABOVE_5_7
+			for (int32 ViewIndex = 0; ViewIndex < Views.Num(); ViewIndex++)
+			{
+				if ((VisibilityMap & (1 << ViewIndex)) == 0)
+				{
+					continue;
+				}
+
+				Collector.AddRayTracingInstance(ViewIndex, RayTracingInstance);
+			}
+#elif RMC_ENGINE_ABOVE_5_5				
 			Collector.AddRayTracingInstance(MoveTemp(RayTracingInstance));
 #endif
 		}

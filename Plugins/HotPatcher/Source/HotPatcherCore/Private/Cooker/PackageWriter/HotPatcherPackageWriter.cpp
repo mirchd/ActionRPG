@@ -17,6 +17,24 @@ void FHotPatcherPackageWriter::AddToExportsSize(int64& ExportsSize)
 }
 #endif
 
+void FHotPatcherPackageWriter::SetCooker(UE::PackageWriter::Private::ICookerInterface* CookerInterface)
+{
+}
+
+void FHotPatcherPackageWriter::GetBaseGameOplogAttachments(TArrayView<FName> PackageNames, TArrayView<FUtf8StringView> AttachmentKeys, TUniqueFunction<void(FName PackageName, FUtf8StringView AttachmentKey, FCbObject&& Attachment)>&& Callback)
+{
+}
+
+TUniquePtr<FLargeMemoryWriter> FHotPatcherPackageWriter::CreateLinkerArchive(FName PackageName, UObject* Asset, uint16 MultiOutputIndex)
+{
+	return TUniquePtr<FLargeMemoryWriter>();
+}
+
+TUniquePtr<FLargeMemoryWriter> FHotPatcherPackageWriter::CreateLinkerExportsArchive(FName PackageName, UObject* Asset, uint16 MultiOutputIndex)
+{
+	return TUniquePtr<FLargeMemoryWriter>();
+}
+
 void FHotPatcherPackageWriter::BeginPackage(const FBeginPackageInfo& Info)
 {
 	TPackageWriterToSharedBuffer<ICookedPackageWriter>::BeginPackage(Info);

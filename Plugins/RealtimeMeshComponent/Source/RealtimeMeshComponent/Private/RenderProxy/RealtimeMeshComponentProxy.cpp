@@ -416,7 +416,10 @@ namespace RealtimeMesh
 
 			if (IsShown(View) && (VisibilityMap & (1 << ViewIndex)))
 			{
+#if RMC_ENGINE_ABOVE_5_7
+#else
 				FFrozenSceneViewMatricesGuard FrozenMatricesGuard(*const_cast<FSceneView*>(Views[ViewIndex]));
+#endif
 				FLODMask LODMask = GetLODMask(View);
 
 				// Walk active LODs

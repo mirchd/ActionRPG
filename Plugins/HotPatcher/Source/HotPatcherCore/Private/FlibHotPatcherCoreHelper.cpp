@@ -728,7 +728,7 @@ bool UFlibHotPatcherCoreHelper::RunCmdlet(const FString& CmdletName,const FStrin
 		CmdletNameStr.Append(TEXT("Commandlet"));
 	}
 	UCommandlet* CmdletCDO = nullptr;
-	UClass* SPCTCmdletClass = FindObject<UClass>(nullptr, *CmdletNameStr, false);
+	UClass* SPCTCmdletClass = FindObject<UClass>(nullptr, *CmdletNameStr, EFindObjectFlags::ExactClass);
 	if(SPCTCmdletClass && SPCTCmdletClass->IsChildOf(UCommandlet::StaticClass()))
 	{
 		// CmdletCDO = Cast<UCommandlet>(SPCTCmdletClass->GetDefaultObject());
@@ -1585,7 +1585,7 @@ bool UFlibHotPatcherCoreHelper::SerializeAssetRegistryByDetails(IAssetRegistry* 
 	SCOPED_NAMED_EVENT_TEXT("SerializeAssetRegistryByDetails",FColor::Red);
 	ITargetPlatform* TargetPlatform =  UFlibHotPatcherCoreHelper::GetPlatformByName(PlatformName);
 	FAssetRegistrySerializationOptions SaveOptions;
-	AssetRegistry->InitializeSerializationOptions(SaveOptions, TargetPlatform->IniPlatformName());
+	AssetRegistry->InitializeSerializationOptions(SaveOptions, TargetPlatform, UE::AssetRegistry::ESerializationTarget::ForGame);
 	SaveOptions.bSerializeAssetRegistry = true;
 	
 	return UFlibHotPatcherCoreHelper::SerializeAssetRegistryByDetails(AssetRegistry,PlatformName,AssetDetails,SavePath, SaveOptions);

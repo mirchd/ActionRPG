@@ -273,11 +273,15 @@ void UFlibShaderCodeLibraryHelper::CancelMaterialShaderCompile(UMaterialInterfac
 {
 	if(MaterialInterface)
 	{
-		UMaterial* Material = MaterialInterface->GetMaterial();
-		for (int32 FeatureLevel = 0; FeatureLevel < ERHIFeatureLevel::Num; ++FeatureLevel)
+		for (int32 QualityLevelIndex = 0; QualityLevelIndex <= EMaterialQualityLevel::Num; ++QualityLevelIndex)
 		{
-			if (FMaterialResource* Res = Material->GetMaterialResource((ERHIFeatureLevel::Type)FeatureLevel))
+			for (int32 ShaderPlatformIndex = 0; ShaderPlatformIndex < EShaderPlatform::SP_NumPlatforms; ++ShaderPlatformIndex)
 			{
+				FMaterialResource* Res = MaterialInterface->GetMaterialResource((EShaderPlatform)ShaderPlatformIndex, (EMaterialQualityLevel::Type)QualityLevelIndex);
+				if (!Res)
+				{
+					continue;
+				}
 				Res->CancelCompilation();
 			}
 		}

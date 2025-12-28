@@ -94,9 +94,7 @@ void FHotPatcherEditorModule::StartupModule()
 	if(::IsRunningCommandlet())
 		return;
 	
-	PRAGMA_DISABLE_DEPRECATION_WARNINGS
-	FCoreUObjectDelegates::OnObjectSaved.AddRaw(this,&FHotPatcherEditorModule::OnObjectSaved);
-	PRAGMA_ENABLE_DEPRECATION_WARNINGS
+	FCoreUObjectDelegates::OnObjectPreSave.AddRaw(this, &FHotPatcherEditorModule::OnObjectPreSave);
 	MakeProjectSettingsForHotPatcher();
 
 	MissionNotifyProay = NewObject<UMissionNotificationProxy>();
@@ -676,7 +674,7 @@ void FHotPatcherEditorModule::OnCookAndPakPlatform(ETargetPlatform Platform, boo
 	);
 }
 
-void FHotPatcherEditorModule::OnObjectSaved(UObject* ObjectSaved)
+void FHotPatcherEditorModule::OnObjectPreSave(UObject* ObjectSaved, FObjectPreSaveContext InObjectPreSaveContext)
 {
 	if (GIsCookerLoadingPackage)
 	{

@@ -360,7 +360,7 @@ struct TURBOSEQUENCE_LF_API FTurboSequence_MeshSpawnData_Lf
 	}
 };
 #if UE_BUILD_DEBUG
-inline uint32 GetTypeHash(const FTurboSequence_MeshSpawnData_Lf& MetaData);
+inline uint32 GetTypeHash(const FTurboSequence_MeshSpawnData_Lf& MetaData)
 {
 	return MetaData.GetHash();
 }
@@ -433,7 +433,7 @@ public:
 	}
 };
 #if UE_BUILD_DEBUG
-inline uint32 GetTypeHash(const FTurboSequence_MinimalMeshData_Lf& MeshData);
+inline uint32 GetTypeHash(const FTurboSequence_MinimalMeshData_Lf& MeshData)
 {
 	return MeshData.RootMotionMeshID;
 }

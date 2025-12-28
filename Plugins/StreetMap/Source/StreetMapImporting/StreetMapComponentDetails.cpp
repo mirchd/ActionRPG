@@ -297,7 +297,7 @@ FReply FStreetMapComponentDetails::OnCreateStaticMeshAssetClicked()
 				}
 
 				// Set the Imported version before calling the build
-				StaticMesh->ImportVersion = EImportStaticMeshVersion::LastVersion;
+				StaticMesh->SetImportVersion(EImportStaticMeshVersion::LastVersion);
 
 				// Build mesh from source
 				StaticMesh->Build(/** bSilent =*/ false);

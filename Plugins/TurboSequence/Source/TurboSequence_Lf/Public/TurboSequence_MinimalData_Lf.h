@@ -1,4 +1,4 @@
-// Copyright Lukas Fratzl, 2022-2024. All Rights Reserved.
+﻿// Copyright Lukas Fratzl, 2022-2024. All Rights Reserved.
 
 #pragma once
 
@@ -360,10 +360,7 @@ struct TURBOSEQUENCE_LF_API FTurboSequence_MeshSpawnData_Lf
 	}
 };
 #if UE_BUILD_DEBUG
-inline uint32 GetTypeHash(const FTurboSequence_MeshSpawnData_Lf& MetaData)
-{
-	return MetaData.GetHash();
-}
+uint32 GetTypeHash(const FTurboSequence_MeshSpawnData_Lf& MetaData);
 #else // optimize by inlining in shipping and development builds
 FORCEINLINE_DEBUGGABLE uint32 GetTypeHash(const FTurboSequence_MeshSpawnData_Lf& MetaData)
 {
@@ -433,10 +430,7 @@ public:
 	}
 };
 #if UE_BUILD_DEBUG
-inline uint32 GetTypeHash(const FTurboSequence_MinimalMeshData_Lf& MeshData)
-{
-	return MeshData.RootMotionMeshID;
-}
+uint32 GetTypeHash(const FTurboSequence_MinimalMeshData_Lf& MeshData);
 #else // optimize by inlining in shipping and development builds
 FORCEINLINE_DEBUGGABLE uint32 GetTypeHash(const FTurboSequence_MinimalMeshData_Lf& MeshData)
 {

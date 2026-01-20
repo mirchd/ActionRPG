@@ -1707,7 +1707,7 @@ public:
 		for (FThreadSafeObjectIterator It(InBaseClass); It; ++It)
 		{
 			const UClass* Class = It->GetClass();
-			if (Class->IsNative() && GetDefault<UObject>(Class) == *It)
+			if (Class->IsNative() && Class->ClassDefaultObject == *It)
 			{
 				TagsValues.AddUnique(FBlueprintTags::NativeParentClassPath,
 				                     FObjectPropertyBase::GetExportPath(Class));
@@ -1812,7 +1812,7 @@ public:
 		Args.Error = GError;
 		//Args.bForceByteSwapping = true;
 		Args.bWarnOfLongFilename = true;
-		Args.SaveFlags = SAVE_Async;
+		Args.SaveFlags = SAVE_KeepGUID;
 
 
 		const FString PackagePath = FPackageName::LongPackageNameToFilename(
@@ -1870,7 +1870,7 @@ public:
 		Args.Error = GError;
 		//Args.bForceByteSwapping = true;
 		Args.bWarnOfLongFilename = true;
-		Args.SaveFlags = SAVE_Async;
+		Args.SaveFlags = SAVE_KeepGUID;
 
 		const FString PackagePath = FPackageName::LongPackageNameToFilename(
 			Package->GetName() + UniqueIdentifier, FPackageName::GetAssetPackageExtension());

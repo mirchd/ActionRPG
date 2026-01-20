@@ -594,6 +594,10 @@ void FTurboSequence_Utility_Lf::CreateLevelOfDetails(FSkinnedMeshReference_Lf& R
 					
 					MeshData.NumNaniteVertices = NumVerticesInstancedMesh;
 				}
+				else
+				{
+					NumVerticesInstancedMesh = FromAsset->InstancedMeshes[i].StaticMesh->GetNumVertices(GET0_NUMBER);
+				}
 			}
 			else
 			{
@@ -3150,8 +3154,8 @@ void FTurboSequence_Utility_Lf::ExtractRootMotionFromAnimations(FTransform& OutA
 				ETurboSequence_RootMotionMode_Lf::Force || (Mode ==
 					ETurboSequence_RootMotionMode_Lf::OnRootBoneAnimated && Animation.bIsRootBoneAnimation)))
 		{
-			const FAnimExtractContext Context(static_cast<double>(Animation.AnimationTime), true, FDeltaTimeRecord(DeltaTime), Animation.bIsLoop);
-			FTransform RootMotion_Transform = Animation.Animation->ExtractRootMotion(Context);
+			FTransform RootMotion_Transform = Animation.Animation->ExtractRootMotion(
+				Animation.AnimationTime, DeltaTime, Animation.bIsLoop);
 
 			float Scalar = Animation.FinalAnimationWeight * Animation.Settings.AnimationSpeed;
 

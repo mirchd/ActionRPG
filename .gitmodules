@@ -1,0 +1,3 @@
+[submodule "Plugins/TurboSequence"]
+	path = Plugins/TurboSequence
+	url = https://github.com/LukasFratzl/TurboSequence.git

@@ -2082,8 +2082,9 @@ FHoudiniParameterTranslator::UpdateParameterFromInfo(
 					HoudiniParameterIntChoice->SetIntValue(CurrentIntValue);
 				}
 
-				// Get the choice descriptors
-				if (bFullUpdate)
+				// Get the choice descriptors. NOTE: have to do this on every cook because they may be updated by the HDA.
+				bool bUpdateChoiceStrings = true;
+				if (bUpdateChoiceStrings)
 				{
 					// Set the default value at created
 					HoudiniParameterIntChoice->SetDefaultIntValue();
@@ -2961,7 +2962,7 @@ FHoudiniParameterTranslator::RevertParameterToDefault(UHoudiniParameter* InParam
 	bool bReverted = true;
 	for (auto CurrentIdx : TupleToRevert )
 	{
-		if (!TupleToRevert.IsValidIndex(CurrentIdx))
+		if (CurrentIdx == -1)
 		{
 			// revert the whole parameter to its default value
 			if (HAPI_RESULT_SUCCESS != FHoudiniApi::RevertParmToDefaults(

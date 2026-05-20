@@ -4898,7 +4898,7 @@ FHoudiniEngineBakeUtils::BakeBlueprints(UHoudiniCookable* InCookable, const FHou
 		FHoudiniEngine::Get().FinishTaskSlateNotification( FText::FromString(Msg) );
 	}
 	
-	TryCollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+	FHoudiniEngineRuntimeUtils::TryCollectGarbage();
 
 	// Broadcast that the bake is complete
 	InCookable->HandleOnPostBake(bSuccess);
@@ -8544,7 +8544,7 @@ FHoudiniEngineBakeUtils::BakePDGTOPNodeOutputsKeepActors(
 		}
 	}
 
-	OutBakedActors = MoveTemp(OurBakedActors);
+	OutBakedActors.Append(OurBakedActors);
 
 	return true;
 }
@@ -8639,6 +8639,8 @@ bool FHoudiniEngineBakeUtils::BakePDGAssetLinkOutputsKeepActors(
 
 	const bool bBakeBlueprints = false;
 	const bool bIsAutoBake = false;
+
+	BakedActors.Empty();
 
 	bool bSuccess = true;
 	switch (InBakeSelectionOption)
@@ -9149,7 +9151,7 @@ FHoudiniEngineBakeUtils::BakePDGTOPNodeBlueprints(
 		FHoudiniEngine::Get().FinishTaskSlateNotification( FText::FromString(Msg) );
 	}
 	
-	TryCollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+	FHoudiniEngineRuntimeUtils::TryCollectGarbage();
 
 	return bSuccess;
 }
@@ -9283,7 +9285,7 @@ FHoudiniEngineBakeUtils::BakePDGAssetLinkBlueprints(
 		FHoudiniEngine::Get().FinishTaskSlateNotification( FText::FromString(Msg) );
 	}
 	
-	TryCollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+	FHoudiniEngineRuntimeUtils::TryCollectGarbage();
 
 	// Broadcast that the bake is complete
 	InPDGAssetLink->HandleOnPostBake(bSuccess);

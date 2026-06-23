@@ -111,8 +111,6 @@ public class LuaMachine : ModuleRules
             {
                 PublicAdditionalLibraries.Add(System.IO.Path.Combine(ThirdPartyDirectory, "ARMv7", "liblua53_android.a"));
                 PublicAdditionalLibraries.Add(System.IO.Path.Combine(ThirdPartyDirectory, "ARM64", "liblua53_android64.a"));
-				// build android x86_64
-				PublicAdditionalLibraries.Add(System.IO.Path.Combine(ThirdPartyDirectory, "x86_64", "liblua53_android32_64.a"));
             }
 
             else if (Target.Platform == UnrealTargetPlatform.IOS)

@@ -41,6 +41,8 @@ class UMaterialInterface;
 class UStaticMesh;
 
 class FUnrealObjectInputHandle;
+class FUnrealObjectInputIdentifier;
+class FUnrealObjectInputOptions;
 struct FHoudiniUnrealLandscapeSplineSegmentMeshData;
 struct FHoudiniUnrealLandscapeSplinesControlPointData;
 struct FHoudiniUnrealLandscapeSplinesData;
@@ -96,6 +98,8 @@ struct FHoudiniUnrealLandscapeSplineSegmentMeshData
 	TArray<FString> MeshRefs;
 	TArray<TArray<FString>> MeshMaterialOverrideRefs;
 	TArray<float> MeshScales;
+	TArray<int8> MeshScaleToWidths;
+	TArray<int8> MeshCenterHs;
 };
 
 
@@ -115,6 +119,9 @@ struct FHoudiniUnrealLandscapeSplinesData
 
 	/** Per-segment bLowerTerrain */
 	TArray<int8> SegmentLowerTerrains;
+
+	/** Per-segment bCastShadow */
+	TArray<int8> SegmentCastShadows;
 
 	/** Static mesh attribute, the outer index is mesh 0, 1, 2 ... The struct contains the per-segment data */
 	TArray<FHoudiniUnrealLandscapeSplineSegmentMeshData> PerMeshSegmentData;
@@ -214,6 +221,18 @@ public:
 		HAPI_NodeId& OutNodeId);
 
 private:
+	// Build landscape spline input options based on the selected export options.
+	static bool BuildLandscapeSplinesInputObjectIdentifiers(
+		ULandscapeSplinesComponent const* const InSplinesComponent,
+		const bool bInExportSplineCurves,
+		const bool bInExportControlPoints,
+		const bool bInExportLeftRightCurves,
+		const float InUnrealSplineResolution,
+		const bool bForceCreateReferenceNode,
+		bool& bOutSingleLeafNodeOnly,
+		FUnrealObjectInputOptions& OutReferenceNode,
+		TArray<FUnrealObjectInputOptions>& OutPerOptionIdentifiers);
+
 	// Extract landscape splines data arrays: positions, and various attributes.
 	static bool ExtractSplineData(
 		ULandscapeSplinesComponent* const InSplinesComponent,
@@ -243,6 +262,7 @@ private:
 	static bool AddPaintLayerNameAttribute(HAPI_NodeId InNodeId, const TArray<FString>& InPaintLayerNames, HAPI_AttributeOwner InAttribOwner);
 	static bool AddRaiseTerrainAttribute(HAPI_NodeId InNodeId, const TArray<int8>& InRaiseTerrain, HAPI_AttributeOwner InAttribOwner);
 	static bool AddLowerTerrainAttribute(HAPI_NodeId InNodeId, const TArray<int8>& InLowerTerrain, HAPI_AttributeOwner InAttribOwner);
+	static bool AddCastShadowAttribute(HAPI_NodeId InNodeId, const TArray<int8>& InCastShadow, HAPI_AttributeOwner InAttribOwner);
 	static bool AddSegmentMeshesAttributes(HAPI_NodeId InNodeId, const TArray<FHoudiniUnrealLandscapeSplineSegmentMeshData>& InPerMeshSegmentData);
 	static bool AddConnectionSocketNameAttribute(HAPI_NodeId InNodeId, const TArray<FString>& InPointConnectionSocketNames);
 	static bool AddRotationAttribute(HAPI_NodeId InNodeId, const TArray<float>& InControlPointRotations);
@@ -256,4 +276,3 @@ private:
 	static bool AddMeshScaleAttribute(HAPI_NodeId InNodeId, const TArray<float>& InTangentLengths);
 	static bool AddControlPointAttributes(HAPI_NodeId InNodeId, const FHoudiniUnrealLandscapeSplineControlPointAttributes& InControlPointAttributes);
 };
-

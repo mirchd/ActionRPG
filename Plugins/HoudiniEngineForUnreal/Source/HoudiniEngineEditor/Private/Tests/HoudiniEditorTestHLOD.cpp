@@ -94,7 +94,7 @@ bool FHoudiniEditorTestLandscapeHLOD::RunTest(const FString& Parameters)
 		auto& BakedObject = BakedOutput.BakedOutputObjects.begin().Value();
 #endif
 
-		ALandscape* Landscape = Cast<ALandscape>(StaticLoadObject(UObject::StaticClass(), nullptr, *BakedObject.Landscape));
+		ALandscape* Landscape = Cast<ALandscape>(StaticLoadObject(UObject::StaticClass(), nullptr, *BakedObject.LandscapePath.ToString()));
 		HOUDINI_TEST_NOT_NULL_ON_FAIL(Landscape, return true);
 
 		UHLODLayer * HODLayer = Landscape->GetHLODLayer();
@@ -154,7 +154,7 @@ IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestInstancesHLOD, "Houdi
 #endif
 
 		// Check first output instancer has DataLayer1.
-		AActor* Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *BakedObject0.Actor));
+		AActor* Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *BakedObject0.ActorPath.ToString()));
 		UHLODLayer* HODLayer0 = Actor->GetHLODLayer();
 		HOUDINI_TEST_NOT_NULL(HODLayer0);
 		HOUDINI_TEST_EQUAL(HODLayer0->GetName(), TEXT("TestHLODLayer1"));
@@ -169,7 +169,7 @@ IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestInstancesHLOD, "Houdi
 #else
 		auto& BakedObject1 = ObjIt.Value();
 #endif
-		Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *BakedObject1.Actor));
+		Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *BakedObject1.ActorPath.ToString()));
 		UHLODLayer* HODLayer1 = Actor->GetHLODLayer();
 		HOUDINI_TEST_NOT_NULL(HODLayer1);
 		HOUDINI_TEST_EQUAL(HODLayer1->GetName(), TEXT("TestHLODLayer"));

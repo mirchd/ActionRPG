@@ -26,6 +26,7 @@
 
 #include "HoudiniInput.h"
 
+#include "HoudiniCookable.h"
 #include "HoudiniEngineRuntime.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
 #include "HoudiniAssetComponent.h"
@@ -37,7 +38,6 @@
 #include "HoudiniAssetBlueprintComponent.h"
 #include "UnrealObjectInputRuntimeTypes.h"
 #include "UnrealObjectInputManager.h"
-#include "UnrealObjectInputRuntimeUtils.h"
 #include "LandscapeSplineActor.h"
 
 #include "EngineUtils.h"
@@ -55,6 +55,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Landscape.h"
 #include "LandscapeInfo.h"
+#include "HoudiniParameterOperatorPath.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 	#include "GeometryCollection/GeometryCollectionActor.h"
 	#include "GeometryCollection/GeometryCollectionComponent.h"
@@ -117,6 +118,42 @@ UHoudiniInput::UHoudiniInput()
 	CachedBounds.Init();
 }
 
+UHoudiniCookable*
+UHoudiniInput::GetCookable()
+{
+	if (UHoudiniCookable* HC = GetTypedOuter<UHoudiniCookable>())
+		return HC;
+
+	// Loaded v2 inputs may still be outered to the deprecated HAC after migration.
+	if (UHoudiniAssetComponent* HAC = GetTypedOuter<UHoudiniAssetComponent>())
+		return HAC->GetCookable();
+
+	return nullptr;
+}
+
+void
+UHoudiniInput::SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate)
+{
+	bNeedsToTriggerUpdate = bInTriggersUpdate;
+
+	if (bNeedsToTriggerUpdate)
+	{
+		UHoudiniCookable* Cookable = GetCookable();
+		if (Cookable
+			&& (Cookable->GetCurrentState() == EHoudiniAssetState::Cooking
+				|| Cookable->GetCurrentState() == EHoudiniAssetState::Cancelling))
+		{
+			if (Cookable->GetCookOnInputChange())
+				Cookable->SetCancelReason(EHoudiniCookableCancelReason::CancelledDueToChangeAndRestart);
+			else if (Cookable->GetCancelReason() != EHoudiniCookableCancelReason::CancelledDueToChangeAndRestart)
+				Cookable->SetCancelReason(EHoudiniCookableCancelReason::CancelledDueToChange);
+
+			if (Cookable->GetCurrentState() == EHoudiniAssetState::Cooking)
+				Cookable->SetCurrentState(EHoudiniAssetState::Cancelling);
+		}
+	}
+}
+
 void
 UHoudiniInput::BeginDestroy()
 {
@@ -134,7 +171,8 @@ UHoudiniInput::BeginDestroy()
 }
 
 #if WITH_EDITOR
-void UHoudiniInput::PostEditUndo() 
+void
+UHoudiniInput::PostEditUndo() 
 {
 	 Super::PostEditUndo();
 	 TArray<TObjectPtr<UHoudiniInputObject>>* InputObjectsPtr = GetHoudiniInputObjectArray(Type);
@@ -171,13 +209,10 @@ void UHoudiniInput::PostEditUndo()
 		 		// If the ref counted input system is being used, we must not delete nodes managed by the system
 				TSet<int32> ManagedNodeIds;
 				{
-					const FUnrealObjectInputManager * Manager = FUnrealObjectInputManager::Get();
-					if (Manager)
-					{
-						TArray<int32> ManagedNodeIdArray;
-						if (Manager->GetAllHAPINodeIds(ManagedNodeIdArray))
-							ManagedNodeIds.Append(ManagedNodeIdArray);
-					}
+					const FUnrealObjectInputManager& Manager = FUnrealObjectInputManager::Get();
+					TArray<int32> ManagedNodeIdArray;
+					if (Manager.GetAllHAPINodeIds(ManagedNodeIdArray))
+						ManagedNodeIds.Append(ManagedNodeIdArray);
 				}
 
 			 	for (auto & NextNodeId : CreatedDataNodeIds)
@@ -460,7 +495,7 @@ UHoudiniInput::GetBounds(UWorld * World)
 
 				UHoudiniAssetComponent* CookableComp = Cast<UHoudiniAssetComponent>(CurInHC->GetComponent());
 				if(IsValid(CookableComp))
-					BoxBounds += CookableComp->GetAssetBounds(nullptr, false);
+					BoxBounds += CookableComp->GetAssetBoundsForLandscapeSelection(nullptr, false);
 			}
 			else if (IsValid(CurInLandscape = Cast<UHoudiniInputLandscape>(WorldInputObjects[Idx])))
 			{
@@ -487,6 +522,7 @@ UHoudiniInput::GetBounds(UWorld * World)
 
 	return BoxBounds;
 }
+
 
 bool
 UHoudiniInput::IsAssetInput() const
@@ -521,7 +557,8 @@ UHoudiniInput::IsLandscapeInput() const
 	return false;
 }
 
-void UHoudiniInput::UpdateLandscapeInputSelection()
+void 
+UHoudiniInput::UpdateLandscapeInputSelection()
 {
 	LandscapeSelectedComponents.Reset();
 	if (!InputSettings.bLandscapeExportSelectionOnly) return;
@@ -550,7 +587,7 @@ void UHoudiniInput::UpdateLandscapeInputSelection()
 			{
 				UHoudiniAssetComponent* OuterHAC = Cast<UHoudiniAssetComponent>(OuterCookable->GetComponent());
 				if(IsValid(OuterHAC))
-					Bounds = OuterHAC->GetAssetBounds(this, true);
+					Bounds = OuterHAC->GetAssetBoundsForLandscapeSelection(this, true);
 			}
 		}
 	
@@ -1021,7 +1058,6 @@ UHoudiniInput::SetInputType(const EHoudiniInputType& InInputType, bool& bOutBlue
 			break;
 	}
 
-	FHoudiniEngineRuntimeUtils::ForceDetailsPanelToUpdate();
 }
 
 UHoudiniInputObject*
@@ -1232,13 +1268,10 @@ void UHoudiniInput::InvalidateData()
 
 	TSet<int32> ManagedNodeIds;
 	{
-		const FUnrealObjectInputManager * Manager = FUnrealObjectInputManager::Get();
-		if(Manager)
-		{
-			TArray<int32> ManagedNodeIdArray;
-			if(Manager->GetAllHAPINodeIds(ManagedNodeIdArray))
-				ManagedNodeIds.Append(ManagedNodeIdArray);
-		}
+		const FUnrealObjectInputManager& Manager = FUnrealObjectInputManager::Get();
+		TArray<int32> ManagedNodeIdArray;
+		if(Manager.GetAllHAPINodeIds(ManagedNodeIdArray))
+			ManagedNodeIds.Append(ManagedNodeIdArray);
 	}
 
 	for(UHoudiniInputObject* InputObject : GeometryInputObjects)
@@ -1408,6 +1441,15 @@ UHoudiniInput::CreateHoudiniSplineInput(UHoudiniInputHoudiniSplineComponent * Fr
 			// Attach the new Houdini spline component to it's owner.
 			if (bAttachToparent)
 				HoudiniSplineComponent->AttachToComponent(OuterComp, FAttachmentTransformRules::KeepRelativeTransform);
+
+			// TODO: Check needed?
+			// Add to the OwnerActor's instance comp - will  display the comp in the list
+			if (OuterComp)
+			{
+				AActor* Owner = OuterComp->GetOwner();
+				if (Owner)
+					Owner->AddInstanceComponent(HoudiniSplineComponent);
+			}
 		}
 
 		//push the new input object to the array for new type.
@@ -2101,9 +2143,16 @@ UHoudiniInput::SetBoundSelectorObjectAt(const int32& AtIndex, AActor* InActor)
 
 // Helper function indicating what classes are supported by an input type
 TArray<const UClass*>
-UHoudiniInput::GetAllowedClasses(const EHoudiniInputType& InInputType)
+UHoudiniInput::GetAllowedClasses(const EHoudiniInputType& InInputType, bool bIsCOPInput)
 {
 	TArray<const UClass*> AllowedClasses;
+	if (bIsCOPInput)
+	{
+		// COP inputs only accept Textures
+		AllowedClasses.Add(UTexture2D::StaticClass());
+		return AllowedClasses;
+	}
+
 	switch (InInputType)
 	{
 		case EHoudiniInputType::Geometry:
@@ -2139,9 +2188,9 @@ UHoudiniInput::GetAllowedClasses(const EHoudiniInputType& InInputType)
 
 // Helper function indicating if an object is supported by an input type
 bool 
-UHoudiniInput::IsObjectAcceptable(const EHoudiniInputType& InInputType, const UObject* InObject)
+UHoudiniInput::IsObjectAcceptable(const EHoudiniInputType& InInputType, const UObject* InObject, bool IsCOPInput)
 {
-	TArray<const UClass*> AllowedClasses = GetAllowedClasses(InInputType);
+	TArray<const UClass*> AllowedClasses = GetAllowedClasses(InInputType, IsCOPInput);
 	for (auto CurClass : AllowedClasses)
 	{
 		if (InObject->IsA(CurClass))
@@ -2158,6 +2207,12 @@ UHoudiniInput::IsDataUploadNeeded()
 		return true;
 
 	return HasChanged();
+}
+
+void 
+UHoudiniInput::SetOwningParameter(UHoudiniParameter* Parameter)
+{
+	OwningParameter = Parameter;
 }
 
 // Indicates if this input has changed and should be updated
@@ -2302,55 +2357,55 @@ UHoudiniInput::GetTransformOffset(const int32& AtIndex) const
 	return FTransform::Identity;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetPositionOffsetX(int32 AtIndex) const
 {
 	return GetTransformOffset(AtIndex).GetLocation().X;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetPositionOffsetY(int32 AtIndex) const
 {
 	return GetTransformOffset(AtIndex).GetLocation().Y;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetPositionOffsetZ(int32 AtIndex) const
 {
 	return GetTransformOffset(AtIndex).GetLocation().Z;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetUserInputRoll(int32 AtIndex) const
 {
 	return GetUserInputRotator(AtIndex).Roll;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetUserInputPitch(int32 AtIndex) const
 {
 	return GetUserInputRotator(AtIndex).Pitch;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetUserInputYaw(int32 AtIndex) const
 {
 	return GetUserInputRotator(AtIndex).Yaw;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetScaleOffsetX(int32 AtIndex) const
 {
 	return GetTransformOffset(AtIndex).GetScale3D().X;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetScaleOffsetY(int32 AtIndex) const
 {
 	return GetTransformOffset(AtIndex).GetScale3D().Y;
 }
 
-TOptional<float>
+float
 UHoudiniInput::GetScaleOffsetZ(int32 AtIndex) const
 {
 	return GetTransformOffset(AtIndex).GetScale3D().Z;
@@ -2948,4 +3003,3 @@ UHoudiniInput::OnSessionConnected()
 	ResetInputObjects(InputObjectArray);
 
 }
-

@@ -98,7 +98,6 @@ FString FHoudiniMeshAutomationTest::GetCollisionTypeName(EHoudiniCollisionType T
 		return TEXT("simple_kdop10y");
 	case EHoudiniCollisionType::Kdop10z:
 		return TEXT("simple_kdop10z");
-		break;
 	case EHoudiniCollisionType::Kdop18:
 		return TEXT("simple_kdop18");
 	case EHoudiniCollisionType::Kdop26:
@@ -178,6 +177,13 @@ TArray<UStaticMeshComponent*> FHoudiniMeshAutomationTest::GetStaticMeshes(TShare
 
 void FHoudiniMeshAutomationTest::ExecuteMeshTest(TSharedPtr<FHoudiniTestContext> Context, const FHoudiniTestSettings& Settings, const FHoudiniMeshCheck& MeshCheck)
 {
+	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, Settings]()
+	{
+		// Cook once to ensure parameters are up to date.
+		Context->StartCookingHDA();
+		return true;
+	}));
+
 	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context, Settings]()
 	{
 		// Set number of multiparms; cook before we update he values.

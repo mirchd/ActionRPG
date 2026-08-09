@@ -50,6 +50,7 @@
 #include "HoudiniFoliageTools.h"
 #include "Materials/Material.h"
 #include "HoudiniLandscapeRuntimeUtils.h"
+#include "HoudiniEngineStatusManager.h"
 #include "Landscape.h"
 
 #define LOCTEXT_NAMESPACE "PCGCachedCookable"
@@ -83,6 +84,17 @@ UHoudiniPCGCookable::Rebuild()
 
 	this->State = EPCGCookableState::Initializing;
 	this->Cookable->MarkAsNeedRebuild();
+}
+
+
+void 
+UHoudiniPCGCookable::OnStateChange(EHoudiniAssetState OldState, EHoudiniAssetState NewState)
+{
+	if (OldState == EHoudiniAssetState::Instantiating)
+	{
+		if(NewState == EHoudiniAssetState::None)
+			this->State = EPCGCookableState::Initialized;
+	}
 }
 
 void
@@ -159,6 +171,11 @@ UHoudiniPCGCookable::CreateHoudiniCookable(UHoudiniAsset* Asset, UHoudiniPCGSett
 			this->OnCookingComplete(bSuccess);
 		});
 
+	Cookable->GetOnCookableStateChangeDelegate().AddLambda([this](UHoudiniCookable*, const EHoudiniAssetState OldState, const EHoudiniAssetState NewState)
+		{
+			this->OnStateChange(OldState, NewState);
+		});
+
 	Cookable->SetDoSlateNotifications(false);
 	Cookable->SetAllowUpdateEditorProperties(false);
 	Cookable->SetParameterSupported(true);
@@ -172,6 +189,8 @@ UHoudiniPCGCookable::CreateHoudiniCookable(UHoudiniAsset* Asset, UHoudiniPCGSett
 	Cookable->SetPDGSupported(true);
 	Cookable->SetBakingSupported(true);
 	Cookable->SetProxySupported(true);
+	Cookable->SetCookAfterInstantiation(false);
+	Cookable->SetImageSupported(false);
 
 	if(Component)
 	{
@@ -222,14 +241,14 @@ UHoudiniPCGCookable::InvalidateCookable()
 }
 
 bool
-UHoudiniPCGCookable::ApplyParametersToCookable(const FPCGContext* Context)
+UHoudiniPCGCookable::ApplyParameterPCGDataToCookable(const FPCGContext* Context)
 {
 	const TArray<FPCGTaggedData> Inputs = Context->InputData.GetInputsByPin(FName(FHoudiniPCGUtils::ParameterInputPinName));
 
 	bool bChanged = false;
 	for(auto& TaggedData : Inputs)
 	{
-		bChanged |= ApplyParametersToCookable(TaggedData.Data);
+		bChanged |= ApplyParameterPCGDataToCookable(TaggedData.Data);
 	}
 
 	if (bChanged)
@@ -242,7 +261,7 @@ UHoudiniPCGCookable::ApplyParametersToCookable(const FPCGContext* Context)
 
 
 bool
-UHoudiniPCGCookable::ApplyInputsToCookable(const FPCGContext* Context)
+UHoudiniPCGCookable::ApplyInputsPCGDataToCookable(const FPCGContext* Context)
 {
 	int NumInputs = this->Cookable->GetNumInputs();
 
@@ -250,7 +269,7 @@ UHoudiniPCGCookable::ApplyInputsToCookable(const FPCGContext* Context)
 	{
 		UHoudiniInput* Input = this->Cookable->GetInputAt(Index);
 
-		FString InputName = FHoudiniPCGUtils::GetHDAInputName(Index);
+		FString InputName = Input->GetInputLabel();
 
 		const TArray<FPCGTaggedData>& ContextInputData = Context->InputData.GetInputsByPin(FName(InputName));
 
@@ -263,7 +282,7 @@ UHoudiniPCGCookable::ApplyInputsToCookable(const FPCGContext* Context)
 		for(const FPCGTaggedData& InputData : ContextInputData)
 		{
 			const UPCGMetadata* Metadata = InputData.Data->ConstMetadata();
-			TArray<FString> UnrealObjects = GetUnrealObjectPaths(Context, Metadata);
+			TArray<FString> UnrealObjects = GetUnrealObjectPaths(Input->GetPCGAttribute(), Context, Metadata);
 			if(!UnrealObjects.IsEmpty())
 			{
 				UnrealObjectPaths.Append(UnrealObjects);
@@ -329,7 +348,7 @@ UHoudiniPCGCookable::AddTrackedObjects(const FPCGContext* Context)
 }
 
 bool
-UHoudiniPCGCookable::ApplyParametersToCookable(const UPCGData* Data)
+UHoudiniPCGCookable::ApplyParameterPCGDataToCookable(const UPCGData* Data)
 {
 	const UPCGMetadata* Metadata = Data->ConstMetadata();
 
@@ -351,26 +370,38 @@ UHoudiniPCGCookable::ApplyParametersToCookable(const UPCGData* Data)
 		if (!AttributeSet.Contains(ParameterName))
 			continue;
 
+		bool bThisValueChanged = false;
+
 		FHoudiniPCGAttributes Attributes(Metadata, FName(ParameterName));
 		if(UHoudiniParameterString* ParameterString = Cast<UHoudiniParameterString>(Parameter))
 		{
-			TArray<FString> Values = FHoudiniPCGUtils::GetValueAsString(ParameterString->GetDefaultValues(), Attributes, 0);
-			bChanged |= ParameterString->SetValuesIfChanged(Values);
+			TArray<FString> Values = FHoudiniPCGUtils::GetValueAsString(Attributes, 0);
+			if (!Values.IsEmpty())
+				bThisValueChanged |= ParameterString->SetValuesIfChanged(Values);
 		}
 		else if(UHoudiniParameterFloat* ParameterFloat = Cast<UHoudiniParameterFloat>(Parameter))
 		{
-			TArray<float> Values = FHoudiniPCGUtils::GetValueAsFloat(ParameterFloat->GetDefaultValues(), Attributes, 0);
-			bChanged |= ParameterFloat->SetValuesIfChanged(Values);
+			TArray<float> Values = FHoudiniPCGUtils::GetValueAsFloat(Attributes, 0);
+			if(!Values.IsEmpty())
+				bThisValueChanged |= ParameterFloat->SetValuesIfChanged(Values);
 		}
 		else if(UHoudiniParameterInt* ParameterInt = Cast<UHoudiniParameterInt>(Parameter))
 		{
-			TArray<int> Values = FHoudiniPCGUtils::GetValueAsInt(ParameterInt->GetDefaultValues(), Attributes, 0);
-			bChanged |= ParameterInt->SetValuesIfChanged(Values);
+			TArray<int> Values = FHoudiniPCGUtils::GetValueAsInt(Attributes, 0);
+			if(!Values.IsEmpty())
+				bThisValueChanged |= ParameterInt->SetValuesIfChanged(Values);
 		}
 		else if(UHoudiniParameterToggle* ParameterToggle = Cast<UHoudiniParameterToggle>(Parameter))
 		{
-			TArray<int> Values = FHoudiniPCGUtils::GetValueAsInt(ParameterToggle->GetDefaultValues(), Attributes, 0);
-			bChanged |= ParameterToggle->SetValuesIfChanged(Values);
+			TArray<int> Values = FHoudiniPCGUtils::GetValueAsInt(Attributes, 0);
+			if(!Values.IsEmpty())
+				bThisValueChanged |= ParameterToggle->SetValuesIfChanged(Values);
+		}
+
+		if (bThisValueChanged)
+		{
+			Parameter->MarkChanged(true);
+			bChanged = true;
 		}
 	}
 
@@ -611,7 +642,7 @@ UHoudiniPCGCookable::ProcessBakedOutput(FPCGContext* Context)
 
 	if(UHoudiniPDGAssetLink* PDGAssetLink = this->Cookable->GetPDGAssetLink())
 	{
-		auto& Outputs = this->PDGBakedOutput->BakedOutputs;
+		auto& Outputs = this->BakedOutputs;
 		for(int Index = 0; Index < Outputs.Num(); Index++)
 		{
 			FString Tag = FString::Printf(TEXT("Output-%d"), Index);
@@ -643,7 +674,7 @@ UHoudiniPCGCookable::CopyParametersAndInputs(const UHoudiniPCGCookable * Other)
 
 	UHoudiniPDGAssetLink* ThisPDGAssetLink =  Cookable->GetPDGAssetLink();
 	UHoudiniPDGAssetLink* OtherPDGAssetLink = Other->Cookable->GetPDGAssetLink();
-	if (OtherPDGAssetLink)
+	if (ThisPDGAssetLink && OtherPDGAssetLink)
 	{
 		ThisPDGAssetLink->SelectedTOPNetworkIndex = OtherPDGAssetLink->SelectedTOPNetworkIndex;
 	}
@@ -651,7 +682,7 @@ UHoudiniPCGCookable::CopyParametersAndInputs(const UHoudiniPCGCookable * Other)
 }
 
 bool
-UHoudiniPCGCookable::UpdateParametersAndInputs(FPCGContext* Context)
+UHoudiniPCGCookable::ApplyPCGDataOnNodeInputs(FPCGContext* Context)
 {
 	Cookable->SetOutputSupported(true);
 
@@ -660,11 +691,12 @@ UHoudiniPCGCookable::UpdateParametersAndInputs(FPCGContext* Context)
 		Settings = Context->GetInputSettings<UHoudiniPCGSettings>();
 
 	Cookable->GetOutputData()->bCreateSceneComponents = Settings ? Settings->bCreateSceneComponents : false;
-
+	Cookable->SetForcePCG(Settings ? Settings->bForcePCGOutputs : false);
+	Cookable->SetApplyPCGTransform(Settings ? Settings->bApplyTransform : false);
 	if(Context)
 	{
-		bParamsChanged |= this->ApplyParametersToCookable(Context);
-		bInputsChanged |= this->ApplyInputsToCookable(Context);
+		bParamsChanged |= this->ApplyParameterPCGDataToCookable(Context);
+		bInputsChanged |= this->ApplyInputsPCGDataToCookable(Context);
 	}
 
 	return true;
@@ -679,49 +711,88 @@ UHoudiniPCGCookable::NeedsCook() const
 }
 
 
-void
+bool
 UHoudiniPCGCookable::StartCook()
 {
 	ensure(NeedsCook());
 
-	bInputsChanged = false;
-	bParamsChanged = false;
-
 	Errors.Empty();
 
-	State = EPCGCookableState::Cooking;
+	if (!IsValid(Cookable))
+	{
+		AddCookError(TEXT("Cannot start a Houdini PCG cook because the cookable is invalid."));
+		return false;
+	}
 
+	bIsCookingPDG = false;
 	UHoudiniPDGAssetLink* PDGAssetLink = Cookable->GetPDGAssetLink();
-	bIsCookingPDG = IsValid(PDGAssetLink);
-
-	if (bIsCookingPDG)
+	if (IsValid(PDGAssetLink))
 	{
 		HOUDINI_PCG_MESSAGE(TEXT("(%p) Starting to Cook with PDG."), this);
 
-		HOUDINI_LOG_MESSAGE(TEXT("################>>> Cookable %p AssetLink %p"), this, PDGAssetLink);
-		UWorld* World= this->GetWorld();
+		UWorld* World = this->GetWorld();
 		PDGAssetLink->SetOutputWorld(World);
-		PDGAssetLink->GetSelectedTOPNetwork();
-		auto * TOPNetwork = PDGAssetLink->GetSelectedTOPNetwork();
-
-		TOPNetwork->GetOnPostCookDelegate().AddLambda([this](UTOPNetwork* Link, bool bSuccess)
+		UTOPNetwork* TOPNetwork = PDGAssetLink->GetSelectedTOPNetwork();
+		if (!IsValid(TOPNetwork))
 		{
+			AddCookError(TEXT("Cannot start a Houdini PDG cook because no TOP network is selected."));
+			return false;
+		}
+
+		if (PDGTopNetworkCookedDelegate.IsValid())
+		{
+			TOPNetwork->GetOnPostCookDelegate().Remove(PDGTopNetworkCookedDelegate);
+			PDGTopNetworkCookedDelegate.Reset();
+		}
+
+		PDGTopNetworkCookedDelegate = TOPNetwork->GetOnPostCookDelegate().AddLambda([this](UTOPNetwork* Link, bool bSuccess)
+		{
+			if (Link && PDGTopNetworkCookedDelegate.IsValid())
+			{
+				Link->GetOnPostCookDelegate().Remove(PDGTopNetworkCookedDelegate);
+				PDGTopNetworkCookedDelegate.Reset();
+			}
+
 			if (State == EPCGCookableState::Cooking)
 			{
 				OnCookingCompleteInternal(bSuccess);
 			}
 		});
-		if(IsValid(TOPNetwork))
+
+		if (!FHoudiniPDGManager::DirtyAll(TOPNetwork))
 		{
-			FHoudiniPDGManager::DirtyAll(TOPNetwork);
-			FHoudiniPDGManager::CookOutput(TOPNetwork);
+			TOPNetwork->GetOnPostCookDelegate().Remove(PDGTopNetworkCookedDelegate);
+			PDGTopNetworkCookedDelegate.Reset();
+			AddCookError(FString::Printf(TEXT("Failed to dirty Houdini PDG TOP network '%s' before starting the cook."), *TOPNetwork->NodeName));
+			return false;
 		}
+
+		if (!FHoudiniPDGManager::CookOutput(Cookable, TOPNetwork))
+		{
+			TOPNetwork->GetOnPostCookDelegate().Remove(PDGTopNetworkCookedDelegate);
+			PDGTopNetworkCookedDelegate.Reset();
+			AddCookError(FString::Printf(TEXT("Failed to start a Houdini PDG cook for TOP network '%s'."), *TOPNetwork->NodeName));
+			return false;
+		}
+
+		bIsCookingPDG = true;
+		bInputsChanged = false;
+		bParamsChanged = false;
+		State = EPCGCookableState::Cooking;
+		return true;
 	}
 	else
 	{
 		// Non-PDG
 		HOUDINI_PCG_MESSAGE(TEXT("(%p) Starting to Cook."), this);
+		bInputsChanged = false;
+		bParamsChanged = false;
+		State = EPCGCookableState::Cooking;
 		Cookable->MarkAsNeedCook();
+
+		// No idea why MarkAsNeedCook() sets has been loaded.
+		Cookable->SetHasBeenLoaded(false);
+		return true;
 	}
 }
 
@@ -730,11 +801,11 @@ UHoudiniPCGCookable::Bake()
 {
 	const bool bInRemoveHACOutputOnSuccess = false;
 
+	BakedOutputs.Empty();
+
 	if (Cookable->IsPDGSupported() && Cookable->GetPDGAssetLink())
 	{
 		FHoudiniEngineBakeUtils::BakePDGAssetLink(Cookable->GetPDGAssetLink());
-
-		this->PDGBakedOutput = NewObject<UHoudiniPDGBakeOutput>(this);
 
 		auto AssetLink = Cookable->GetPDGAssetLink();
 		UTOPNetwork* TopNetwork = AssetLink->GetSelectedTOPNetwork();
@@ -743,7 +814,7 @@ UHoudiniPCGCookable::Bake()
 			for (auto & It : Node->GetBakedWorkResultObjectsOutputs())
 			{
 				FHoudiniPDGWorkResultObjectBakedOutput & Result = It.Value;
-				this->PDGBakedOutput->BakedOutputs.Append(Result.BakedOutputs);
+				this->BakedOutputs.Append(Result.BakedOutputs);
 			}
 		}
 	}
@@ -755,6 +826,10 @@ UHoudiniPCGCookable::Bake()
 			BakeSettings,
 			EHoudiniEngineBakeOption::ToActor,
 			bInRemoveHACOutputOnSuccess);
+
+		UCookableBakingData* BakedData = Cookable->GetBakingData();
+		if(BakedData)
+			BakedOutputs = BakedData->BakedOutputs;
 	}
 }
 void
@@ -804,9 +879,9 @@ UHoudiniPCGCookable::Update(FPCGContext* Context)
 }
 
 TArray<FString>
-UHoudiniPCGCookable::GetUnrealObjectPaths(const FPCGContext* Context, const UPCGMetadata* Metadata)
+UHoudiniPCGCookable::GetUnrealObjectPaths(const FString& InputName, const FPCGContext* Context, const UPCGMetadata* Metadata)
 {
-	FHoudiniPCGAttributes Attributes(Metadata, FHoudiniPCGUtils::HDAInputObjectName);
+	FHoudiniPCGAttributes Attributes(Metadata, FName(InputName));
 
 	// Extract all soft object paths from the PCG node inputs.
 
@@ -815,8 +890,7 @@ UHoudiniPCGCookable::GetUnrealObjectPaths(const FPCGContext* Context, const UPCG
 	NewInputPaths.Reserve(NumRows);
 	for(int Row = 0; Row < NumRows; Row++)
 	{
-		TArray<FString> DefaultPaths = {};
-		TArray<FString> Paths = FHoudiniPCGUtils::GetValueAsString(DefaultPaths, Attributes, Row);
+		TArray<FString> Paths = FHoudiniPCGUtils::GetValueAsString(Attributes, Row);
 		for(FString Path : Paths)
 		{
 			if(!Path.IsEmpty())
@@ -968,149 +1042,10 @@ UHoudiniPCGCookable::ApplyInputAsPCGData(UHoudiniInput* HoudiniInput, const TArr
 }
 
 void
-UHoudiniPCGCookable::DeleteBakedActor(const FString & ActorPath)
-{
-	if(ActorPath.IsEmpty())
-		return;
-
-	UObject* Actor = StaticLoadObject(UObject::StaticClass(), nullptr, *ActorPath);
-	;
-	if(AActor* SceneActor = Cast<AActor>(Actor))
-	{
-		SceneActor->GetWorld()->DestroyActor(SceneActor);
-	}
-}
-
-void
-UHoudiniPCGCookable::DeleteBakedComponent(const FString& ComponentPath)
-{
-	if(ComponentPath.IsEmpty())
-		return;
-
-	UObject* Component = StaticLoadObject(UObject::StaticClass(), nullptr, *ComponentPath);
-	;
-	if (USceneComponent* SceneComponent = Cast<USceneComponent>(Component))
-	{
-		SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-		SceneComponent->UnregisterComponent();
-		SceneComponent->DestroyComponent();
-	}
-}
-
-void
-UHoudiniPCGCookable::DeletePackage(UPackage* Package)
-{
-	if(!Package)
-		return;
-
-	TArray<UObject*> ObjectsToDelete;
-	ObjectsToDelete.Add(Package);
-#if (ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION > 7)
-	GetObjectsWithOuter(Package, ObjectsToDelete, EGetObjectsFlags::IncludeNestedObjects);
-#else
-	GetObjectsWithOuter(Package, ObjectsToDelete, true);
-#endif	
-	ObjectTools::DeleteObjectsUnchecked(ObjectsToDelete);
-}
-
-
-void
-UHoudiniPCGCookable::DeleteBakedObject(const FString& ObjectPath)
-{
-#if WITH_EDITOR
-	if(ObjectPath.IsEmpty())
-		return;
-
-	UObject* Object = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath);
-	if(!IsValid(Object))
-		return;
-
-	if(!Object->IsA<UStaticMesh>() && !Object->IsA<UMaterial>())
-	{
-		// Only delete selected types of objects that should be assets.
-		return;
-	}
-
-	UPackage* Package = Object->GetPackage();
-
-	if(!Package)
-		return;
-
-	FString HoudiniName;
-
-	if (FHoudiniEngineBakeUtils::GetHoudiniGeneratedNameFromMetaInformation(Package, Object, HoudiniName))
-	{
-		DeletePackage(Package);
-	}
-	else
-	{
-		HOUDINI_LOG_WARNING(TEXT("Package %s is marked as a baked output, but is not tagged as generated by Houdini. Not deleting."),
-			*Package->GetFullName());
-	}
-
-#endif
-}
-
-void
-UHoudiniPCGCookable::DeleteLandscapeLayer(const FString& LandscapePath, TArray<FString> & LandscapeLayers)
-{
-	FSoftObjectPath Path(LandscapePath);
-	ALandscape* Landscape = Cast<ALandscape>(Path.ResolveObject());
-
-	for (auto Layer : LandscapeLayers)
-		FHoudiniLandscapeRuntimeUtils::DeleteEditLayer(Landscape, FName(Layer));
-}
-
-void
-UHoudiniPCGCookable::DeleteFoliage(UWorld * World, UFoliageType * FoliageType, const TArray<FVector> & FoliageInstancePositions)
-{
-	FHoudiniFoliageTools::RemoveFoliageInstances(World, FoliageType, FoliageInstancePositions);
-}
-
-void
-UHoudiniPCGCookable::DeleteBakedOutputObject(UWorld* World, FHoudiniBakedOutputObject& BakedOutputObject)
-{
-	DeleteBakedActor(BakedOutputObject.Actor);
-	DeleteBakedObject(BakedOutputObject.BakedObject);
-	DeleteBakedComponent(BakedOutputObject.Actor);
-
-	for (FString & ActorPath : BakedOutputObject.InstancedActors)
-	{
-		DeleteBakedActor(ActorPath);
-	}
-
-	for(FString& ActorPath : BakedOutputObject.LevelInstanceActors)
-	{
-		DeleteBakedActor(ActorPath);
-	}
-	for(FString& ComponentPath : BakedOutputObject.InstancedComponents)
-	{
-		DeleteBakedActor(ComponentPath);
-	}
-
-
-	DeleteLandscapeLayer(BakedOutputObject.Landscape, BakedOutputObject.CreatedLandscapeLayers);
-
-	DeleteBakedActor(BakedOutputObject.Actor);
-
-	DeleteFoliage(World, BakedOutputObject.FoliageType.Get(), BakedOutputObject.FoliageInstancePositions);
-
-	for(FString& FoliageActor : BakedOutputObject.FoliageActors)
-	{
-		DeleteBakedActor(FoliageActor);
-	}
-
-	DeleteBakedObject(BakedOutputObject.BakedSkeleton);
-	DeleteBakedObject(BakedOutputObject.BakedPhysicsAsset);
-}
-
-void
 UHoudiniPCGCookable::DeleteBakedOutput(UWorld* World)
 {
 	if(!IsValid(this->Cookable))
 		return;
-
-	TArray<FHoudiniBakedOutput>& BakedOutputs =  this->Cookable->GetBakedOutputs();
 
 	for (FHoudiniBakedOutput & BakedOutput : BakedOutputs)
 	{
@@ -1118,29 +1053,24 @@ UHoudiniPCGCookable::DeleteBakedOutput(UWorld* World)
 		{
 			FHoudiniBakedOutputObject & BakedOutputObject =  It.Value;
 
-			DeleteBakedOutputObject(World, BakedOutputObject);
+			FHoudiniEngineBakeUtils::DeleteBakedOutputObject(World, BakedOutputObject);
 		}
 	}
 	BakedOutputs.Empty();
 
 	// Delete PDG Output
 
-	if (this->PDGBakedOutput)
+	for(auto& BakedOutput : this->BakedOutputs)
 	{
-		for (auto & BakedOutput : this->PDGBakedOutput->BakedOutputs)
+		for(auto It : BakedOutput.BakedOutputObjects)
 		{
-			for(auto It : BakedOutput.BakedOutputObjects)
-			{
-				FHoudiniBakedOutputObject& BakedOutputObject = It.Value;
-
-				DeleteBakedOutputObject(World, BakedOutputObject);
-			}
+			FHoudiniBakedOutputObject& BakedOutputObject = It.Value;
+			FHoudiniEngineBakeUtils::DeleteBakedOutputObject(World, BakedOutputObject);
 		}
-
-		this->PDGBakedOutput->ConditionalBeginDestroy();
-		this->PDGBakedOutput = nullptr;
 	}
 
+
+	this->BakedOutputs.Empty();
 }
 
 #undef LOCTEXT_NAMESPACE

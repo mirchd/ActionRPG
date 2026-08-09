@@ -34,6 +34,7 @@
 #include "HoudiniStaticMesh.h"
 #include "HoudiniStaticMeshComponent.h"
 #include "CoreMinimal.h"
+#include "HoudiniParameterUpdater.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 #include "GeometryCollection/GeometryCollectionActor.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
@@ -71,7 +72,7 @@ class UHoudiniAssetComponent;
 		bool ____bSuccess = TestEqual(#A, A, B);\
 		if (!____bSuccess)\
 		{\
-			REPORT_ERROR(true);\
+			REPORT_ERROR(false);\
 			_FAIL;\
 		}\
 	}
@@ -81,7 +82,7 @@ class UHoudiniAssetComponent;
 			bool ____bSuccess = TestEqual(#A, A, B, C);\
 			if(!____bSuccess)\
 			{\
-				REPORT_ERROR(true);\
+				REPORT_ERROR(false);\
 				_FAIL;\
 			}\
 	}
@@ -91,7 +92,7 @@ class UHoudiniAssetComponent;
 			bool ____bSuccess = TestNotEqual(#A, A, B);\
 			if(!____bSuccess)\
 			{\
-				REPORT_ERROR(true);\
+				REPORT_ERROR(false);\
 				_FAIL;\
 			}\
 	}
@@ -101,7 +102,7 @@ class UHoudiniAssetComponent;
 			bool ____bSuccess = TestNull(#A, A);\
 			if(!____bSuccess)\
 			{\
-				REPORT_ERROR(true);\
+				REPORT_ERROR(false);\
 				_FAIL;\
 			}\
 	}
@@ -111,7 +112,7 @@ class UHoudiniAssetComponent;
 			bool ____bSuccess = TestNotNull(#A, A);\
 			if(!____bSuccess)\
 			{\
-				REPORT_ERROR(true);\
+				REPORT_ERROR(false);\
 				_FAIL;\
 			}\
 	}
@@ -356,7 +357,7 @@ struct FHoudiniEditorUnitTestUtils
 		{\
 			return true;\
 		}\
-		__Parameter->SetNumElements(_PARAMETER_VALUE);\
+		FHoudiniParameterUpdater::Get()->SetNumMultiParmElements(__Parameter, _PARAMETER_VALUE);\
 	}
 
 enum class EHoudiniContextState : uint8
@@ -420,7 +421,7 @@ struct FHoudiniTestContext
 	// Bakes the top network. Synchronous, returns the baked actors.
 	TArray<FHoudiniEngineBakedActor> BakeSelectedTopNetwork();
 
-	double MaxTime = 120.0f;					// Max time (seconds) this test can run.
+	double MaxTime = 30.0f;						// Max time (seconds) this test can run.
 	double TimeStarted = 0.0f;					// Time this test started. Used to test for timeout.
 
 	FAutomationTestBase* Test = nullptr;		// Unit test underway
@@ -465,10 +466,13 @@ public:
 
 	TSharedPtr<FHoudiniTestContext> SingleContext;
 	TSharedPtr<FHoudiniMultiTestContext> MultiContext;
+	bool bHasTimedOut = false;
 
 	// Like its base class, return true when the command is complete, false when it should be called again.
 	virtual bool Update() override;
 
 	bool CheckForCookingComplete(FHoudiniTestContext* Context);
+
+	bool IsTimedOut(FHoudiniTestContext* Context);
 };
 #endif

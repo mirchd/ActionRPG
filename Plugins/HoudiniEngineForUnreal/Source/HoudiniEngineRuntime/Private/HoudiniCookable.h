@@ -51,6 +51,16 @@ class UHoudiniInput;
 class UHoudiniOutput;
 class UHoudiniPDGAssetLink;
 class UHoudiniParameter;
+class UMaterialInterface;
+
+UENUM()
+enum class EHoudiniCookableCancelReason : uint8
+{
+	None,
+	UserCancelled,
+	CancelledDueToChange,
+	CancelledDueToChangeAndRestart
+};
 
 UCLASS()
 class HOUDINIENGINERUNTIME_API UCookableHoudiniAssetData : public UObject
@@ -64,7 +74,7 @@ public:
 	UCookableHoudiniAssetData();
 
 #if WITH_EDITORONLY_DATA
-	// Houdini Asset associated with this component.
+	// Houdini Asset associated with this component.			
 	UPROPERTY(Category = HoudiniAsset, EditAnywhere)// BlueprintSetter = SetHoudiniAsset, BlueprintReadWrite, )
 	TObjectPtr<UHoudiniAsset> HoudiniAsset;
 #endif
@@ -217,6 +227,10 @@ public:
 	UPROPERTY(Category = "HoudiniMeshGeneration", EditAnywhere, meta = (DisplayPriority = 0))
 	bool bSplitMeshSupport = false;
 	
+	// Controls whether or not to apply transforms to PCG Data.
+	UPROPERTY()
+	bool bApplyPCGTransform = false;
+
 	// Look for editable curve::1.0 nodes to create curve inputs
 	// Legacy workflow - deprecated - disabled by default
 	UPROPERTY()
@@ -247,6 +261,8 @@ class HOUDINIENGINERUNTIME_API UCookableBakingData : public UObject
 public:
 
 	FOnPostBakeDelegate& GetOnPostBakeDelegate() { return OnPostBakeDelegate; };
+
+	void PostLoad() override;
 
 	//-----------------------------------
 	// BAKE
@@ -411,7 +427,42 @@ public:
 };
 
 
+UCLASS()
+class HOUDINIENGINERUNTIME_API UCookableImageData : public UObject
+{
+	GENERATED_UCLASS_BODY()
 
+	friend class UHoudiniCookable;
+
+public:
+
+	UCookableImageData();
+
+	UPROPERTY()
+	bool bIsCOPHDA;
+
+	UPROPERTY()
+	bool bOverrideDefaultResolution;
+
+	UPROPERTY()
+	FIntPoint ResolutionOverride;
+
+	UPROPERTY()
+	bool bOverridePixelScale;
+
+	UPROPERTY()
+	float PixelScale;
+
+	// 0 INT8, 1 FLOAT16, 2 FLOAT32
+	UPROPERTY()
+	EHoudiniEngineImageDataFormat ImageDataFormat;
+
+	UPROPERTY()
+	bool bGenerateMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> MaterialToInstance = nullptr;
+};
 
 
 UCLASS()
@@ -424,12 +475,11 @@ class HOUDINIENGINERUNTIME_API UHoudiniCookable : public UObject, public IHoudin
 	friend class FHoudiniEngineManager;
 	friend struct FHoudiniEngineUtils;
 	friend struct FHoudiniOutputTranslator;
-	//friend struct FHoudiniInputTranslator;
-	//friend struct FHoudiniSplineTranslator;
 	friend struct FHoudiniParameterTranslator;
-	//friend struct FHoudiniPDGManager;
 	friend struct FHoudiniHandleTranslator;
 	friend class UHoudiniAssetComponent;
+	friend class UHoudiniAssetBlueprintComponent;
+	friend struct FHoudiniEngineParameterUpdater;
 
 	// Delegate for when EHoudiniAssetState changes from InFromState to InToState on a HoudiniCookable (InHC)
 	DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnCookableStateChangeDelegate, UHoudiniCookable*, const EHoudiniAssetState, const EHoudiniAssetState);
@@ -452,7 +502,7 @@ public:
 	//------------------------------------------------------------------------------------------------
 
 	int32 GetNodeId() const { return NodeId; };
-	void SetNodeId(int InNodeId) { NodeId = InNodeId;  }
+	void SetNodeId(int InNodeId) { NodeId = InNodeId; }
 
 	EHoudiniAssetState GetCurrentState() const { return CurrentState; };
 	EHoudiniAssetStateResult GetCurrentStateResult() const { return CurrentStateResult; };
@@ -464,9 +514,10 @@ public:
 	UCookableInputData* GetInputData() { return IsInputSupported() ? InputData : nullptr; };
 	UCookableOutputData* GetOutputData() { return IsOutputSupported() ? OutputData : nullptr;};
 	UCookableComponentData* GetComponentData() { return IsComponentSupported() ? ComponentData : nullptr; };
-	UCookablePDGData* GetPDGData() { return IsPDGSupported() ? PDGData : nullptr; };
+	UCookablePDGData* GetPDGData() const { return IsPDGSupported() ? PDGData : nullptr; };
 	UCookableBakingData* GetBakingData() { return IsBakingSupported() ? BakingData : nullptr; };
 	UCookableProxyData* GetProxyData() { return IsProxySupported() ? ProxyData : nullptr; };
+	UCookableImageData* GetImageData() const { return IsImageSupported() ? ImageData : nullptr; };
 
 	bool SetParameterData(UCookableParameterData * ParameterData);
 	bool SetInputData(UCookableInputData*);
@@ -481,14 +532,20 @@ public:
 	FString GetHoudiniAssetName() const;
 
 	FGuid& GetHapiGUID();
+	void SetHapiGUID(const FGuid& InGUID) { HapiGUID = InGUID; }
+
 	FString GetHapiAssetName() const;
+
 	FGuid GetCookableGUID() const;
+	void SetCookableGUID(const FGuid& InGUID) { CookableGUID = InGUID; };
 
 	bool IsCookingEnabled() const { return bEnableCooking; };
+	bool CookAfterInstantiatation() const { return bCookAfterInstantiation;  }
 	bool HasBeenLoaded() const { return bHasBeenLoaded; };
 	bool HasBeenDuplicated() const { return bHasBeenDuplicated; };
 	bool HasRecookBeenRequested() const { return bRecookRequested; };
 	bool HasRebuildBeenRequested() const { return bRebuildRequested; };
+	EHoudiniCookableCancelReason GetCancelReason() const { return CancelReason; };
 	bool IsInstantiatingOrCooking() const;
 
 	bool GetCookOnParameterChange() const;
@@ -497,6 +554,7 @@ public:
 	bool GetCookOnCookableInputCook() const;
 	bool IsOutputless() const;
 	bool GetUseOutputNodes() const;
+	bool GetForcePCGOutputs() const;
 	bool GetOutputTemplateGeos() const;
 	bool GetUploadTransformsToHoudiniEngine() const;
 	bool GetLandscapeUseTempLayers() const;
@@ -515,6 +573,8 @@ public:
 	FHoudiniStaticMeshGenerationProperties& GetStaticMeshGenerationProperties();
 	FMeshBuildSettings& GetStaticMeshBuildSettings();
 
+	void ConstructParameterTree();
+
 	// Feature data accessors
 	int32 GetNumInputs() const
 	{ 
@@ -526,6 +586,8 @@ public:
 	};
 	
 	int32 GetNumOutputs() const { return IsOutputSupported() ? OutputData->Outputs.Num() : 0; };
+
+	void UpdateParameters();
 
 	int32 GetNumParameters() const 
 	{
@@ -594,8 +656,10 @@ public:
 	// method is overridden by HoudiniAssetBlueprintComponent.
 	virtual bool HasOpenEditor() const { return false; };
 
+	bool IsPendingDelete() const { return bPendingDelete; };
 	int32 GetCookCount() const { return CookCount; };
 
+	void SetLastCookSuccessful(bool bInSuccess) { bLastCookSuccess = bInSuccess; };
 	bool WasLastCookSuccessful() const;
 
 	// TODO COOKABLE: Move to component?
@@ -618,8 +682,10 @@ public:
 	bool NeedUpdateOutputs() const;
 
 #if WITH_EDITORONLY_DATA
-	TArray<TObjectPtr<UHoudiniParameter>>& GetParameters();
 	const TArray<TObjectPtr<UHoudiniParameter>>& GetParameters() const;
+	void SetParameters(const TArray<TObjectPtr<UHoudiniParameter>>& Parameters);
+	void SetParametersAndInstantiate(const TArray<TObjectPtr<UHoudiniParameter>>& Parameters);
+	void RemoveInvalidParameters();
 #endif
 #if WITH_EDITORONLY_DATA
 	TArray<TObjectPtr<UHoudiniInput>>& GetInputs();
@@ -656,6 +722,7 @@ public:
 	EHoudiniBakeAfterNextCook GetBakeAfterNextCook() const;
 	bool IsPlayInEditorRefinementAllowed() const;
 	EHoudiniEngineActorBakeOption GetActorBakeOption() const;
+	bool GetApplyPCGTransform() const;
 
 	FName GetAssetEditorId() const { return AssetEditorId; };
 
@@ -706,12 +773,14 @@ public:
 	bool SetTemporaryCookFolder(const FDirectoryPath& InPath);
 	bool SetBakeFolder(const FDirectoryPath& InPath);
 
+	void SetCookAfterInstantiation(bool bInCookAfterInstantiation);
 	void SetCookingEnabled(const bool& bInCookingEnabled);
 	void SetHasBeenLoaded(const bool& InLoaded);
 	void SetHasBeenDuplicated(const bool& InDuplicated);
 	void SetCookCount(const int32& InCount);
 	void SetRecookRequested(const bool& InRecook);
 	void SetRebuildRequested(const bool& InRebuild);
+	void SetCancelReason(const EHoudiniCookableCancelReason InCancelReason);
 
 	// Set to True to force the next cook to not build a proxy mesh (regardless of global or override settings) and
 	// instead build a UStaticMesh directly (if applicable for the output type).
@@ -729,10 +798,12 @@ public:
 	void SetCookOnCookableInputCook(bool bEnable);
 	void SetOutputless(bool bEnable);
 	void SetUseOutputNodes(bool bEnable);
+	void SetForcePCG(bool bEnable);
 	void SetOutputTemplateGeos(bool bEnable);
 	void SetUploadTransformsToHoudiniEngine(bool bEnable);
 	void SetLandscapeUseTempLayers(bool bEnable);
 	void SetEnableCurveEditing(bool bEnable);
+	void SetApplyPCGTransform(bool bEnable);
 
 	// Set whether or not bake after cooking (disabled, always or once).
 	void SetBakeAfterNextCook(const EHoudiniBakeAfterNextCook InBakeAfterNextCook);
@@ -779,11 +850,12 @@ public:
 	virtual bool IsPDGSupported() const { return bHasPDG && PDGData; };
 	virtual bool IsBakingSupported() const { return IsOutputSupported() && bHasBaking && BakingData; };
 	virtual bool IsProxySupported() const { return IsOutputSupported() && bHasProxy && ProxyData; };
+	virtual bool IsImageSupported() const { return bHasImage && ImageData; };
 
 	// Needed for BP support
-	virtual void NotifyHoudiniRegisterCompleted() {};
-	virtual void NotifyHoudiniPreUnregister() {};
-	virtual void NotifyHoudiniPostUnregister() {};
+	virtual void NotifyHoudiniRegisterCompleted();
+	virtual void NotifyHoudiniPreUnregister();
+	virtual void NotifyHoudiniPostUnregister();
 
 	// Feature mutators
 	virtual void SetHoudiniAssetSupported(bool bSupport) { bHasHoudiniAsset = bSupport; };
@@ -794,6 +866,7 @@ public:
 	virtual void SetPDGSupported(bool bSupport) { bHasPDG = bSupport; };
 	virtual void SetBakingSupported(bool bSupport) { bHasBaking = bSupport; };
 	virtual void SetProxySupported(bool bSupport) { bHasProxy = bSupport; };
+	virtual void SetImageSupported(bool bSupport) { bHasImage = bSupport; };
 
 	// Turn On/Off Notifications & Unreal UI
 	void SetDoSlateNotifications(bool bOnOff) { bDoSlateNotifications = bOnOff;  }
@@ -852,10 +925,12 @@ protected:
 	// Do any object - specific cleanup required immediately after loading an object.
 	// This is not called for newly - created objects, and by default will always execute on the game thread.
 	virtual void PostLoad() override;
-
+	virtual void PostDuplicate(bool bDuplicateForPIE) override;
 	virtual void PostEditImport() override;
 
 	virtual void BeginDestroy() override;
+
+	void FixupInputPointers();
 
 protected:
 
@@ -904,6 +979,10 @@ protected:
 	UPROPERTY()
 	bool bShouldUpdateUI = false;
 
+	// Should outputs be treated as PCG?
+	UPROPERTY()
+	bool bForcePCGOutputs = false;
+
 	// Ids of the nodes that should also be cooked with this cookable
 	// This can be used for additional outputs or templated nodes if used.
 	UPROPERTY(Transient, DuplicateTransient)
@@ -925,11 +1004,23 @@ protected:
 	UPROPERTY(DuplicateTransient)
 	bool bEnableCooking;	// bEnableCooking
 
+	UPROPERTY()
+	bool bCookAfterInstantiation;
+
 	UPROPERTY(DuplicateTransient)
 	bool bForceNeedUpdate;	// bForceNeedUpdate
 
 	UPROPERTY(DuplicateTransient)
 	bool bLastCookSuccess;	// bLastCookSuccess
+
+	UPROPERTY(DuplicateTransient)
+	bool bCookCancelIssued;
+
+	UPROPERTY(Transient, DuplicateTransient)
+	double CookCancelRequestTime;
+
+	UPROPERTY(Transient, DuplicateTransient)
+	EHoudiniCookableCancelReason CancelReason;
 
 	// The last timestamp this cookable was ticked
 	// Used to prioritize/limit the number of Cookable processed per tick
@@ -976,7 +1067,7 @@ protected:
 	bool bHasHoudiniAsset;
 
 	// Structure containing the HDA data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookableHoudiniAssetData> HoudiniAssetData;
 
 	// PARAMETERS
@@ -985,7 +1076,7 @@ protected:
 	bool bHasParameters;
 
 	// Structure containing the parameter data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookableParameterData> ParameterData;
 
 	// INPUTS
@@ -994,7 +1085,7 @@ protected:
 	bool bHasInputs;
 
 	// Structure containing the input data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookableInputData> InputData;
 
 	// OUTPUTS
@@ -1003,7 +1094,7 @@ protected:
 	bool bHasOutputs;
 
 	// Structure containing the output data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookableOutputData> OutputData;
 
 	// COMPONENTS / TRANSFORM
@@ -1012,7 +1103,7 @@ protected:
 	bool bHasComponent; // bIsInWorld?
 
 	// Structure containing the component's data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookableComponentData> ComponentData;
 
 	// PDG
@@ -1021,15 +1112,24 @@ protected:
 	bool bHasPDG;
 
 	// Structure containing the PDG data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookablePDGData> PDGData;
+
+	// Image/COP
+	// Indicates if this cookable has access to COP/Images
+	UPROPERTY()
+	bool bHasImage;
+
+	// Structure containing COP/Image PDG data
+	UPROPERTY()
+	TObjectPtr<UCookableImageData> ImageData;
 
 	// Baking
 	// Indicates if this cookable has access to baking
 	UPROPERTY()
 	bool bHasBaking;
 	// Structure containing the Baking data
-	UPROPERTY(EditAnywhere, Category = "Houdini Cookable")
+	UPROPERTY()
 	TObjectPtr<UCookableBakingData> BakingData;
 
 	// Proxy
@@ -1077,22 +1177,7 @@ protected:
 	UPROPERTY(Transient)
 	bool bAllowUpdateEditorProperties;
 
-#if WITH_EDITORONLY_DATA
 public:
-
-	UPROPERTY()
-	bool bGenerateMenuExpanded;
-
-	UPROPERTY()
-	bool bBakeMenuExpanded;
-
-	UPROPERTY()
-	bool bAssetOptionMenuExpanded;
-
-	UPROPERTY()
-	bool bHelpAndDebugMenuExpanded;
-#endif
-
 	// Indicates the Id of the AssetEditor viewing this cookable
 	// Can be null/empty if not viewded by an AssetEditor
 	UPROPERTY()

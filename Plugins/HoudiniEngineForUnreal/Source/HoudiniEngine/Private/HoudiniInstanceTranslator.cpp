@@ -67,6 +67,7 @@
 	//#include "ScopedTransaction.h"
 	#include "LevelEditorViewport.h"
 	#include "MeshPaintHelpers.h"
+	#include "AssetRegistry/AssetRegistryModule.h"
 #endif
 #include "HoudiniEngineAttributes.h"
 #include "HoudiniFoliageUtils.h"
@@ -596,13 +597,25 @@ UObject*
 FHoudiniInstanceTranslator::LoadInstancedObject(const FString & ObjectPath)
 {
 	// Load the object using its path. Resolve redirectors if necessary.
-	UObject * InstanceObject = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath, nullptr, LOAD_None, nullptr);
+#if WITH_EDITOR
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	FAssetData AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(ObjectPath);
+	bool AssetDataValid = AssetData.IsValid();
+#else
+	bool AssetDataValid = true;
+#endif
 
-	while (UObjectRedirector* Redirector = Cast<UObjectRedirector>(InstanceObject))
-		InstanceObject = Redirector->DestinationObject;
+	UObject* InstanceObject = nullptr;
+	if (AssetDataValid)
+	{
+		InstanceObject = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath, nullptr, LOAD_None, nullptr);
 
-	if (IsValid(InstanceObject))
-		return InstanceObject;
+		while(UObjectRedirector* Redirector = Cast<UObjectRedirector>(InstanceObject))
+			InstanceObject = Redirector->DestinationObject;
+
+		if(IsValid(InstanceObject))
+			return InstanceObject;
+	}
 
 	// If could not load the actor, try to load it as a class.
 	UClass* FoundClass = FHoudiniEngineRuntimeUtils::GetClassByName(ObjectPath);

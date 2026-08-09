@@ -25,11 +25,13 @@
 */
 
 #include "HoudiniParameterFolder.h"
+#include "HoudiniParameterFolderList.h"
 
 UHoudiniParameterFolder::UHoudiniParameterFolder(const FObjectInitializer & ObjectInitializer)
 	: Super(ObjectInitializer)
 	,bExpanded(false)
 	,bChosen(false)
+	,bIsContentShown(true)
 {
 	ParmType = EHoudiniParameterType::Folder;
 }
@@ -49,4 +51,26 @@ UHoudiniParameterFolder::Create(
 	HoudiniAssetParameter->SetParameterType(EHoudiniParameterType::Folder);
 	//HoudiniAssetParameter->UpdateFromParmInfo(InParentParameter, InNodeId, ParmInfo);
 	return HoudiniAssetParameter;
+}
+
+void UHoudiniParameterFolder::MarkChanged(const bool& bInChanged)
+{
+	Super::MarkChanged(bInChanged);
+
+	UHoudiniParameterFolderList* FolderList = Cast<UHoudiniParameterFolderList>(GetParent());
+	if (!FolderList)
+		return;
+
+	FolderList->MarkChanged(bInChanged);
+}
+
+void UHoudiniParameterFolder::SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate)
+{
+	Super::SetNeedsToTriggerUpdate(bInTriggersUpdate);
+
+	UHoudiniParameterFolderList* FolderList = Cast<UHoudiniParameterFolderList>(GetParent());
+	if (!FolderList)
+		return;
+
+	FolderList->SetNeedsToTriggerUpdate(bInTriggersUpdate);
 }

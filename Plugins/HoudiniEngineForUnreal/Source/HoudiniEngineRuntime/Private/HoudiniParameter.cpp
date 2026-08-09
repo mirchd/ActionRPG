@@ -25,6 +25,7 @@
 */
 
 #include "HoudiniParameter.h"
+#include "HoudiniCookable.h"
 
 UHoudiniParameter::UHoudiniParameter(const FObjectInitializer & ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -46,6 +47,7 @@ UHoudiniParameter::UHoudiniParameter(const FObjectInitializer & ObjectInitialize
 	, bIsLabelVisible(true)
 	, bIsChildOfMultiParm(false)
 	, bIsDirectChildOfMultiParm(false)
+	, MultiParmInstanceNum(INDEX_NONE)
 	, bPendingRevertToDefault(false)
 	, TagCount(0)
 	, ValueIndex(-1)
@@ -75,6 +77,38 @@ bool
 UHoudiniParameter::IsChildParameter() const
 {
 	return ParentParmId >= 0;
+}
+
+void
+UHoudiniParameter::MarkChanged(const bool& bInChanged)
+{
+	bHasChanged = bInChanged;
+	SetNeedsToTriggerUpdate(bInChanged);
+}
+
+void
+UHoudiniParameter::SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate)
+{
+	bNeedsToTriggerUpdate = bInTriggersUpdate;
+
+	if (bNeedsToTriggerUpdate)
+	{
+		// A Parameter has changed, so cancel the current cook.
+		UHoudiniCookable * Cookable = GetCookable();
+		if (Cookable
+			&& (Cookable->GetCurrentState() == EHoudiniAssetState::Cooking
+				|| Cookable->GetCurrentState() == EHoudiniAssetState::Cancelling))
+		{
+			if (Cookable->GetCookOnParameterChange())
+				Cookable->SetCancelReason(EHoudiniCookableCancelReason::CancelledDueToChangeAndRestart);
+			else if (Cookable->GetCancelReason() != EHoudiniCookableCancelReason::CancelledDueToChangeAndRestart)
+				Cookable->SetCancelReason(EHoudiniCookableCancelReason::CancelledDueToChange);
+
+			if (Cookable->GetCurrentState() == EHoudiniAssetState::Cooking)
+				Cookable->SetCurrentState(EHoudiniAssetState::Cancelling);
+		}
+
+	}
 }
 
 void
@@ -264,10 +298,37 @@ UHoudiniParameter::OnSessionConnected()
 {
 	NodeId = INDEX_NONE;
 
-	// Dont invalidate existing parmId as this will prevent the Parm UI
-	// From properly showing up.
-	//ParmId = INDEX_NONE;
-	//ParentParmId = INDEX_NONE;
+	ParmId = INDEX_NONE;
+	ParentParmId = INDEX_NONE;
+}
+
+
+UHoudiniCookable* UHoudiniParameter::GetCookable() const
+{
+	UHoudiniCookable* HC = Cast<UHoudiniCookable>(GetOuter());
+	return HC;
+}
+
+const TObjectPtr<UHoudiniParameter> UHoudiniParameter::GetParent()
+{
+	return Parent;
+}
+
+const TArray<TObjectPtr<UHoudiniParameter>>& UHoudiniParameter::GetChildren()
+{
+	return Children;
+}
+
+void UHoudiniParameter::SetParent(UHoudiniParameter* InParent)
+{
+	this->Parent = InParent;
+	InParent->Children.Add(this);
+}
+
+void UHoudiniParameter::ClearTree()
+{
+	this->Parent = nullptr;
+	this->Children.Empty();
 }
 
 

@@ -115,7 +115,7 @@ public:
 	//------------------------------------------------------------------------------------------------
 	// Accessors
 	//------------------------------------------------------------------------------------------------
-	UHoudiniCookable* GetCookable() const;
+	virtual UHoudiniCookable* GetCookable() const;
 
 	UHoudiniAsset* GetHoudiniAsset() const;
 	int32 GetAssetId() const;
@@ -147,7 +147,7 @@ public:
 	const TArray<FHoudiniBakedOutput>& GetBakedOutputs() const;
 		
 #if WITH_EDITORONLY_DATA
-	TArray<TObjectPtr<UHoudiniParameter>>& GetParameters();
+	void SetParameters(const TArray<TObjectPtr<UHoudiniParameter>>& Parameters);
 	const TArray<TObjectPtr<UHoudiniParameter>>& GetParameters() const;
 #endif
 
@@ -331,7 +331,7 @@ public:
 	virtual FBoxSphereBounds CalcBounds(const FTransform & LocalToWorld) const override;
 	virtual void OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport) override;
 
-	FBox GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreGeneratedLandscape) const;
+	FBox GetAssetBoundsForLandscapeSelection(UHoudiniInput* IgnoreInput, bool bIgnoreGeneratedLandscape) const;
 
 	// return the cached component template, if available.
 	virtual UHoudiniAssetComponent* GetCachedTemplate() const { return nullptr; }

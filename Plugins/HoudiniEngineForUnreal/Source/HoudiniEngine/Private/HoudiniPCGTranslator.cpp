@@ -48,8 +48,11 @@ bool HasAttribute(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_AttributeOwner Ow
 }
 
 
-bool FHoudiniPCGTranslator::IsPCGOutput(HAPI_NodeId NodeId, HAPI_PartId PartId)
+bool FHoudiniPCGTranslator::IsPCGOutput(bool bForcePCG, HAPI_NodeId NodeId, HAPI_PartId PartId)
 {
+	if(bForcePCG)
+		return true;
+
 	if(HasAttribute(NodeId, PartId, HAPI_AttributeOwner::HAPI_ATTROWNER_POINT, HOUDINI_PCG_PARAMS_OUTPUT_NAME))
 		return true;
 	if(HasAttribute(NodeId, PartId, HAPI_AttributeOwner::HAPI_ATTROWNER_VERTEX, HOUDINI_PCG_PARAMS_OUTPUT_NAME))
@@ -61,7 +64,7 @@ bool FHoudiniPCGTranslator::IsPCGOutput(HAPI_NodeId NodeId, HAPI_PartId PartId)
 	return false;
 }
 
-UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGSplinesOutput(UHoudiniOutput* CurOutput)
+UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGSplinesOutput(UHoudiniOutput* CurOutput, const FTransform& Transform)
 {
 	const auto& HGPO = CurOutput->GetHoudiniGeoPartObjects()[0];
 
@@ -116,11 +119,13 @@ UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGSplinesOutput(UHoudiniOut
 		for (int PosIndex = 0; PosIndex < SplinePoints.Num(); PosIndex++)
 		{
 			int HapiOffset = (CurveStart + PosIndex) * 3;
-			FVector Position;
-			Position.X = FloatPositions[HapiOffset + 0] * 100.0;
-			Position.Y = FloatPositions[HapiOffset + 2] * 100.0;
-			Position.Z = FloatPositions[HapiOffset + 1] * 100.0;
-			SplinePoints[PosIndex].Position = Position;
+			FVector LocalPosition;
+			LocalPosition.X = FloatPositions[HapiOffset + 0] * 100.0;
+			LocalPosition.Y = FloatPositions[HapiOffset + 2] * 100.0;
+			LocalPosition.Z = FloatPositions[HapiOffset + 1] * 100.0;
+
+			FVector GlobalPosition = Transform.TransformPosition(LocalPosition);
+			SplinePoints[PosIndex].Position = GlobalPosition;
 			SplinePoints[PosIndex].InputKey = static_cast<float>(PosIndex);
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6
 			EntryKeys[PosIndex] = PosIndex;
@@ -144,7 +149,7 @@ UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGSplinesOutput(UHoudiniOut
 	return Results;
 }
 
-UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGParamsOutput(UHoudiniOutput* CurOutput)
+UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGParamsOutput(UHoudiniOutput* CurOutput, const FTransform& Transform)
 {
 	const auto& HGPO = CurOutput->GetHoudiniGeoPartObjects()[0];
 
@@ -153,11 +158,11 @@ UHoudiniPCGOutputData* FHoudiniPCGTranslator::CreatePCGParamsOutput(UHoudiniOutp
 	Results->DetailsParams = CreatePCGAttributes(HGPO.GeoId, HGPO.PartId, HAPI_AttributeOwner::HAPI_ATTROWNER_DETAIL);
 	Results->PrimsParams = CreatePCGAttributes(HGPO.GeoId, HGPO.PartId, HAPI_AttributeOwner::HAPI_ATTROWNER_PRIM);
 	Results->VertexParams = CreatePCGAttributes(HGPO.GeoId, HGPO.PartId, HAPI_AttributeOwner::HAPI_ATTROWNER_VERTEX);
-	Results->PointParams = CreatePCGPointData(HGPO.GeoId, HGPO.PartId);
+	Results->PointParams = CreatePCGPointData(HGPO.GeoId, HGPO.PartId, Transform);
 	return Results;
 }
 
-void FHoudiniPCGTranslator::CreatePCGFromOutput(UHoudiniOutput* Output)
+void FHoudiniPCGTranslator::CreatePCGFromOutput(UHoudiniOutput* Output, const FTransform& Transform)
 {
 	if(Output->GetHoudiniGeoPartObjects().IsEmpty())
 		return;
@@ -169,11 +174,11 @@ void FHoudiniPCGTranslator::CreatePCGFromOutput(UHoudiniOutput* Output)
 	switch (HGPO.PartInfo.Type)
 	{
 	case EHoudiniPartType::Curve:
-		PCGOutput = CreatePCGSplinesOutput(Output);
+		PCGOutput = CreatePCGSplinesOutput(Output, Transform);
 		break;
 
 	default:
-		PCGOutput = CreatePCGParamsOutput(Output);
+		PCGOutput = CreatePCGParamsOutput(Output, Transform);
 		break;
 	}
 
@@ -189,7 +194,7 @@ void FHoudiniPCGTranslator::CreatePCGFromOutput(UHoudiniOutput* Output)
 	}
 }
 
-UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAPI_PartId PartId )
+UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAPI_PartId PartId, const FTransform& Transform)
 {
 	UPCGPointData* PointData = NewObject<UPCGPointData>();
 	HAPI_PartInfo PartInfo;
@@ -221,8 +226,10 @@ UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAP
 			Accessor.GetAttributeData(HAPI_ATTROWNER_POINT, Values);
 			for(int Index = 0; Index < Points.Num(); Index++)
 			{
-				FVector Position = FHoudiniPCGUtils::HoudiniToUnrealPosition(&Values[Index * 3]);
-				Points[Index].Transform.SetLocation(Position);
+				FVector LocalPosition = FHoudiniPCGUtils::HoudiniToUnrealScaled(&Values[Index * 3]);
+				FVector GlobalPosition = Transform.TransformPosition(LocalPosition);
+
+				Points[Index].Transform.SetLocation(GlobalPosition);
 				
 			}
 		}
@@ -232,8 +239,10 @@ UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAP
 			Accessor.GetAttributeData(HAPI_ATTROWNER_POINT, Values);
 			for(int Index = 0; Index < Points.Num(); Index++)
 			{
-				FQuat Quat = FHoudiniPCGUtils::HoudiniToUnrealQuat(&Values[Index * 4]);
-				Points[Index].Transform.SetRotation(Quat);
+				FQuat LocalQuat = FHoudiniPCGUtils::HoudiniToUnrealQuat(&Values[Index * 4]);
+				FQuat GlobalQuat = Transform.GetRotation() * LocalQuat;
+
+				Points[Index].Transform.SetRotation(GlobalQuat);
 
 			}
 		}
@@ -243,7 +252,7 @@ UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAP
 			Accessor.GetAttributeData(HAPI_ATTROWNER_POINT, Values);
 			for(int Index = 0; Index < Points.Num(); Index++)
 			{
-				FVector3d Scale = FHoudiniPCGUtils::HoudiniToUnrealVector(&Values[Index * 3]);
+				FVector3d Scale = FHoudiniPCGUtils::HoudiniToUnrealUnscaled(&Values[Index * 3]);
 				Points[Index].Transform.SetScale3D(Scale);
 			}
 		}
@@ -253,7 +262,7 @@ UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAP
 			Accessor.GetAttributeData(HAPI_ATTROWNER_POINT, Values);
 			for(int Index = 0; Index < Points.Num(); Index++)
 			{
-				FVector3d BoundsMin = FHoudiniPCGUtils::HoudiniToUnrealVector(&Values[Index * 3]);
+				FVector3d BoundsMin = FHoudiniPCGUtils::HoudiniToUnrealScaled(&Values[Index * 3]);
 				Points[Index].BoundsMin = BoundsMin;
 			}
 		}
@@ -263,7 +272,7 @@ UPCGPointData* FHoudiniPCGTranslator::CreatePCGPointData(HAPI_NodeId NodeId, HAP
 			Accessor.GetAttributeData(HAPI_ATTROWNER_POINT, Values);
 			for(int Index = 0; Index < Points.Num(); Index++)
 			{
-				FVector3d BoundsMax = FHoudiniPCGUtils::HoudiniToUnrealVector(&Values[Index * 3]);
+				FVector3d BoundsMax = FHoudiniPCGUtils::HoudiniToUnrealScaled(&Values[Index * 3]);
 				Points[Index].BoundsMax = BoundsMax;
 			}
 		}

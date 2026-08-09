@@ -89,6 +89,7 @@
 #include "SSubobjectEditor.h"
 #include "UnrealEdGlobals.h"
 #include "UObject/MetaData.h"
+#include "UObject/UObjectGlobals.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
 #include <vector>
@@ -292,6 +293,8 @@ FHoudiniEngineUtils::GetStatusString(HAPI_StatusType status_type, HAPI_StatusVer
 		// Let FHoudiniEngine know that the sesion is now invalid to "Stop" the invalid session
 		// and clean things up
 		FHoudiniEngine::Get().OnSessionLost();
+		if (FHoudiniStatusManager::Get())
+			FHoudiniStatusManager::Get()->OnSessionLost();
 	}
 
 	if (StatusBufferLength > 0)
@@ -406,27 +409,43 @@ FHoudiniEngineUtils::GetNodeErrorsWarningsAndMessages(HAPI_NodeId InNodeId)
 }
 
 const FString
-FHoudiniEngineUtils::GetCookLog(const TArray<HAPI_NodeId>& InNodeIds)
+FHoudiniEngineUtils::GetCookLog(const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
+	TArray<HAPI_NodeId> NodeIds;
+	NodeIds.SetNum(InHCs.Num());
+	for(int32 Idx = 0; Idx < InHCs.Num(); Idx++)
+		NodeIds[Idx] = InHCs[Idx].Get() ? InHCs[Idx].Get()->GetNodeId() : -1;
+
 	FString CookLog;
 
 	// Get fetch cook status.
 	FString CookResult = FHoudiniEngineUtils::GetCookResult();
 	if (!CookResult.IsEmpty())
-		CookLog += TEXT("Cook Results:\n") + CookResult + TEXT("\n\n");
+		CookLog += TEXT("Houdini Cook Results:\n") + CookResult + TEXT("\n\n");
 
 	// Add the cook state
 	FString CookState = FHoudiniEngineUtils::GetCookState();
 	if (!CookState.IsEmpty())
-		CookLog += TEXT("Cook State:\n") + CookState + TEXT("\n\n");
+		CookLog += TEXT("Houdini Cook State:\n") + CookState + TEXT("\n\n");
 
 	// Error Description
 	FString Error = FHoudiniEngineUtils::GetErrorDescription();
 	if (!Error.IsEmpty())
-		CookLog += TEXT("Error Description:\n") + Error + TEXT("\n\n");
+		CookLog += TEXT("Houdini Error Description:\n") + Error + TEXT("\n\n");
+
+	CookLog += TEXT("Plugin Errors:\n");
+	FString Errors = FHoudiniStatusManager::Get()->GetLogs(InHCs);
+	if(!Errors.IsEmpty())
+	{
+		CookLog += Errors;
+	}
+	else
+	{
+		CookLog += TEXT("None.");
+	}
 
 	// Iterates on all the selected HAC and get their node errors
-	for (auto& NodeId : InNodeIds)
+	for (auto& NodeId : NodeIds)
 	{
 		if (NodeId < 0)
 			continue;
@@ -519,13 +538,16 @@ FHoudiniEngineUtils::ConvertUnrealString(const FString & UnrealString, std::stri
 }
 
 UWorld*
-FHoudiniEngineUtils::FindWorldInPackage(const FString& PackagePath, bool bCreateMissingPackage, bool& bOutCreatedPackage)
+FHoudiniEngineUtils::FindWorldInPackage(const FString& InPackagePath, bool bCreateMissingPackage, bool& bOutCreatedPackage)
 {
 	AActor* Result = nullptr;
 	UWorld* PackageWorld = nullptr;
 
 	bOutCreatedPackage = false;
 	
+	// Sometimes the "package Path" passed in as an object, os make sure we get the package's path.
+	FString PackagePath = FPackageName::ObjectPathToPackageName(InPackagePath);
+
 	// Try to load existing UWorld from the tile package path.
 	UPackage* Package = FindPackage(nullptr, *PackagePath);
 	if (!Package)
@@ -3231,7 +3253,7 @@ FHoudiniEngineUtils::UploadCookableTransform(UHoudiniCookable* HC)
 	if (!HC->ComponentData->bUploadTransformsToHoudiniEngine)
 		return false;
 
-	if (!IsValid(HC->ComponentData->Component.Get()))
+	if (!IsValid(HC->GetComponent()))
 		return false;
 
 	// Indicates the Cookable has been fully loaded
@@ -3240,7 +3262,7 @@ FHoudiniEngineUtils::UploadCookableTransform(UHoudiniCookable* HC)
 
 	if (HC->GetNodeId() >= 0)
 	{
-		if (!FHoudiniEngineUtils::HapiSetAssetTransform(HC->GetNodeId(), HC->ComponentData->Component->GetComponentTransform()))
+		if (!FHoudiniEngineUtils::HapiSetAssetTransform(HC->GetNodeId(), HC->GetComponent()->GetComponentTransform()))
 			return false;
 	}
 
@@ -3280,6 +3302,12 @@ FHoudiniEngineUtils::HapiSetAssetTransform(HAPI_NodeId AssetId, const FTransform
 		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetObjectTransform(
 			FHoudiniEngine::Get().GetSession(),
 			AssetId, &TransformEuler), false);
+	}
+	else if (LocalAssetNodeInfo.type == HAPI_NODETYPE_COP)
+	{
+		// Can't set transform on COP HDAs.. 
+		// Just pretend everything's fine
+		return true;
 	}
 	else
 		return false;
@@ -4843,16 +4871,22 @@ FHoudiniEngineUtils::AddTextureMeshToComponent(
 	if (FHoudiniEngineUtils::HasHoudiniLogo(InComponent))
 		FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(InComponent);
 
-	// No need to do anything if we already show the default mesh
-	if (FHoudiniEngineUtils::HasTextureMesh(InComponent))
+	UStaticMeshComponent* HoudiniCOPSMC = FHoudiniEngineUtils::GetTextureMesh(InComponent);
+	if (HoudiniCOPSMC)
+	{
+		// No need to create anything if we already show the default COP SMC
+		// just update the material
+		HoudiniCOPSMC->SetMaterial(0, InMaterial);
 		return true;
+	}
 
 	// Get the COP SM
 	UStaticMesh* HoudiniCOPMesh = FHoudiniEngine::Get().GetHoudiniCOPStaticMesh().Get();
 	if (!HoudiniCOPMesh)
 		return false;
 
-	UStaticMeshComponent* HoudiniCOPSMC = NewObject<UStaticMeshComponent>(
+	// Create a default COP SMC
+	HoudiniCOPSMC = NewObject<UStaticMeshComponent>(
 		InComponent, UStaticMeshComponent::StaticClass(), NAME_None, RF_Transactional);
 
 	if (!HoudiniCOPSMC)
@@ -4872,6 +4906,39 @@ FHoudiniEngineUtils::AddTextureMeshToComponent(
 
 	// That EditorPlane isn't properly oriented
 	HoudiniCOPSMC->SetRelativeRotation(FRotator(0.0, -90.0, 0.0));
+
+	return true;
+}
+
+bool
+FHoudiniEngineUtils::UpdateTextureMeshRatio(
+	USceneComponent* InComponent,
+	UTexture2D* InTexture)
+{
+	if (!InTexture)
+		return false;
+
+	// No need to do anything if we dont have the texture mesh
+	UStaticMeshComponent* HoudiniCOPSMC = FHoudiniEngineUtils::GetTextureMesh(InComponent);
+	if ( !HoudiniCOPSMC || !InTexture)
+		return false;
+
+	// Now we need to scale the mesh according to the texture's aspect ratio
+	FVector Scale = FVector::OneVector;
+	float fRatio = (float)InTexture->GetSizeX() / (float)InTexture->GetSizeY();
+	if (fRatio > 1.0)
+	{		
+		fRatio = 1.0 / fRatio;
+		Scale = FVector(1.0, 1.0, fRatio);
+		//Scale = FVector(1.0, fRatio, 1.0);
+	}
+	else if (fRatio < 1.0)
+	{
+		//fRatio = 1.0 / fRatio;
+		//Scale = FVector(1.0, 1.0, fRatio);
+		Scale = FVector(1.0, fRatio, 1.0);
+	}
+	HoudiniCOPSMC->SetRelativeScale3D(Scale);
 
 	return true;
 }
@@ -4918,10 +4985,23 @@ FHoudiniEngineUtils::HasTextureMesh(USceneComponent* InComponent)
 	if (!IsValid(InComponent))
 		return false;
 
+	UStaticMeshComponent* FoundSMC = FHoudiniEngineUtils::GetTextureMesh(InComponent);
+	if (FoundSMC != nullptr)
+		return true;
+
+	return false;
+}
+
+UStaticMeshComponent*
+FHoudiniEngineUtils::GetTextureMesh(USceneComponent* InComponent)
+{
+	if (!IsValid(InComponent))
+		return nullptr;
+
 	// Get the COP SM
 	UStaticMesh* HoudiniCOPMesh = FHoudiniEngine::Get().GetHoudiniCOPStaticMesh().Get();
 	if (!HoudiniCOPMesh)
-		return false;
+		return nullptr;
 
 	// Iterate on the HAC's component
 	for (USceneComponent* CurrentSceneComp : InComponent->GetAttachChildren())
@@ -4936,12 +5016,11 @@ FHoudiniEngineUtils::HasTextureMesh(USceneComponent* InComponent)
 
 		// Check if the SMC is the Houdini Logo
 		if (SMC->GetStaticMesh() == HoudiniCOPMesh)
-			return true;
+			return SMC;
 	}
 
-	return false;
+	return nullptr;
 }
-
 
 
 int32
@@ -5385,6 +5464,25 @@ FHoudiniEngineUtils::HapiGetParameterDataAsInteger(
 	OutValue = Value;
 
 	return true;
+}
+
+bool
+FHoudiniEngineUtils::HapiSetParameterDataAsIntegerIfChanged(
+	HAPI_NodeId NodeId,
+	const std::string& ParmName,
+	int32 DesiredValue,
+	int32 TupleIndex)
+{
+	int CurrentValue = INDEX_NONE;
+	if (HAPI_RESULT_SUCCESS == FHoudiniApi::GetParmIntValue(
+		FHoudiniEngine::Get().GetSession(), NodeId, ParmName.c_str(), TupleIndex, &CurrentValue)
+		&& CurrentValue == DesiredValue)
+	{
+		return true;
+	}
+
+	return HAPI_RESULT_SUCCESS == FHoudiniApi::SetParmIntValue(
+		FHoudiniEngine::Get().GetSession(), NodeId, ParmName.c_str(), TupleIndex, DesiredValue);
 }
 
 
@@ -8389,13 +8487,29 @@ TMap< HAPI_AttributeOwner, TArray<FString>> FHoudiniEngineUtils::GetAllAttribute
 void FHoudiniEngineUtils::DumpNode(const FString& NodePath)
 {
 	HAPI_NodeId UnrealContentNodeId = -1;
-	HAPI_Result result = FHoudiniApi::GetNodeFromPath(
-		FHoudiniEngine::Get().GetSession(), -1, TCHAR_TO_ANSI(*NodePath), &UnrealContentNodeId);
-	if (result != HAPI_RESULT_SUCCESS)
+
+	const bool bIsNodeIdString = NodePath.IsNumeric();
+	if (bIsNodeIdString)
 	{
-		HOUDINI_LOG_DISPLAY(TEXT("Failed to get node from path: %s"), *NodePath);
+		UnrealContentNodeId = FCString::Atoi(*NodePath);
+	}
+	else
+	{
+		HAPI_Result result = FHoudiniApi::GetNodeFromPath(
+			FHoudiniEngine::Get().GetSession(), -1, TCHAR_TO_ANSI(*NodePath), &UnrealContentNodeId);
+		if (result != HAPI_RESULT_SUCCESS)
+		{
+			HOUDINI_LOG_DISPLAY(TEXT("Failed to get node from path: %s"), *NodePath);
+			return;
+		}
+	}
+
+	if (UnrealContentNodeId < 0)
+	{
+		HOUDINI_LOG_DISPLAY(TEXT("Invalid node id: %s"), *NodePath);
 		return;
 	}
+
 	FString Output = DumpNode(UnrealContentNodeId);
 	HOUDINI_LOG_DISPLAY(TEXT("%s"), *Output);
 }
@@ -8553,8 +8667,10 @@ FString FHoudiniEngineUtils::DumpNode(HAPI_NodeId NodeId)
 #else
 	FStringBuilderBase Output;
 #endif
+	FString NodePath;
+	const bool bHasNodePath = FHoudiniEngineUtils::HapiGetAbsNodePath(NodeId, NodePath);
 	Output.Appendf(TEXT("Node ID: %d\n"), NodeId);
-	Output.Appendf(TEXT("    Name: %s\n"), *FHoudiniEngineString(NodeInfo.nameSH).ToFString());
+	Output.Appendf(TEXT("    Path: %s\n"), bHasNodePath ? *NodePath : *FHoudiniEngineString(NodeInfo.nameSH).ToFString());
 	Output.Appendf(TEXT("    Type: %s\n"), *NodeTypeToString(NodeInfo.type));
 
 	// Get GeoInfo for this node
@@ -9339,6 +9455,143 @@ TArray<char> HoudiniTCHARToUTF(const TCHAR* Text)
 	Result[ByteCount] = '\0';
 
 	return Result;
+}
+
+void
+FHoudiniEngineUtils::UpdateImageDataOnCookable(UHoudiniCookable* InHC)
+{
+	int32 InNodeId = InHC->GetNodeId();
+	if (InNodeId < 0)
+		return;
+
+	if (!InHC->IsImageSupported())
+		return;
+
+	// Start by seeing if the HDA is a COP HDA
+	HAPI_NodeInfo NodeInfo;
+	if (HAPI_RESULT_SUCCESS == FHoudiniApi::GetNodeInfo(FHoudiniEngine::Get().GetSession(), InHC->GetNodeId(), &NodeInfo))
+	{
+		InHC->ImageData->bIsCOPHDA = HAPI_NODETYPE_COP == NodeInfo.type;
+	}
+
+	// Apply COP overrides on the HDA's parent COP network if needed
+	if (!InHC->ImageData->bIsCOPHDA)
+		return;
+
+	bool bApplyResolutionOverride = false;
+	FIntPoint ResOverride = FIntPoint::ZeroValue;
+	if (InHC->ImageData->bOverrideDefaultResolution)
+	{
+		bApplyResolutionOverride = true;
+		ResOverride = InHC->ImageData->ResolutionOverride;
+	}
+	else
+	{
+		// see if the HDA node has resolution override attributes
+		TArray<int> Data;
+		FHoudiniHapiAccessor Accessor(InHC->NodeId, 0, HAPI_UNREAL_ATTRIB_COP_RESOLUTION_OVERRIDE);
+		Accessor.bCanBeArray = true;
+		bool bSuccess = Accessor.GetAttributeData(HAPI_ATTROWNER_DETAIL, Data);
+		if (bSuccess)
+		{
+			bApplyResolutionOverride = true;
+			ResOverride.X = Data[0];
+			ResOverride.Y = Data[1];
+		}
+	}
+
+	// setres - enable resolution override 
+	HAPI_Result Result = FHoudiniApi::SetParmIntValue(
+		FHoudiniEngine::Get().GetSession(),
+		NodeInfo.parentId, "setres", 0, bApplyResolutionOverride ? 1 : 0);
+
+	if (bApplyResolutionOverride && ResOverride.X > 2 && ResOverride.Y > 2)
+	{
+		// default_xres, default_yres - resolution override
+		Result = FHoudiniApi::SetParmIntValue(
+			FHoudiniEngine::Get().GetSession(),
+			NodeInfo.parentId, "res", 0, ResOverride.X);
+
+		Result = FHoudiniApi::SetParmIntValue(
+			FHoudiniEngine::Get().GetSession(),
+			NodeInfo.parentId, "res", 1, ResOverride.Y);
+	}
+
+	// Pixel Scale
+	bool bApplyPixelScaleOverride = false;
+	float PixelScaleOverride = 0.0f;
+	if (InHC->ImageData->bOverridePixelScale)
+	{
+		bApplyPixelScaleOverride = true;
+		PixelScaleOverride = InHC->ImageData->PixelScale;
+	}
+	else
+	{
+		// see if the HDA node has pixel scale override attributes
+		TArray<float> Data;
+		FHoudiniHapiAccessor Accessor(InHC->NodeId, 0, HAPI_UNREAL_ATTRIB_COP_PIXEL_SCALE_OVERRIDE);
+		Accessor.bCanBeArray = false;
+		bool bSuccess = Accessor.GetAttributeData(HAPI_ATTROWNER_DETAIL, Data);
+		if (bSuccess && Data.Num() > 0)
+		{
+			bApplyPixelScaleOverride = true;
+			PixelScaleOverride = Data[0];
+		}
+	}
+
+	// setpixelscale - enable pixelscale override 
+	Result = FHoudiniApi::SetParmIntValue(
+		FHoudiniEngine::Get().GetSession(),
+		NodeInfo.parentId, "setpixelscale", 0, bApplyPixelScaleOverride ? 1 : 0);
+
+	if (bApplyPixelScaleOverride && PixelScaleOverride > 0.0f)
+	{
+		// defaultpixelscale - pixelscale override
+		Result = FHoudiniApi::SetParmFloatValue(
+			FHoudiniEngine::Get().GetSession(),
+			NodeInfo.parentId, "pixelscale", 0, PixelScaleOverride);
+	}
+
+	// Precision
+	// This is controlled via the image data format property
+	// 0 auto: not overriden
+	// 1 int8: not overriden
+	// 2 float16: overriden to 16bits
+	// 3 float32: overriden to 32bits
+	bool bOverridePrecision = false;
+	int PrecisionOverrideValue = 1;
+	if (InHC->ImageData->ImageDataFormat == EHoudiniEngineImageDataFormat::Float16
+		|| InHC->ImageData->ImageDataFormat == EHoudiniEngineImageDataFormat::Float32)
+	{
+		bOverridePrecision = true;
+		PrecisionOverrideValue = InHC->ImageData->ImageDataFormat == EHoudiniEngineImageDataFormat::Float16 ? 0 : 1;
+	}
+	else
+	{
+		// See if the HDA has a data format override attribute
+		TArray<int> Data;
+		FHoudiniHapiAccessor Accessor(InHC->NodeId, 0, HAPI_UNREAL_ATTRIB_COP_IMAGE_DATA_FORMAT);
+		Accessor.bCanBeArray = false;
+		bool bSuccess = Accessor.GetAttributeData(HAPI_ATTROWNER_DETAIL, Data);
+		if (bSuccess && Data.Num() > 0)
+		{
+			bOverridePrecision = true;
+			PrecisionOverrideValue = Data[0] == 2 ? 0 : 1;
+		}
+	}
+
+	// setprecision, precision
+	Result = FHoudiniApi::SetParmIntValue(
+		FHoudiniEngine::Get().GetSession(),
+		NodeInfo.parentId, "setprecision", 0, bOverridePrecision ? 1 : 0);
+
+	Result = FHoudiniApi::SetParmIntValue(
+		FHoudiniEngine::Get().GetSession(),
+		NodeInfo.parentId, "precision", 0, PrecisionOverrideValue);
+
+	// Handle other parameters as well?
+	// setborder, border
+	// docompile, singleoutput
 }
 
 #undef LOCTEXT_NAMESPACE

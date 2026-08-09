@@ -40,7 +40,7 @@
 #include "HoudiniInput.generated.h"
 
 
-
+class UHoudiniParameter;
 class FReply;
 
 enum class EHoudiniCurveType : int8;
@@ -63,15 +63,16 @@ public:
 
 	// Equality operator,
 	// We consider two inputs equals if they have the same name, objparam state, and input index/parmId
-	// TODO: ParmId might be an incorrect condition
+
 	bool operator==(const UHoudiniInput& other) const
 	{
 		return (bIsObjectPathParameter == other.bIsObjectPathParameter 
 			&& InputIndex == other.InputIndex
-			&& ParmId == other.ParmId
 			&& Name.Equals(other.Name)
 			&& Label.Equals(other.Label));
 	}
+
+	UHoudiniCookable* GetCookable();
 
 	bool Matches(const UHoudiniInput& other) const { return (*this == other); };
 
@@ -89,10 +90,12 @@ public:
 		const FString& CurveParameterizationString);
 	
 	// Helper function indicating what classes are supported by an input type
-	static TArray<const UClass*> GetAllowedClasses(const EHoudiniInputType& InInputType);
+	static TArray<const UClass*> GetAllowedClasses(
+		const EHoudiniInputType& InInputType, bool bIsCOPInput = false);
 
-	// Helper function indicating if an object is supported by an input type	
-	static bool IsObjectAcceptable(const EHoudiniInputType& InInputType, const UObject* InObject);
+	// Helper function indicating if an object is supported by an input type
+	static bool IsObjectAcceptable(
+		const EHoudiniInputType& InInputType, const UObject* InObject, bool bIsCOPInput = false);
 
 	//------------------------------------------------------------------------------------------------
 	// Accessors
@@ -146,6 +149,7 @@ public:
 	FString GetInputName() const						{ return Name; };
 	FString GetInputLabel() const						{ return Label; };
 	FString GetInputHelp() const						{ return Help; };	
+	FString GetPCGAttribute() const						{ return PCGAttribute;  }
 	bool GetPackBeforeMerge() const						{ return bPackBeforeMerge; };
 	bool GetImportAsReference() const					{ return InputSettings.bImportAsReference; };
 	bool GetImportAsReferenceRotScaleEnabled() const	{ return InputSettings.bImportAsReferenceRotScaleEnabled; };
@@ -168,6 +172,7 @@ public:
 	bool GetCurvePointSelectionUseAbsLocation() const	{ return bCurvePointSelectionUseAbsLocation; }
 	bool GetCurvePointSelectionUseAbsRotation() const	{ return bCurvePointSelectionUseAbsRotation; }
 	bool IsObjectPathParameter() const					{ return bIsObjectPathParameter; };
+	TWeakObjectPtr<UHoudiniParameter> GetOwningParameter() { return OwningParameter;  }
 	bool IsCOPInput() const								{ return bIsCOPInput; };
 	float GetUnrealSplineResolution() const				{ return InputSettings.UnrealSplineResolution; };
 	virtual bool GetCookOnCurveChange() const			{ return bCookOnCurveChanged; };
@@ -207,14 +212,14 @@ public:
 	FTransform GetTransformOffset(const int32& AtIndex) const;
 
 	// Returns the position offset for a given input object
-	TOptional<float> GetPositionOffsetX(int32 AtIndex) const;
-	TOptional<float> GetPositionOffsetY(int32 AtIndex) const;
-	TOptional<float> GetPositionOffsetZ(int32 AtIndex) const;
+	float GetPositionOffsetX(int32 AtIndex) const;
+	float GetPositionOffsetY(int32 AtIndex) const;
+	float GetPositionOffsetZ(int32 AtIndex) const;
 
 	// Returns the scale offset for a given input object
-	TOptional<float> GetScaleOffsetX(int32 AtIndex) const;
-	TOptional<float> GetScaleOffsetY(int32 AtIndex) const;
-	TOptional<float> GetScaleOffsetZ(int32 AtIndex) const;
+	float GetScaleOffsetX(int32 AtIndex) const;
+	float GetScaleOffsetY(int32 AtIndex) const;
+	float GetScaleOffsetZ(int32 AtIndex) const;
 
 	// User input functions. We keep a user readable version of Roll, Pitch, Yaw that
 	// the user can edit rather than getting the Quaternion from the FTransform as
@@ -223,9 +228,9 @@ public:
 	FRotator GetUserInputRotator(int AtIndex) const;
 	void SetUserInputAndTransformRotators(int AtIndex, const FRotator& Rotator);
 
-	TOptional<float> GetUserInputRoll(int32 AtIndex) const;
-	TOptional<float> GetUserInputPitch(int32 AtIndex) const;
-	TOptional<float> GetUserInputYaw(int32 AtIndex) const;
+	float GetUserInputRoll(int32 AtIndex) const;
+	float GetUserInputPitch(int32 AtIndex) const;
+	float GetUserInputYaw(int32 AtIndex) const;
 
 	// Returns true if the object is one of our input object for the given type
 	bool ContainsInputObject(const UObject* InObject, const EHoudiniInputType& InType) const;
@@ -286,8 +291,7 @@ public:
 		SetNeedsToTriggerUpdate(bInChanged);
 	};
 
-	void SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate)
-		{ bNeedsToTriggerUpdate = bInTriggersUpdate; };
+	void SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate);
 	void MarkDataUploadNeeded(const bool& bInDataUploadNeeded) 
 		{ bDataUploadNeeded = bInDataUploadNeeded; };
 	void MarkAllInputObjectsChanged(const bool& bInChanged);
@@ -320,6 +324,11 @@ public:
 	void SetImportAsReferenceMaterialEnabled(const bool& bInImportAsReferenceMaterialEnabled)
 		{ InputSettings.bImportAsReferenceMaterialEnabled = bInImportAsReferenceMaterialEnabled; };
 	
+	void SetPCGAttribute(const FString& InPCGAttribute)
+	{
+		PCGAttribute = InPCGAttribute;
+	}
+
 	void SetExportMainGeometry(const bool& bInExportMainGeo)
 		{ InputSettings.bExportMainGeometry = bInExportMainGeo; };
 	void SetExportLODs(const bool& bInExportLODs)
@@ -364,6 +373,7 @@ public:
 		{ InputSettings.bExportMergedPaintLayers = bOnOff; }
 	void SetExportLevelInstanceContent(bool bOnOff)
 		{ InputSettings.bExportLevelInstanceContent = bOnOff; }
+	void SetOwningParameter(UHoudiniParameter* Parameter);
 
 	virtual void SetCookOnCurveChange(const bool & bInCookOnCurveChanged) 
 		{ bCookOnCurveChanged = bInCookOnCurveChanged; };
@@ -562,7 +572,12 @@ protected:
 	UPROPERTY()
 	bool bIsObjectPathParameter;
 
+	// Parameter this Input belongs to, likely an Operator Path.
+	UPROPERTY()
+	TWeakObjectPtr<UHoudiniParameter> OwningParameter;
+
 	// Indicates if we're a COP input
+	UPROPERTY()
 	bool bIsCOPInput;
 
 	// Array containing all the node Ids created by this input
@@ -590,6 +605,9 @@ protected:
 	// Help for this parameter/input
 	UPROPERTY()
 	FString Help;
+
+	UPROPERTY()
+	FString PCGAttribute = TEXT("object");
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// General Input options

@@ -30,6 +30,7 @@
 
 #include "Widgets/SBoxPanel.h"
 #include "IDetailsView.h"
+#include "DetailLayoutBuilder.h"
 
 class UHoudiniInput;
 class UHoudiniSplineComponent;
@@ -46,8 +47,15 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 {
 	public:
 		static void CreateWidget(
+			IDetailLayoutBuilder& DetailBuilder,
 			IDetailCategoryBuilder& HouInputCategoryBuilder,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, FDetailWidgetRow* InputRow = nullptr);
+
+
+		static TSharedRef<SWidget> CreateInputValueWidget(
+			IDetailLayoutBuilder& DetailBuilder,
+			IDetailCategoryBuilder& HouInputCategory,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
 		static void CreateNameWidget(
 			const TWeakObjectPtr<UHoudiniInput>& InParam,
@@ -59,6 +67,7 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 
 		// ComboBox :  Input Type
 		static void AddInputTypeComboBox(
+			IDetailLayoutBuilder& DetailBuilder,
 			IDetailCategoryBuilder& CategoryBuilder,
 			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
@@ -112,6 +121,10 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
 		static void AddExportOptions(
+			TSharedRef<SVerticalBox> InVerticalBox,
+			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
+
+		static void AddPCGOptions(
 			TSharedRef<SVerticalBox> InVerticalBox,
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 
@@ -216,4 +229,6 @@ class FHoudiniInputDetails : public TSharedFromThis<FHoudiniInputDetails, ESPMod
 
 		static bool Helper_CancelWorldSelection(
 			const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, const FName& DetailsPanelName);
+
+		static bool IsInsidePCG(const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs);
 };

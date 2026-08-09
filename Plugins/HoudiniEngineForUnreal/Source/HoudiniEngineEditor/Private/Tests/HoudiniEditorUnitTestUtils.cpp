@@ -25,7 +25,7 @@
 #include "FileHelpers.h"
 #include "GenericPlatform/GenericPlatformProcess.h"
 #include "Misc/AutomationTest.h"
-
+#include "HoudiniEngine.h"
 
 UWorld* 
 FHoudiniEditorUnitTestUtils::CreateEmptyMap(bool bOpenWorld)
@@ -92,6 +92,9 @@ FHoudiniEditorUnitTestUtils::GetActorWithName(UWorld* World, FString& Name)
 bool
 FHoudiniLatentTestCommand::Update()
 {
+	if(SingleContext.IsValid() && IsTimedOut(SingleContext.Get()))
+		return true;
+
 	if(SingleContext.IsValid())
 	{
 		bool bDone = CheckForCookingComplete(SingleContext.Get());
@@ -114,19 +117,54 @@ FHoudiniLatentTestCommand::Update()
 
 	bool bDone = FFunctionLatentCommand::Update();
 	return bDone;
+}
 
+bool
+FHoudiniLatentTestCommand::IsTimedOut(FHoudiniTestContext* Context)
+{
+	double DeltaTime = FPlatformTime::Seconds() - Context->TimeStarted;
+	if(DeltaTime > Context->MaxTime)
+	{
+		if(!bHasTimedOut)
+		{
+			bHasTimedOut = true;
+			Context->Test->AddError(FString::Printf(TEXT("***************** Test timed out After %.2f seconds*************"), DeltaTime));
+
+			const EHoudiniBGEOCommandletStatus Status = FHoudiniEngine::Get().GetPDGCommandletStatus();
+
+			FString CommandletStatus;
+			switch (Status)
+			{
+			case EHoudiniBGEOCommandletStatus::NotStarted:
+				CommandletStatus = TEXT("Not Started");
+				break;
+			case EHoudiniBGEOCommandletStatus::Running:
+				CommandletStatus = TEXT("Running");
+				break;
+			case EHoudiniBGEOCommandletStatus::Connected:
+				CommandletStatus = TEXT("Connected");
+				break;
+
+			case EHoudiniBGEOCommandletStatus::Crashed:
+				CommandletStatus = TEXT("Crashed");
+				break;
+			default:
+				CommandletStatus = TEXT("Unknown");
+				break;
+			}
+
+			Context->Test->AddError(FString::Printf(TEXT("**** Commandlet Status: %s"), *CommandletStatus));
+		}
+
+		return true;
+	}
+
+	return false;
 }
 
 bool
 FHoudiniLatentTestCommand::CheckForCookingComplete(FHoudiniTestContext* Context)
 {
-	double DeltaTime = FPlatformTime::Seconds() - Context->TimeStarted;
-	if(DeltaTime > Context->MaxTime)
-	{
-		Context->Test->AddError(FString::Printf(TEXT("***************** Test timed out After %.2f seconds*************"), DeltaTime));
-		return true;
-	}
-
 	int CurrentFrame = GFrameCounter;
 	if(Context->WaitTickFrame)
 	{
@@ -188,7 +226,7 @@ FHoudiniTestContext::StartCookingSelectedTOPNetwork()
 		return;
 	});
 
-	FHoudiniPDGManager::CookOutput(TopNetwork);
+	FHoudiniPDGManager::CookOutput(HC, TopNetwork);
 
 	this->PDGState = EHoudiniContextState::Cooking;
 
@@ -524,9 +562,9 @@ FHoudiniEditorUnitTestUtils::GetOutputActors(TArray<FHoudiniBakedOutput>& BakedO
 	{
 		for(auto & OutputObject : BakeOutput.BakedOutputObjects)
 		{
-			if (!OutputObject.Value.Actor.IsEmpty())
+			if (OutputObject.Value.ActorPath.IsValid())
 			{
-				AActor* Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *OutputObject.Value.Actor));
+				AActor* Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *OutputObject.Value.ActorPath.ToString()));
 				if (IsValid(Actor))
 				{
 					Results.Add(Actor);
@@ -545,9 +583,9 @@ FHoudiniEditorUnitTestUtils::GetOutputInstancedActors(TArray<FHoudiniBakedOutput
 	{
 		for(auto& OutputObject : BakeOutput.BakedOutputObjects)
 		{
-			if(!OutputObject.Value.InstancedActors.IsEmpty())
+			if(!OutputObject.Value.InstancedActorPaths.IsEmpty())
 			{
-				AActor* Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *OutputObject.Value.InstancedActors[0]));
+				AActor* Actor = Cast<AActor>(StaticLoadObject(UObject::StaticClass(), nullptr, *OutputObject.Value.InstancedActorPaths[0].ToString()));
 				if(IsValid(Actor))
 				{
 					Results.Add(Actor);

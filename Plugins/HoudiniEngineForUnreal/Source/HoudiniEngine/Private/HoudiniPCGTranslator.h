@@ -37,11 +37,11 @@ class UHoudiniPCGOutputData;
 struct HOUDINIENGINE_API FHoudiniPCGTranslator
 {
 public:
-	static void CreatePCGFromOutput(UHoudiniOutput* CurOutput);
-	static UHoudiniPCGOutputData* CreatePCGParamsOutput(UHoudiniOutput* CurOutput);
-	static UHoudiniPCGOutputData* CreatePCGSplinesOutput(UHoudiniOutput* CurOutput);
+	static void CreatePCGFromOutput(UHoudiniOutput* CurOutput, const FTransform& Transform);
+	static UHoudiniPCGOutputData* CreatePCGParamsOutput(UHoudiniOutput* CurOutput, const FTransform& Transform);
+	static UHoudiniPCGOutputData* CreatePCGSplinesOutput(UHoudiniOutput* CurOutput, const FTransform& Transform);
 
-	static bool IsPCGOutput(HAPI_NodeId NodeId, HAPI_PartId PartId);
+	static bool IsPCGOutput(bool bForcePCG, HAPI_NodeId NodeId, HAPI_PartId PartId);
 private:
 	static UPCGParamData * CreatePCGAttributes(HAPI_NodeId NodeId, HAPI_PartId PartId, HAPI_AttributeOwner Owner);
 	static void CreatePCGMetaAttributes(UPCGMetadata* MetaData, 
@@ -53,7 +53,7 @@ private:
 		int StartIndex = 0,
 		int IndexCount = -1);
 
-	static UPCGPointData* CreatePCGPointData(HAPI_NodeId NodeId, HAPI_PartId PartId);
+	static UPCGPointData* CreatePCGPointData(HAPI_NodeId NodeId, HAPI_PartId PartId, const FTransform& Transform);
 
 	static void CreatePCGInt32Attribute(UPCGMetadata* Metadata, 
 		const TArray<int64>& EntryKeys, 

@@ -110,11 +110,11 @@ public:
 		IDetailLayoutBuilder& DetailBuilder,
 		TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables);
 
-private:
+	void CreateImageDetails(
+		IDetailLayoutBuilder& DetailBuilder,
+		TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables);
 
-	// Handler for double clicking the static mesh thumbnail, opens the editor.
-	FReply OnThumbnailDoubleClick(
-		const FGeometry& InMyGeometry, const FPointerEvent& InMouseEvent, UObject* Object);
+private:
 
 	// Structure holding the output's details
 	TSharedPtr<FHoudiniOutputDetails, ESPMode::NotThreadSafe> OutputDetails;

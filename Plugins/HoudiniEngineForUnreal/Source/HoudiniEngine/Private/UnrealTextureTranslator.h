@@ -39,7 +39,8 @@ struct HOUDINIENGINE_API FUnrealTextureTranslator
 		// If ParentNode is -1, the texture will be created in a copnet in /img.
 		static bool HapiCreateCOPTexture(
 			UTexture2D* Texture,
-			const HAPI_NodeId ParentNode);
+			const HAPI_NodeId ParentNode,
+			HAPI_NodeId& OutCreatedNodeId);
 
 		// Creates a Grid node with uvs and material to old the COP texture
 		static bool CreateGeometryForTexture(

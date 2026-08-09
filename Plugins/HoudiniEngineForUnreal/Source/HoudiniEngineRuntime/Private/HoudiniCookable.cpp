@@ -48,11 +48,15 @@
 #endif
 
 #include "HoudiniParameterInt.h"
+#include "HoudiniParameterOperatorPath.h"
+#include "HoudiniParameterUpdater.h"
 #include "Components/SplineComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "InstancedFoliageActor.h"
 #include "LevelInstance/LevelInstanceSubsystem.h"
 #include "TimerManager.h"
+#include "HoudiniStatusManager.h"
+#include "HoudiniParameterUpdater.h"
 
 UHoudiniParameter*
 UCookableParameterData::FindMatchingParameter(UHoudiniParameter* InOtherParam)
@@ -94,7 +98,7 @@ UCookableHoudiniAssetData::UCookableHoudiniAssetData(const FObjectInitializer& O
 UCookableParameterData::UCookableParameterData(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	, bCookOnParameterChange(true)
-	, bParameterDefinitionUpdateNeeded(false)
+	, bParameterDefinitionUpdateNeeded(true)
 {
 
 }
@@ -269,7 +273,21 @@ UCookablePDGData::SetPDGAssetLink(UHoudiniPDGAssetLink* InPDGAssetLink)
 	PDGAssetLink = InPDGAssetLink;
 }
 
-
+//
+//
+//
+UCookableImageData::UCookableImageData(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+	, bIsCOPHDA(false)
+	, bOverrideDefaultResolution(false)
+	, bOverridePixelScale(false)
+	, bGenerateMaterial(false)
+{
+	ResolutionOverride = FIntPoint(1024, 1024);
+	PixelScale = 1.0;
+	MaterialToInstance = nullptr;
+	ImageDataFormat = EHoudiniEngineImageDataFormat::Auto;
+}
 
 //
 // HOUDINI COOKABLE
@@ -280,7 +298,7 @@ UHoudiniCookable::UHoudiniCookable(const FObjectInitializer& ObjectInitializer)
 	NodeId = -1;
 	CurrentState = EHoudiniAssetState::NewHDA;
 	CurrentStateResult = EHoudiniAssetStateResult::None;
-	CookCount = 0;
+	SetCookCount(0);
 	Name = FString();
 
 	// Create unique cookable GUID.
@@ -295,8 +313,12 @@ UHoudiniCookable::UHoudiniCookable(const FObjectInitializer& ObjectInitializer)
 	bRecookRequested = false;
 	bRebuildRequested = false;
 	bEnableCooking = true;
+	bCookAfterInstantiation = true;
 	bForceNeedUpdate = false;
 	bLastCookSuccess = false;
+	bCookCancelIssued = false;
+	CookCancelRequestTime = 0.0;
+	CancelReason = EHoudiniCookableCancelReason::None;
 	//bBlueprintStructureModified = false;
 	//bBlueprintModified = false;
 	bFullyLoaded = false;
@@ -331,6 +353,9 @@ UHoudiniCookable::UHoudiniCookable(const FObjectInitializer& ObjectInitializer)
 	bHasProxy = false;
 	ProxyData = CreateDefaultSubobject<UCookableProxyData>(TEXT("ProxyData"));
 
+	bHasImage = false;
+	ImageData = CreateDefaultSubobject<UCookableImageData>(TEXT("ImageData"));
+
 	bNeedToUpdateEditorProperties = false;
 	bIsPCG = false;
 	bIsLandscapeModification = true;
@@ -355,12 +380,6 @@ UHoudiniCookable::UHoudiniCookable(const FObjectInitializer& ObjectInitializer)
 
 	Bounds = FBox(ForceInitToZero);
 	*/
-#if WITH_EDITORONLY_DATA
-	bGenerateMenuExpanded = true;
-	bBakeMenuExpanded = true;
-	bAssetOptionMenuExpanded = true;
-	bHelpAndDebugMenuExpanded = true;
-#endif
 
 	AssetEditorId = FName();
 }
@@ -412,41 +431,65 @@ HoudiniAreObjectsEqual(const UObject* A, const UObject*B)
 bool 
 UHoudiniCookable::SetParameterData(UCookableParameterData* InParameterData)
 {
-	bool bChanged = false;
 #if WITH_EDITORONLY_DATA
+	bool bChanged = false;
 	bChanged |= HoudiniCheckAndSetValue(ParameterData->bCookOnParameterChange, InParameterData->bCookOnParameterChange);
-	bChanged |= HoudiniCheckAndSetValue(ParameterData->ParameterPresetBuffer, InParameterData->ParameterPresetBuffer);
 	bChanged |= HoudiniCheckAndSetValue(ParameterData->bParameterDefinitionUpdateNeeded, InParameterData->bParameterDefinitionUpdateNeeded);
 
-	if(ParameterData->Parameters.Num() != InParameterData->Parameters.Num())
-	{
-		ParameterData->Parameters.SetNum(InParameterData->Parameters.Num());
-		bChanged = true;
-	}
+	// Did any parameters change? If not, return. If so, update all.
+	const TArray<TObjectPtr<UHoudiniParameter>>& InParameters = InParameterData->Parameters;
+	const TArray<TObjectPtr<UHoudiniParameter>>& OriginalParameters = ParameterData->Parameters;
+	bool bDifferent = false;
 
-	for (int Index = 0; Index < ParameterData->Parameters.Num(); Index++)
+	if (InParameters.Num() != OriginalParameters.Num())
 	{
-		if (!HoudiniAreObjectsEqual(ParameterData->Parameters[Index], InParameterData->Parameters[Index]))
+		bDifferent = true;
+	}
+	else
+	{
+		for(int Index = 0; Index < OriginalParameters.Num(); Index++)
 		{
-			bChanged = true;
-			if(IsValid(InParameterData->Parameters[Index]))
-			{
-				ParameterData->Parameters[Index] = DuplicateObject(InParameterData->Parameters[Index], this);
-				ParameterData->Parameters[Index]->SetNodeId(this->GetNodeId());
-				ParameterData->Parameters[Index]->SetParmId(INDEX_NONE);
-				ParameterData->Parameters[Index]->SetParentParmId(INDEX_NONE);
-				ParameterData->Parameters[Index]->MarkChanged(true);
-				ParameterData->Parameters[Index]->MarkChanged(true);
-			}
-			else
-			{
-				ParameterData->Parameters[Index] = nullptr;
-			}
+			bDifferent = !HoudiniAreObjectsEqual(OriginalParameters[Index], InParameters[Index]);
+			if(bDifferent)
+				break;
 		}
 	}
-#endif
-	return bChanged;
 
+
+	if(!bDifferent)
+	{
+		// No difference, we can reuse the preset buffer.
+		ParameterData->ParameterPresetBuffer = InParameterData->ParameterPresetBuffer;
+		return false;
+	}
+	
+	ParameterData->ParameterPresetBuffer.Empty();
+
+	// Make a duplicate of all parameters, since it simplifys the code somewhat rather than setting
+	// individual parameters since the Cookable only allows setting of all parameters; 
+	// could be optimized if slow.
+	TArray<TObjectPtr<UHoudiniParameter>> DuplicatedParameters;
+
+	DuplicatedParameters.SetNum(InParameterData->Parameters.Num());
+
+	for (int Index = 0; Index < DuplicatedParameters.Num(); Index++)
+	{
+		DuplicatedParameters[Index] = DuplicateObject(InParameters[Index], this);
+		DuplicatedParameters[Index]->SetNodeId(this->GetNodeId());
+		DuplicatedParameters[Index]->SetParmId(INDEX_NONE);
+		DuplicatedParameters[Index]->SetParentParmId(INDEX_NONE);
+	}
+
+	if(this->GetCurrentState() == EHoudiniAssetState::None)
+		this->SetParametersAndInstantiate(DuplicatedParameters);
+	else
+		this->SetParameters(DuplicatedParameters);
+
+	this->ParameterData->bParameterDefinitionUpdateNeeded = false;
+	return true;
+#else
+	return false;
+#endif
 }
 
 bool
@@ -471,6 +514,7 @@ UHoudiniCookable::SetInputData(UCookableInputData* InInputData)
 			if(IsValid(InInputData->Inputs[Index]))
 			{
 				InputData->Inputs[Index] = DuplicateObject(InInputData->Inputs[Index], this);
+				InputData->Inputs[Index]->SetAssetNodeId(this->GetNodeId());
 				InputData->Inputs[Index]->MarkChanged(true);
 			}
 			else
@@ -683,6 +727,7 @@ UHoudiniCookable::ShouldTryToStartFirstSession() const
 			return true;
 
 		case EHoudiniAssetState::NeedInstantiation:
+		case EHoudiniAssetState::Cancelling:
 		case EHoudiniAssetState::PostCook:
 		case EHoudiniAssetState::PreProcess:
 		case EHoudiniAssetState::Processing:
@@ -725,10 +770,6 @@ void
 UHoudiniCookable::SetHoudiniAsset(UHoudiniAsset* InHoudiniAsset)
 {
 #if WITH_EDITORONLY_DATA
-	// Check the asset validity
-	if (!IsValid(InHoudiniAsset))
-		return;
-
 	if (!IsHoudiniAssetSupported())
 		return;
 
@@ -737,14 +778,19 @@ UHoudiniCookable::SetHoudiniAsset(UHoudiniAsset* InHoudiniAsset)
 		return;
 
 	HoudiniAssetData->HoudiniAsset = InHoudiniAsset;
+
+	//OnHoudiniAssetChanged();
 #endif
 }
 
 void
 UHoudiniCookable::OnHoudiniAssetChanged()
 {
+	UHoudiniAssetBlueprintComponent* MyHABC = Cast<UHoudiniAssetBlueprintComponent>(GetComponent());
+	if (MyHABC)
+		MyHABC->OnHoudiniAssetChanged();
+
 #if WITH_EDITORONLY_DATA
-	// TODO: clear input/params/outputs?
 	if(IsParameterSupported())
 		ParameterData->Parameters.Empty();
 #endif
@@ -762,6 +808,8 @@ UHoudiniCookable::OnHoudiniAssetChanged()
 
 	// Force an update on the next tick
 	bForceNeedUpdate = true;
+
+	SetNeedToUpdateEditorProperties(true);
 }
 
 
@@ -786,6 +834,43 @@ UHoudiniCookable::SetCurrentState(EHoudiniAssetState InNewState)
 {
 	const EHoudiniAssetState OldState = CurrentState;
 	CurrentState = InNewState;
+
+	if (InNewState == EHoudiniAssetState::Cancelling)
+	{
+		if (OldState != EHoudiniAssetState::Cancelling)
+		{
+			bCookCancelIssued = false;
+			CookCancelRequestTime = 0.0;
+
+			if (CancelReason == EHoudiniCookableCancelReason::None)
+				CancelReason = EHoudiniCookableCancelReason::UserCancelled;
+		}
+	}
+	else
+	{
+		bCookCancelIssued = false;
+		CookCancelRequestTime = 0.0;
+		CancelReason = EHoudiniCookableCancelReason::None;
+	}
+
+	if (OldState == EHoudiniAssetState::Instantiating)
+	{
+		FHoudiniStatusManager::Get()->EndInstantiating(this, true);
+	}
+	if(InNewState == EHoudiniAssetState::PreInstantiation)
+	{
+		FHoudiniStatusManager::Get()->StartInstantiating(this);
+	}
+	else if(InNewState == EHoudiniAssetState::PreCook)
+	{
+		FHoudiniStatusManager::Get()->StartCooking(this);
+	}
+	else if (InNewState == EHoudiniAssetState::Cancelling)
+	{
+		FHoudiniStatusManager::Get()->StartCancelling(this);
+	}
+
+
 
 #if WITH_EDITOR
 	IHoudiniEditorAssetStateSubsystemInterface* const EditorSubsystem = IHoudiniEditorAssetStateSubsystemInterface::Get();
@@ -1090,8 +1175,15 @@ UHoudiniCookable::NeedUpdate() const
 		return true;
 
 	// Check if the HAC's transform has changed and we need to cook because of it
-	if (IsComponentSupported() && ComponentData->bHasComponentTransformChanged && ComponentData->bCookOnTransformChange)
+	bool bIsCOPHDA = IsImageSupported() ? ImageData->bIsCOPHDA : false;
+
+	if (IsComponentSupported()
+		&& ComponentData->bHasComponentTransformChanged
+		&& ComponentData->bCookOnTransformChange
+		&& !bIsCOPHDA)
+	{
 		return true;
+	}
 
 	// If we don't want to cook on parameter/input change dont bother looking for updates
 	//if (!bCookOnParameterChange && !bRecookRequested && !bRebuildRequested)
@@ -1133,7 +1225,7 @@ UHoudiniCookable::ClearNodesToCook()
 void
 UHoudiniCookable::UpdatePostDuplicate()
 {
-	if (IsComponentSupported() && IsValid(ComponentData->Component.Get()))
+	if (IsComponentSupported() && GetComponent())
 	{
 		// TODO:
 		// - Keep the output objects/components (remove duplicatetransient on the output object uproperties)
@@ -1387,31 +1479,14 @@ void
 UHoudiniCookable::MarkAsNeedInstantiation()
 {
 	// Invalidate the asset ID
-	NodeId = -1;
+	NodeId = INDEX_NONE;
 
-#if WITH_EDITORONLY_DATA
-	if((IsParameterSupported() && ParameterData->Parameters.Num() <= 0)
-		&& (IsInputSupported() && InputData->Inputs.Num() <= 0)
-		&& (IsOutputSupported() && OutputData->Outputs.Num() <= 0))
-	{
-		// The asset has no parameters or inputs.
-		// This likely indicates it has never cooked/been instantiated.
-		// Set its state to NewHDA to force its instantiation
-		// so that we can have its parameters/input interface
-		SetCurrentState(EHoudiniAssetState::NewHDA);
-	}
-	else
-	{
-		// The asset has cooked before since we have a parameter/input interface
-		// Set its state to need instantiation so that the asset is instantiated
-		// after being modified
-		SetCurrentState(EHoudiniAssetState::NeedInstantiation);
-	}
-#endif
+	SetCurrentState(EHoudiniAssetState::NeedInstantiation);
+
 	CurrentStateResult = EHoudiniAssetStateResult::None;
 
 	// Reset some of the asset's flag
-	CookCount = 0;
+	SetCookCount(0);
 	bHasBeenLoaded = true;
 	bPendingDelete = false;
 	bRecookRequested = false;
@@ -1633,8 +1708,9 @@ UHoudiniCookable::FindParameterByName(const FString& InParamName)
 	if (!IsParameterSupported())
 		return nullptr;
 
-	for (auto CurrentParam : ParameterData->Parameters)
+	for (int Index = 0; Index < ParameterData->Parameters.Num(); Index++)
 	{
+		UHoudiniParameter* CurrentParam = ParameterData->Parameters[Index];
 		if (!IsValid(CurrentParam))
 			continue;
 
@@ -1646,14 +1722,35 @@ UHoudiniCookable::FindParameterByName(const FString& InParamName)
 	return nullptr;
 }
 
-
 #if WITH_EDITORONLY_DATA
-TArray<TObjectPtr<UHoudiniParameter>>&
-UHoudiniCookable::GetParameters()
+void UHoudiniCookable::SetParameters(const TArray<TObjectPtr<UHoudiniParameter>>& Parameters)
 {
-	return ParameterData->Parameters;
+	ParameterData->Parameters = Parameters;
+	ConstructParameterTree();
+
 }
 #endif
+
+#if WITH_EDITORONLY_DATA
+void UHoudiniCookable::RemoveInvalidParameters()
+{
+	ParameterData->Parameters.RemoveAll([](const UHoudiniParameter* Param)
+		{
+			return Param->GetParmId() == INDEX_NONE;
+		});
+
+	ConstructParameterTree();
+}
+#endif
+
+#if WITH_EDITORONLY_DATA
+void UHoudiniCookable::SetParametersAndInstantiate(const TArray<TObjectPtr<UHoudiniParameter>>& Parameters)
+{
+	SetParameters(Parameters);
+	FHoudiniParameterUpdater::Get()->InstantiateParameters(this);
+}
+#endif
+
 
 #if WITH_EDITORONLY_DATA
 const TArray<TObjectPtr<UHoudiniParameter>>&
@@ -1713,6 +1810,17 @@ TMap<int32, int32>
 UHoudiniCookable::GetNodesToCookCookCounts() const
 {
 	return NodesToCookCookCounts;
+}
+
+bool UHoudiniCookable::GetApplyPCGTransform() const
+{
+	return OutputData ?  OutputData->bApplyPCGTransform : false;
+}
+
+void UHoudiniCookable::SetApplyPCGTransform(bool bEnable)
+{
+	if(OutputData)
+		OutputData->bApplyPCGTransform = bEnable;
 }
 
 bool
@@ -2030,14 +2138,13 @@ UHoudiniCookable::IsHoudiniCookedDataAvailable(bool& bOutNeedsRebuildOrDelete, b
 	case EHoudiniAssetState::Instantiating:
 	case EHoudiniAssetState::PreCook:
 	case EHoudiniAssetState::Cooking:
+	case EHoudiniAssetState::Cancelling:
 	case EHoudiniAssetState::PostCook:
 	case EHoudiniAssetState::PreProcess:
 	case EHoudiniAssetState::Processing:
 		return false;
-		break;
 	case EHoudiniAssetState::None:
 		return true;
-		break;
 	case EHoudiniAssetState::NeedRebuild:
 	case EHoudiniAssetState::NeedDelete:
 	case EHoudiniAssetState::Deleting:
@@ -2171,6 +2278,12 @@ bool
 UHoudiniCookable::GetUseOutputNodes() const
 {
 	return OutputData->bUseOutputNodes;
+}
+
+bool
+UHoudiniCookable::GetForcePCGOutputs() const
+{
+	return bForcePCGOutputs;
 }
 
 bool
@@ -2310,6 +2423,12 @@ UHoudiniCookable::SetCookOnCookableInputCook(bool bEnable)
 }
 
 void
+UHoudiniCookable::SetCookAfterInstantiation(bool bInCookAfterInstantiation)
+{
+	bCookAfterInstantiation = bInCookAfterInstantiation;
+}
+
+void
 UHoudiniCookable::SetCookingEnabled(const bool& bInCookingEnabled)
 {
 	bEnableCooking = bInCookingEnabled;
@@ -2345,6 +2464,12 @@ UHoudiniCookable::SetRebuildRequested(const bool& InRebuild)
 	bRebuildRequested = InRebuild;
 }
 
+void
+UHoudiniCookable::SetCancelReason(const EHoudiniCookableCancelReason InCancelReason)
+{
+	CancelReason = InCancelReason;
+}
+
 bool
 UHoudiniCookable::WasLastCookSuccessful() const
 {
@@ -2375,6 +2500,12 @@ UHoudiniCookable::SetUseOutputNodes(bool bEnable)
 		return;
 
 	OutputData->bUseOutputNodes = bEnable;
+}
+
+void
+UHoudiniCookable::SetForcePCG(bool bEnable)
+{
+	bForcePCGOutputs = bEnable;
 }
 
 void
@@ -2700,11 +2831,65 @@ UHoudiniCookable::ClearDownstreamCookable()
 #endif
 }
 
+void UHoudiniCookable::PostDuplicate(bool bDuplicateForPIE)
+{
+	Super::PostDuplicate(bDuplicateForPIE);
+#if WITH_EDITORONLY_DATA
+	// Zero out param Ids, they were only valid for the original HDA. We do not reconstruct 
+	// parameter tree, since Parent and Children should have been duplicated already.
+	for(UHoudiniParameter* Parameter : ParameterData->Parameters)
+	{
+		Parameter->SetParentParmId(INDEX_NONE);
+		Parameter->SetParmId(INDEX_NONE);
+	}
+#endif
+}
+
+void 
+UHoudiniCookable::FixupInputPointers()
+{
+#if WITH_EDITORONLY_DATA
+	// Ensure pointer consistency with operator paths. This could be done in Serialize(), with a new version,
+	// but it works fine to do this after load.
+
+	for(UHoudiniParameter* Parameter : ParameterData->Parameters)
+	{
+		if(UHoudiniParameterOperatorPath* OperatorPath = Cast<UHoudiniParameterOperatorPath>(Parameter))
+		{
+			if(OperatorPath->HoudiniInput.IsValid())
+			{
+				OperatorPath->HoudiniInput.Get()->SetOwningParameter(OperatorPath);
+			}
+			else
+			{
+				HOUDINI_LOG_ERROR(TEXT("Could not match operator path"));
+			}
+		}
+	}
+
+#endif
+}
+
 void
 UHoudiniCookable::PostLoad()
 {
 	Super::PostLoad();
+#if WITH_EDITORONLY_DATA
+	// Construct parameter tree and zero out ParmIds. The older Parameter Details code required
+	// the parmIds to reconstruct a tree (bugily), but now we explicitly store the parameter tree
+	// and new parameter code expects the ids to be invalid before cooking; before they were
+	// left over from the previous session, which was wrong.
+	ConstructParameterTree();
 
+	for(UHoudiniParameter* Parameter : ParameterData->Parameters)
+	{
+		Parameter->SetParentParmId(INDEX_NONE);
+		Parameter->SetParmId(INDEX_NONE);
+	}
+
+	FixupInputPointers();
+
+#endif
 	// Mark as need instantiation
 	MarkAsNeedInstantiation();
 
@@ -2765,3 +2950,102 @@ const FString& UHoudiniCookable::GetNodeLabelPrefix() const
 	return NodeLabelPrefix;
 }
 
+
+void
+UHoudiniCookable::NotifyHoudiniRegisterCompleted()
+{
+	UHoudiniAssetBlueprintComponent* MyHABC = Cast<UHoudiniAssetBlueprintComponent>(GetComponent());
+	if (!MyHABC)
+		return;
+
+	MyHABC->NotifyHoudiniRegisterCompleted();
+}
+
+void
+UHoudiniCookable::NotifyHoudiniPreUnregister()
+{
+	UHoudiniAssetBlueprintComponent* MyHABC = Cast<UHoudiniAssetBlueprintComponent>(GetComponent());
+	if (!MyHABC)
+		return;
+
+	MyHABC->NotifyHoudiniPreUnregister();
+}
+
+void
+UHoudiniCookable::NotifyHoudiniPostUnregister()
+{
+	UHoudiniAssetBlueprintComponent* MyHABC = Cast<UHoudiniAssetBlueprintComponent>(GetComponent());
+	if (!MyHABC)
+		return;
+
+	MyHABC->NotifyHoudiniPostUnregister();
+}
+
+void UHoudiniCookable::UpdateParameters()
+{
+	auto Updater = FHoudiniParameterUpdater::Get();
+	if(!Updater)
+		return;
+
+	// Only fetch parameters if we have an instantiated HDA... which we do not if in PreInstantiation.
+	// Otherwise we over-write out parameters.
+	bool bFetch = this->CurrentState != EHoudiniAssetState::PreInstantiation;
+
+	Updater->SendModifiedParametersToHoudini(this, bFetch);
+}
+
+void UCookableBakingData::PostLoad() 
+{
+	// This exists to fix up deprecated values and update them accordingly.
+	Super::PostLoad();
+
+	for (FHoudiniBakedOutput& Output : BakedOutputs)
+	{
+		for (auto It : Output.BakedOutputObjects)
+		{
+			It.Value.PostLoad();
+		}
+	}
+}
+
+void
+UHoudiniCookable::ConstructParameterTree()
+{
+#if WITH_EDITORONLY_DATA
+	this->Modify();
+	
+	// Construct parameter tree using Param Ids.
+
+	TMap<int, UHoudiniParameter*> IdToParameter;
+	if(ParameterData)
+	{
+		for(UHoudiniParameter* Parameter : ParameterData->Parameters)
+		{
+			// Create a map of Id to parameters for quick lookups.
+			if(Parameter->GetParmId() != INDEX_NONE)
+			{
+				IdToParameter.Add(Parameter->GetParmId(), Parameter);
+			}
+		}
+
+		for(UHoudiniParameter* Parameter : ParameterData->Parameters)
+		{
+			// Clear the existing tree.
+			Parameter->ClearTree();
+		}
+
+		for (int Index = 0; Index < ParameterData->Parameters.Num(); Index++)
+		{
+			UHoudiniParameter* Parameter = ParameterData->Parameters[Index];
+
+			UHoudiniParameter** ParentParameter = IdToParameter.Find(Parameter->GetParentParmId());
+			if (ParentParameter)
+			{
+				Parameter->SetParent(*ParentParameter);
+			}
+		}
+
+	}
+
+#endif
+}

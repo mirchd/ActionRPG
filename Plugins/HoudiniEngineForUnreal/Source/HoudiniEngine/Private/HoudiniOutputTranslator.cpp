@@ -76,6 +76,10 @@
 #include "HAL/FileManager.h"
 #include "InstancedFoliageActor.h"
 #include "LandscapeInfo.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION > 1
+#include "MaterialShared.h"
+#endif
+#include "Materials/MaterialInstanceConstant.h"
 #include "Modules/ModuleManager.h"
 #include "WorldBrowserModule.h"
 
@@ -116,7 +120,8 @@ FHoudiniOutputTranslator::UpdateOutputs(
 		HC->OutputData->bOutputTemplateGeos,
 		HC->OutputData->bUseOutputNodes,
 		HC->GetEnableCurveEditing(),
-		HC->OutputData->bCreateSceneComponents);
+		HC->OutputData->bCreateSceneComponents,
+		HC->bForcePCGOutputs);
 
 	// 2. Update tags and generic attributes on the Cookable and its component (if any)
 	UpdateOutputAttributesAndTags(HC);
@@ -167,6 +172,7 @@ FHoudiniOutputTranslator::ProcessOutputs(
 		HC->HasNoProxyMeshNextCookBeenRequested(),
 		HC->IsBakeAfterNextCookEnabled(),
 		HC->GetSplitMeshSupport(),
+		HC->GetApplyPCGTransform(),
 		HC->GetStaticMeshGenerationProperties(),
 		HC->GetStaticMeshBuildSettings(),
 		bOutHasHoudiniStaticMeshOutput,
@@ -202,7 +208,8 @@ FHoudiniOutputTranslator::UpdateOutputObjects(
 	bool bOutputTemplateGeos,
 	bool bUseOutputNodes,
 	bool bEnableCurveEditing,
-	bool bCreateSceneComponents)
+	bool bCreateSceneComponents,
+	bool bForcePCG)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniOutputTranslator::UpdateOutputObjects);
 
@@ -221,7 +228,7 @@ FHoudiniOutputTranslator::UpdateOutputObjects(
 	TArray<TObjectPtr<UHoudiniOutput>> NewOutputs;
 	if (FHoudiniOutputTranslator::BuildAllOutputs(
 		InNodeId, InOuter, InNodeIdsToCook, InOutputNodeCookCounts,
-		Outputs, NewOutputs, bOutputTemplateGeos, bUseOutputNodes, bEnableCurveEditing, bCreateSceneComponents))
+		Outputs, NewOutputs, bOutputTemplateGeos, bUseOutputNodes, bEnableCurveEditing, bCreateSceneComponents, bForcePCG))
 	{
 		ClearAndRemoveOutputs(Outputs, EHoudiniClearFlags::EHoudiniClear_Assets);
 
@@ -370,6 +377,7 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	bool bHasNoProxyMeshNextCookBeenRequested,
 	bool bIsBakeAfterNextCookEnabled,
 	bool bSplitMeshSupport,
+	bool bApplyPCGTransform,
 	const FHoudiniStaticMeshGenerationProperties& InStaticMeshGenerationProperties,
 	const FMeshBuildSettings& InStaticMeshBuildSettings,
 	bool& bOutHasHoudiniStaticMeshOutput,
@@ -388,6 +396,10 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	if (!InOuterComponent)
 	{
 		InOuterComponent = OuterHC ? OuterHC->GetComponent() : nullptr;
+	}
+	else if (!OuterHC)
+	{
+		OuterHC = Cast<UHoudiniCookable>(InOuterComponent->GetOuter());
 	}
 
 	// NOTE: The world can be NULL when, for example, when working with
@@ -470,6 +482,18 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	// We track them to prevent recreate the same houdini material over and over if it is assigned to multiple parts.
 	// (this can easily happen when using packed prims)
 	TMap<FHoudiniMaterialIdentifier, TObjectPtr<UMaterialInterface>> AllOutputMaterials;
+
+	// For COP HDAs, handle generating materials if asked
+	bool bShouldGenerateCOPMaterial = false;
+	UMaterialInterface* COPMaterialSource = nullptr;
+	UMaterialInstanceConstant* GeneratedCOPMaterial = nullptr;
+	FMaterialUpdateContext MaterialUpdateContext;
+	FHoudiniOutputObjectIdentifier GeneratedMaterialOutputID(0, 0, 0, TEXT("material"));
+	if (OuterHC && OuterHC->GetImageData())
+	{
+		bShouldGenerateCOPMaterial = OuterHC->GetImageData()->bGenerateMaterial;
+		COPMaterialSource = bShouldGenerateCOPMaterial ? OuterHC->GetImageData()->MaterialToInstance : nullptr;
+	}
 
 	UTexture2D* VisibleTexture = nullptr;
 	UMaterialInterface* VisibleMat = nullptr;
@@ -677,7 +701,9 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 			case EHoudiniOutputType::PCG:
 			{
 #if defined(HOUDINI_USE_PCG)
-				FHoudiniPCGTranslator::CreatePCGFromOutput(CurOutput);
+
+				const FTransform& Transform = bApplyPCGTransform ? InOuterComponent->GetComponentToWorld() : FTransform::Identity;
+				FHoudiniPCGTranslator::CreatePCGFromOutput(CurOutput, Transform);
 #endif
 				break;
 			}
@@ -693,9 +719,62 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 
 			case EHoudiniOutputType::Cop:
 			{
-				FHoudiniTextureTranslator::ProcessCopOutput(CurOutput, PackageParams);
+				EHoudiniEngineImageDataFormat ImageDataFormat = OuterHC ? OuterHC->GetImageData()->ImageDataFormat : EHoudiniEngineImageDataFormat::Int8;
+
+				FHoudiniTextureTranslator::ProcessCopOutput(CurOutput, PackageParams, ImageDataFormat);
 
 				NumTextureOutputs += CurOutput->GetOutputObjects().Num();
+
+				// Update generated material if we have any
+				if (bShouldGenerateCOPMaterial && NumTextureOutputs > 0)
+				{
+					bool bUpdateOutID = false;
+					if (GeneratedCOPMaterial == nullptr)
+					{
+						// Create the COP output material if we haven't already
+						GeneratedCOPMaterial = FHoudiniTextureTranslator::CreateCopOutputMaterialInstance(COPMaterialSource, PackageParams);
+						MaterialUpdateContext.AddMaterialInstance(GeneratedCOPMaterial);
+
+						bUpdateOutID = true;
+					}
+
+					for (auto& CurOutputObject : CurOutput->GetOutputObjects())
+					{
+						UTexture2D* CurTexture = Cast<UTexture2D>(CurOutputObject.Value.OutputObject);
+						if(CurTexture == nullptr)
+							continue;
+
+						if (bUpdateOutID)
+						{
+							GeneratedMaterialOutputID.ObjectId = CurOutputObject.Key.ObjectId;
+							GeneratedMaterialOutputID.GeoId = CurOutputObject.Key.GeoId;
+							GeneratedMaterialOutputID.PartId = CurOutputObject.Key.PartId;
+						}
+
+						FString ParamName = CurOutputObject.Key.SplitIdentifier;
+						if (COPMaterialSource == nullptr)
+						{
+							// For the default material - handle some name replacement
+							if(ParamName.Equals(TEXT("basecolor")))
+								ParamName = TEXT("diffuse");
+							else if (ParamName.Equals(TEXT("height")))
+								ParamName = TEXT("displacement");
+							else if (ParamName.Equals(TEXT("alpha")))
+								ParamName = TEXT("opacity");
+							else if (ParamName.Equals(TEXT("ao")))
+								ParamName = TEXT("occlusion");
+							else if (ParamName.Equals(TEXT("compact")))
+								ParamName = TEXT("rma");
+
+							// For the default cop output material - we also need to modify the matching "has"boolean parameter first
+							FString HasParamName = TEXT("has") + ParamName;
+							FHoudiniTextureTranslator::UpdateBooleanParamOnCopOutputMaterialInstance(GeneratedCOPMaterial, true, HasParamName);
+						}
+
+						FHoudiniTextureTranslator::UpdateTexureParamOnCopOutputMaterialInstance(GeneratedCOPMaterial, CurTexture, ParamName);
+					}
+				}
+
 				for (auto& It : CurOutput->GetOutputObjects())
 				{
 					// If we haven;t already selected a texture to display..
@@ -749,24 +828,68 @@ FHoudiniOutputTranslator::CreateAllOutputs(
 	{
 		// If we have valid outputs, we don't need to display the houdini logo anymore...
 		FHoudiniEngineUtils::RemoveHoudiniLogoFromComponent(InOuterComponent);
-		// .. or the default COP nesh
+		// .. or the default COP mesh
 		FHoudiniEngineUtils::RemoveTextureMeshFromComponent(InOuterComponent);
 	}
 	else if (NumTextureOutputs > 0)
 	{
-		// Create a temporary material to display the texture
-		if (VisibleTexture)
+		// If we generated a material for COP HDAs - add it to the outputs
+		if (bShouldGenerateCOPMaterial && GeneratedCOPMaterial != nullptr)
+		{
+			// We need to add a new Output
+			TObjectPtr<UHoudiniOutput> Output =
+				NewObject<UHoudiniOutput>(
+					OuterHC,
+					UHoudiniOutput::StaticClass(),
+					FName(TEXT("Generated COP Material Instance")),
+					RF_NoFlags);
+
+			Output->Type = EHoudiniOutputType::Cop;
+			Output->bCreateSceneComponents = false;
+
+			FHoudiniOutputObject OutputObject;
+			OutputObject.OutputObject = GeneratedCOPMaterial;
+			Output->OutputObjects.Add(GeneratedMaterialOutputID, OutputObject);
+
+			Outputs.Add(Output);
+
+			// Dirty the material
+			GeneratedCOPMaterial->MarkPackageDirty();
+
+			// Update the material instance
+			GeneratedCOPMaterial->InitStaticPermutation();
+			GeneratedCOPMaterial->PreEditChange(nullptr);
+			GeneratedCOPMaterial->PostEditChange();
+		}
+
+		if(VisibleTexture)
 		{
 			// Fully stream in the texture before drawing it.
-			// Not doing this would cause the texture to appear blurry in the ortho viewport
+			// Not doing this would cause the texture to appear blurry in the 2D viewport
 			VisibleTexture->SetForceMipLevelsToBeResident(30.0f);
 			VisibleTexture->WaitForStreaming();
+		}
 
+		bool bIsInAssetEditor = OuterHC ? !OuterHC->AssetEditorId.IsNone() : false;
+
+		// If we're in the asset editor - or if we haven't generated any material
+		// we need to create a temporary material to display the textures
+		bool bCreateDefaultMaterial = bIsInAssetEditor || GeneratedCOPMaterial == nullptr;
+		if (bCreateDefaultMaterial)
+		{
 			VisibleMat = FHoudiniTextureTranslator::CreateDefaultCopMaterialForTexture(VisibleTexture, PackageParams);
+		}
+		else
+		{
+			// Not in the HDA editor and we have a generated material - just use it
+			VisibleMat = GeneratedCOPMaterial;
 		}
 
 		// ... if we only have texture outputs, use a texture quad
 		FHoudiniEngineUtils::AddTextureMeshToComponent(InOuterComponent, VisibleTexture, VisibleMat);
+
+		// .. and update its aspect ratio to match the texture
+		FHoudiniEngineUtils::UpdateTextureMeshRatio(InOuterComponent, VisibleTexture);
 	}
 	else
 	{
@@ -1268,7 +1391,8 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 	bool InOutputTemplatedGeos,
 	bool InUseOutputNodes, 
 	bool bGatherEditableCurves,
-	bool bCreateSceneComponents)
+	bool bCreateSceneComponents,
+	bool bForcePCGOutput)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniOutputTranslator::BuildAllOutputs);
 
@@ -1935,7 +2059,7 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 									
 								}
 #if defined(HOUDINI_USE_PCG)
-								else if (FHoudiniPCGTranslator::IsPCGOutput(CurrentHapiGeoInfo.nodeId, CurrentHapiPartInfo.id))
+								else if (FHoudiniPCGTranslator::IsPCGOutput(bForcePCGOutput, CurrentHapiGeoInfo.nodeId, CurrentHapiPartInfo.id))
 								{
 									CurrentPartType = EHoudiniPartType::PCG;
 								}
@@ -2002,7 +2126,7 @@ FHoudiniOutputTranslator::BuildAllOutputs(
 							CurrentPartType = EHoudiniPartType::LandscapeSpline;
 						}
 #if defined(HOUDINI_USE_PCG)
-						else if(FHoudiniPCGTranslator::IsPCGOutput(CurrentHapiGeoInfo.nodeId, CurrentHapiPartInfo.id))
+						else if(FHoudiniPCGTranslator::IsPCGOutput(bForcePCGOutput, CurrentHapiGeoInfo.nodeId, CurrentHapiPartInfo.id))
 						{
 							CurrentPartType = EHoudiniPartType::PCG;
 						}

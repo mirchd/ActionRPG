@@ -83,7 +83,6 @@ class HOUDINIENGINE_API FHoudiniPCGUtils
 public:
 
 	static FString ParameterInputPinName;;
-	static FName HDAInputObjectName;
 
 	static EHoudiniPCGSessionStatus StartSessionAsync();
 	static EHoudiniPCGSessionStatus StartSession();
@@ -94,16 +93,14 @@ public:
 
 	static void UnrealToHoudini(const FVector3d& UnrealVector, float HoudiniVector[3]);
 	static FVector4d UnrealToHoudiniQuat(const FQuat& Quat);
-	static FVector3d HoudiniToUnrealPosition(float HoudiniVector[3]);
-	static FVector3d HoudiniToUnrealVector(float HoudiniVector[3]);
+	static FVector3d HoudiniToUnrealScaled(float HoudiniVector[3]);
+	static FVector3d HoudiniToUnrealUnscaled(float HoudiniVector[3]);
 	static FQuat HoudiniToUnrealQuat(float HoudiniVector[4]);
 
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Input Functions.
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	static EHoudiniPCGInputType GetInputType(const UPCGData* TaggedData);
 
 	static FString GetHDAInputName(int Index);
 
@@ -114,9 +111,9 @@ public:
 	static TArray<FHoudiniPCGObjectOutput> GetPCGOutputData(const FHoudiniBakedOutput * BakedOutput);
 	static TArray<FHoudiniPCGObjectOutput> GetPCGOutputData(const FTOPWorkResult* WorkItem);
 
-	static TArray<FString> GetValueAsString(const TArray<FString>& DefaultValues, const FHoudiniPCGAttributes & Attributes, int RowIndex);
-	static TArray<int> GetValueAsInt(const TArray<int>& DefaultValues, const FHoudiniPCGAttributes& Attributes, int RowIndex);
-	static TArray<float> GetValueAsFloat(const TArray<float> & DefaultValues, const FHoudiniPCGAttributes& Attributes, int RowIndex);
+	static TArray<FString> GetValueAsString(const FHoudiniPCGAttributes & Attributes, int RowIndex);
+	static TArray<int> GetValueAsInt(const FHoudiniPCGAttributes& Attributes, int RowIndex);
+	static TArray<float> GetValueAsFloat(const FHoudiniPCGAttributes& Attributes, int RowIndex);
 
 	static void LogVisualWarning(const FPCGContext* Context, const FString& ErrorText);
 	static void LogVisualError(const FPCGContext* Context, const FString & ErrorText);

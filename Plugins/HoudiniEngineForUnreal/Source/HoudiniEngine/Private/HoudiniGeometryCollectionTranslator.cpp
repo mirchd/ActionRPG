@@ -276,6 +276,7 @@ FHoudiniGeometryCollectionTranslator::SetupGeometryCollectionComponentFromOutput
 
 		if (IsValid(GeometryCollectionComponent))
 		{
+
 			// See if we need to update Custom Prim Data on the GCC
 			TArray<float> CustomPrimData;
 			FHoudiniMeshTranslator::GetCustomPrimitiveData(
@@ -289,6 +290,7 @@ FHoudiniGeometryCollectionTranslator::SetupGeometryCollectionComponentFromOutput
 				FHoudiniMeshTranslator::SetCustomPrimitiveData(
 					CustomPrimData, GeometryCollectionComponent);
 			}
+
 
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
 		//	Rebuild render data on the GeometryCollection itself otherwise the asset won't update in UE5.3

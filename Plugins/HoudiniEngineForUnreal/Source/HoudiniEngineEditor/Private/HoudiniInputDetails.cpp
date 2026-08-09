@@ -47,8 +47,6 @@
 	#include "HoudiniPCGCookable.h"
 #endif
 #include "HoudiniSplineComponentVisualizer.h"
-#include "UnrealObjectInputRuntimeUtils.h"
-
 #include "ActorTreeItem.h"
 #include "AssetRegistry/AssetData.h"
 #include "DetailLayoutBuilder.h"
@@ -193,6 +191,7 @@ public:
 
 void
 FHoudiniInputDetails::CreateWidget(
+	IDetailLayoutBuilder& DetailBuilder,
 	IDetailCategoryBuilder& HouInputCategory,
 	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
 	FDetailWidgetRow* InputRow)
@@ -224,6 +223,27 @@ FHoudiniInputDetails::CreateWidget(
 		CreateNameWidget(MainInput, *Row, true, InInputs.Num());
 
 	// Create a vertical Box for storing the UI
+	TSharedRef<SWidget> VerticalBox = CreateInputValueWidget(DetailBuilder, HouInputCategory, InInputs);
+	Row->ValueWidget.Widget = VerticalBox;
+	Row->ValueWidget.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH);
+
+}
+
+TSharedRef<SWidget> FHoudiniInputDetails::CreateInputValueWidget(
+	IDetailLayoutBuilder& DetailBuilder,
+	IDetailCategoryBuilder& HouInputCategory, 
+	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::CreateInputValueWidget);
+
+	TSharedPtr< FAssetThumbnailPool > AssetThumbnailPool = HouInputCategory.GetParentLayout().GetThumbnailPool();
+
+	const TWeakObjectPtr<UHoudiniInput>& MainInput = InInputs[0];
+
+	if (!MainInput.IsValid())
+		return SNullWidget::NullWidget;
+
+	// Create a vertical Box for storing the UI
 	TSharedRef<SVerticalBox> VerticalBox = SNew(SVerticalBox);
 
 	// ComboBox :  Input Type
@@ -234,35 +254,24 @@ FHoudiniInputDetails::CreateWidget(
 	const IDetailsView* DetailsView = HouInputCategory.GetParentLayout().GetDetailsView();
 #endif
 
-	AddInputTypeComboBox(HouInputCategory, VerticalBox, InInputs, DetailsView);
+	AddInputTypeComboBox(DetailBuilder, HouInputCategory, VerticalBox, InInputs, DetailsView);
 
-	switch (MainInput->GetInputType())
+	switch(MainInput->GetInputType())
 	{
-		case EHoudiniInputType::Geometry:
-		{
-			AddGeometryInputUI(HouInputCategory, VerticalBox, InInputs, AssetThumbnailPool);
-		}
+	case EHoudiniInputType::Geometry:
+		AddGeometryInputUI(HouInputCategory, VerticalBox, InInputs, AssetThumbnailPool);
 		break;
 
-		case EHoudiniInputType::Curve:
-		{
-			AddCurveInputUI(HouInputCategory, VerticalBox, InInputs, AssetThumbnailPool);
-		}
+	case EHoudiniInputType::Curve:
+		AddCurveInputUI(HouInputCategory, VerticalBox, InInputs, AssetThumbnailPool);
 		break;
 
-		case EHoudiniInputType::World:
-		{
-			AddWorldInputUI(HouInputCategory, VerticalBox, InInputs, DetailsView);
-		}
+	case EHoudiniInputType::World:
+		AddWorldInputUI(HouInputCategory, VerticalBox, InInputs, DetailsView);
 		break;
 	}
 
-
-	Row->ValueWidget.Widget = VerticalBox;
-
-	Row->ValueWidget.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH);
-	//Row.ValueWidget.Widget->SetEnabled(!MainParam->IsDisabled());
-
+	return VerticalBox;
 }
 
 void
@@ -297,8 +306,15 @@ FHoudiniInputDetails::GetInputTooltip(const TWeakObjectPtr<UHoudiniInput>& InPar
 }
 
 void
-FHoudiniInputDetails::AddInputTypeComboBox(IDetailCategoryBuilder& CategoryBuilder, TSharedRef<SVerticalBox> VerticalBox, const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, const IDetailsView* DetailsView)
+FHoudiniInputDetails::AddInputTypeComboBox(
+	IDetailLayoutBuilder& DetailBuilder,
+	IDetailCategoryBuilder& CategoryBuilder, 
+	TSharedRef<SVerticalBox> VerticalBox, 
+	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs, 
+	const IDetailsView* DetailsView)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::AddInputTypeComboBox);
+
 	// Get the details view name and locked status
 	bool bDetailsLocked = false;
 	FName DetailsPanelName = "LevelEditorSelectionDetails";
@@ -318,7 +334,7 @@ FHoudiniInputDetails::AddInputTypeComboBox(IDetailCategoryBuilder& CategoryBuild
 	};
 
 	// Lambda for changing inputs type
-	auto OnSelChanged = [DetailsPanelName](const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputsToUpdate, TSharedPtr<FString> InNewChoice)
+	auto OnSelChanged = [DetailsPanelName, &DetailBuilder](const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputsToUpdate, TSharedPtr<FString> InNewChoice)
 	{
 		if (!InNewChoice.IsValid())
 			return;
@@ -336,8 +352,6 @@ FHoudiniInputDetails::AddInputTypeComboBox(IDetailCategoryBuilder& CategoryBuild
 		if (!IsValidWeakPointer(MainInput))
 			return;
 
-		UHoudiniAssetBlueprintComponent* HAB = MainInput->GetTypedOuter<UHoudiniAssetBlueprintComponent>();
-
 		// Record a transaction for undo/redo
 		FScopedTransaction Transaction(
 			TEXT(HOUDINI_MODULE_EDITOR),
@@ -345,7 +359,6 @@ FHoudiniInputDetails::AddInputTypeComboBox(IDetailCategoryBuilder& CategoryBuild
 			MainInput->GetOuter());
 
 		bool bBlueprintStructureModified = false;
-
 		for (auto CurInput : InInputsToUpdate)
 		{
 			if (!IsValidWeakPointer(CurInput))
@@ -375,8 +388,11 @@ FHoudiniInputDetails::AddInputTypeComboBox(IDetailCategoryBuilder& CategoryBuild
 
 			FHoudiniEngineEditorUtils::ReselectSelectedActors();
 
+			DetailBuilder.ForceRefreshDetails();
+
 		}
 
+		UHoudiniAssetBlueprintComponent* HAB = MainInput->GetTypedOuter<UHoudiniAssetBlueprintComponent>();
 		if (HAB)
 		{
 			if (bBlueprintStructureModified)
@@ -2754,6 +2770,55 @@ FHoudiniInputDetails::AddLandscapeAutoSelectSplinesCheckBox(
 	}
 }
 
+
+void FHoudiniInputDetails::AddPCGOptions(
+	TSharedRef<SVerticalBox> InVerticalBox,
+	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs)
+{
+	InVerticalBox->AddSlot()
+		[
+			SNew(SHorizontalBox)
+				+SHorizontalBox::Slot()
+					.AutoWidth()
+					.Padding(5.0, 7.0, 0.0, 0.0)
+					[
+						SNew(STextBlock)
+							.Text(FText::FromString("PCG Attribute"))
+							.ToolTipText(LOCTEXT("PCGAttribute_Tooltip", "The name of the PCG Attribute to use to use to override the input object, if the input pin is connected."))
+							.Font(IDetailLayoutBuilder::GetDetailFont())
+
+					]
+
+				+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.Padding(5.0, 3.0, 0.0, 0.0)
+					[
+						SNew(SEditableTextBox)
+							.MinDesiredWidth(160)
+							.Text_Lambda([InInputs]() {
+
+								if(InInputs.IsEmpty() || !InInputs[0].IsValid())
+									return FText::GetEmpty();
+								else
+									return FText::FromString(InInputs[0]->GetPCGAttribute());
+
+								})
+							.ToolTipText(LOCTEXT("PCGAttribute_Tooltip", "The name of the PCG Attribute to use to use to override the input object, if the input pin is connected."))
+							.Font(IDetailLayoutBuilder::GetDetailFont())
+							.OnTextCommitted_Lambda([=](const FText& InputText, ETextCommit::Type CommitType)
+								{
+									if(CommitType != ETextCommit::Type::OnEnter && CommitType != ETextCommit::Type::OnUserMovedFocus)
+										return;
+
+									if(InInputs.IsEmpty() || !InInputs[0].IsValid())
+										return;
+
+									InInputs[0]->SetPCGAttribute(InputText.ToString());
+								})
+						]
+		];
+}
+
 void
 FHoudiniInputDetails::AddExportOptions(
 	TSharedRef<SVerticalBox> InVerticalBox,
@@ -3283,6 +3348,9 @@ FHoudiniInputDetails::AddCurveInputUI(
 		}
 	};
 
+	if (IsInsidePCG(InInputs))
+		AddPCGOptions(InVerticalBox, InInputs);
+
 	AddExportOptions(InVerticalBox, InInputs);
 
 	FText InputsMenuTitle = FText::Format(
@@ -3298,11 +3366,17 @@ FHoudiniInputDetails::AddCurveInputUI(
 
 	TSharedRef<SVerticalBox> InputsCollapsed_VerticalBox = SNew(SVerticalBox).Visibility_Lambda([MainInput]()
 	{
+		if (!IsValidWeakPointer(MainInput))
+			return EVisibility::Collapsed;
+
 		return MainInput->GetCurveInputsMenuExpanded() ? EVisibility::Collapsed : EVisibility::Visible;
 	});
 
 	TSharedRef<SVerticalBox> InputsExpanded_VerticalBox = SNew(SVerticalBox).Visibility_Lambda([MainInput]()
 	{
+		if (!IsValidWeakPointer(MainInput))
+			return EVisibility::Collapsed;
+
 		return MainInput->GetCurveInputsMenuExpanded() ? EVisibility::Visible : EVisibility::Collapsed;
 	});
 
@@ -3360,6 +3434,9 @@ FHoudiniInputDetails::AddCurveInputUI(
 			SNew(SButton)
 			.OnClicked_Lambda([InInputs, MainInput, &CategoryBuilder]()
 			{
+				if (!IsValidWeakPointer(MainInput))
+					return FReply::Handled();
+
 				TArray<TObjectPtr<UHoudiniInputObject>>* CurveInputComponentArray = MainInput->GetHoudiniInputObjectArray(EHoudiniInputType::Curve);
 
 				// Detach all curves before deleting.
@@ -5848,6 +5925,9 @@ FHoudiniInputDetails::Helper_CreateBoundSelectorPickerWidget(const TArray<TWeakO
 		if (!IsValid(Actor))
 			return false;
 
+		if (!IsValidWeakPointer(MainInput))
+			return false;
+
 		const TArray<TObjectPtr<AActor>>* BoundObjects = MainInput->GetBoundSelectorObjectArray();
 		if (!BoundObjects)
 			return false;
@@ -5917,11 +5997,12 @@ FHoudiniInputDetails::AddGeometryInputUI(
 	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
 	TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::AddGeometryInputUI);
+
 	if (InInputs.Num() <= 0)
 		return;
 
 	const TWeakObjectPtr<UHoudiniInput>& MainInput = InInputs[0];
-
 	if (!IsValidWeakPointer(MainInput))
 		return;
 
@@ -5991,6 +6072,9 @@ FHoudiniInputDetails::AddGeometryInputUI(
 		}
 	};
 
+	if(IsInsidePCG(InInputs))
+		AddPCGOptions(InVerticalBox, InInputs);
+
 	AddExportOptions(InVerticalBox, InInputs);
 
 	FText InputsMenuTitle = FText::Format(
@@ -6006,11 +6090,17 @@ FHoudiniInputDetails::AddGeometryInputUI(
 		
 	TSharedRef<SVerticalBox> InputsCollapsed_VerticalBox = SNew(SVerticalBox).Visibility_Lambda([MainInput]()
 	{
+		if (!IsValidWeakPointer(MainInput))
+			return EVisibility::Collapsed;
+
 		return MainInput->GetGeometryInputsMenuExpanded() ? EVisibility::Collapsed : EVisibility::Visible;
 	});
 	
 	TSharedRef<SVerticalBox> InputsExpanded_VerticalBox = SNew(SVerticalBox).Visibility_Lambda([MainInput]()
 	{
+		if (!IsValidWeakPointer(MainInput))
+			return EVisibility::Collapsed;
+
 		return MainInput->GetGeometryInputsMenuExpanded() ? EVisibility::Visible : EVisibility::Collapsed;
 	});
 
@@ -6150,6 +6240,8 @@ FHoudiniInputDetails::AddWorldInputUI(
 	const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs,
 	const IDetailsView* DetailsView)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::AddWorldInputUI);
+
 	if (InInputs.Num() <= 0)
 		return;
 
@@ -6157,6 +6249,9 @@ FHoudiniInputDetails::AddWorldInputUI(
 
 	if (!IsValidWeakPointer(MainInput))
 		return;
+
+	if(IsInsidePCG(InInputs))
+		AddPCGOptions(InVerticalBox, InInputs);
 
 	AddExportOptions(InVerticalBox, InInputs);
 	AddLandscapeOptions(InVerticalBox, InInputs);
@@ -6539,6 +6634,8 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectCollapsed(
 	TSharedRef<SVerticalBox> InVerticalBox,
 	TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::Helper_CreateGeometryInputObjectCollapsed);
+
 	if (InInputs.Num() <= 0)
 		return;
 
@@ -6690,6 +6787,8 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 	TSharedRef<SVerticalBox> InVerticalBox,
 	TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded);
+
 	if (InInputs.Num() <= 0)
 		return;
 
@@ -6701,10 +6800,8 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 	UHoudiniInputObject* HoudiniInputObject = MainInput->GetHoudiniInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
 	UObject* InputObject = HoudiniInputObject ? HoudiniInputObject->GetObject() : nullptr;
 
-
 	// Create thumbnail for this static mesh.
 	constexpr int32 ThumbnailSize = 46;
-
 	TSharedPtr<FAssetThumbnail> StaticMeshThumbnail = MakeShareable(
 		new FAssetThumbnail(InputObject, ThumbnailSize, ThumbnailSize, AssetThumbnailPool));
 
@@ -6760,43 +6857,45 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 	};
 
 	TSharedPtr<SHorizontalBox> HorizontalBox;
-	InVerticalBox->AddSlot()
-	.Padding(0, 5, 0, 0)
-	.AutoHeight()
-	[
-		SNew(SAssetDropTarget)
-		.bSupportsMultiDrop(true)
-		.OnAreAssetsAcceptableForDrop_Lambda([](TArrayView<FAssetData> InAssets)
-		{
-			for (auto& CurAssetData : InAssets)
-			{
-				if (UHoudiniInput::IsObjectAcceptable(EHoudiniInputType::Geometry, CurAssetData.GetAsset()))
-					return true;
-			}
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::AssetDrop);
+		InVerticalBox->AddSlot()
+			.Padding(0, 5, 0, 0)
+			.AutoHeight()
+			[
+				SNew(SAssetDropTarget)
+					.bSupportsMultiDrop(true)
+					.OnAreAssetsAcceptableForDrop_Lambda([](TArrayView<FAssetData> InAssets)
+						{
+							for(auto& CurAssetData : InAssets)
+							{
+								if(UHoudiniInput::IsObjectAcceptable(EHoudiniInputType::Geometry, CurAssetData.GetAsset()))
+									return true;
+							}
 
-			return false;
-		})
-		.OnAssetsDropped_Lambda([InInputs, InObjectIdx, UpdateGeometryObjectAt](const FDragDropEvent&, TArrayView<FAssetData> InAssets)
-		{
-			int32 CurrentObjectIdx = InObjectIdx;
-			for (auto& CurAssetData : InAssets)
-			{
-				UObject* Object = CurAssetData.GetAsset();
-				if (!IsValid(Object))
-					continue;
+							return false;
+						})
+					.OnAssetsDropped_Lambda([InInputs, InObjectIdx, UpdateGeometryObjectAt](const FDragDropEvent&, TArrayView<FAssetData> InAssets)
+						{
+							int32 CurrentObjectIdx = InObjectIdx;
+							for(auto& CurAssetData : InAssets)
+							{
+								UObject* Object = CurAssetData.GetAsset();
+								if(!IsValid(Object))
+									continue;
 
-				if (!UHoudiniInput::IsObjectAcceptable(EHoudiniInputType::Geometry, Object))
-					continue;
+								if(!UHoudiniInput::IsObjectAcceptable(EHoudiniInputType::Geometry, Object))
+									continue;
 
-				// Update the object, inserting new one if necessary
-				UpdateGeometryObjectAt(InInputs, CurrentObjectIdx++, Object, true);
-			}
-		})
-		[
-			SAssignNew(HorizontalBox, SHorizontalBox)
-		]
-	];
-
+								// Update the object, inserting new one if necessary
+								UpdateGeometryObjectAt(InInputs, CurrentObjectIdx++, Object, true);
+							}
+						})
+					[
+						SAssignNew(HorizontalBox, SHorizontalBox)
+					]
+			];
+	}
 		
 	FText ThumbnailTip = FText::GetEmpty();
 	if (InputObject)
@@ -6804,74 +6903,86 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 	    ThumbnailTip = FText::FromString(InputObject->GetDesc());
 	}
 
-	HorizontalBox->AddSlot()
-	.Padding(0)
-	.AutoWidth()
-	[
-		SNew(SBorder)
-		.BorderImage(_GetEditorStyle().GetBrush(TEXT("AssetThumbnail.AssetBackground")))
-		.VAlign(VAlign_Center)
-		.HAlign(HAlign_Center)
-		.OnMouseDoubleClick_Lambda([MainInput, InObjectIdx](const FGeometry&, const FPointerEvent&)
-		{
-			UObject* InputObject = MainInput->GetInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
-			if (GEditor && InputObject)
-				GEditor->EditObject(InputObject);
-
-			return FReply::Handled();
-		})
-		[
-			SNew(SBox)
-			.WidthOverride(ThumbnailSize)
-			.HeightOverride(ThumbnailSize)
-			.ToolTipText(ThumbnailTip)
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::Thumbnail);
+		HorizontalBox->AddSlot()
+			.Padding(0)
+			.AutoWidth()
 			[
-				StaticMeshThumbnail->MakeThumbnailWidget()
-			]
-		]
-	];
+				SNew(SBorder)
+					.BorderImage(_GetEditorStyle().GetBrush(TEXT("AssetThumbnail.AssetBackground")))
+					.VAlign(VAlign_Center)
+					.HAlign(HAlign_Center)
+					.OnMouseDoubleClick_Lambda([MainInput, InObjectIdx](const FGeometry&, const FPointerEvent&)
+						{
+							UObject* InputObject = MainInput->GetInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
+							if(GEditor && InputObject)
+								GEditor->EditObject(InputObject);
 
+							return FReply::Handled();
+						})
+					[
+						SNew(SBox)
+							.WidthOverride(ThumbnailSize)
+							.HeightOverride(ThumbnailSize)
+							.ToolTipText(ThumbnailTip)
+							[
+								StaticMeshThumbnail->MakeThumbnailWidget()
+							]
+					]
+			];
+	}
 	FText MeshNameText = FText::GetEmpty();
 	if (InputObject)
 		MeshNameText = FText::FromString(InputObject->GetName());
 
 	TSharedPtr<SVerticalBox> ComboAndButtonBox;
-	HorizontalBox->AddSlot()
-	.FillWidth(1)
-	.Padding(4, 0, 5, 0)
-	.VAlign(VAlign_Center)
-	[
-		SAssignNew(ComboAndButtonBox, SVerticalBox)
-	];
-
-	// Add Combo box : Static Mesh
 	TSharedPtr<SComboButton> StaticMeshComboButton;
-	ComboAndButtonBox->AddSlot()
-	.FillHeight(1)
-	[
-		SNew(SVerticalBox)
-		+ SVerticalBox::Slot()
-		.Padding(0)
-		.VAlign(VAlign_Center)
-		[
-			SAssignNew(StaticMeshComboButton, SComboButton)
-			.ButtonContent()
-			[
-				SNew(STextBlock)
-				.TextStyle(_GetEditorStyle(), TEXT("PropertyEditor.AssetClass"))
-				.Font(_GetEditorStyle().GetFontStyle(FName(TEXT("PropertyWindow.NormalFont"))))
-				.ColorAndOpacity(_GetEditorStyle().GetColor(TEXT("AssetThumbnail"), ".ColorAndOpacity"))
-				.Text(MeshNameText)
-			]
-		]
-	];
 
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::MeshName);
+		HorizontalBox->AddSlot()
+			.FillWidth(1)
+			.Padding(4, 0, 5, 0)
+			.VAlign(VAlign_Center)
+			[
+				SAssignNew(ComboAndButtonBox, SVerticalBox)
+			];
+
+		// Add Combo box : Static Mesh
+
+		ComboAndButtonBox->AddSlot()
+			.FillHeight(1)
+			[
+				SNew(SVerticalBox)
+					+ SVerticalBox::Slot()
+					.Padding(0)
+					.VAlign(VAlign_Center)
+					[
+						SAssignNew(StaticMeshComboButton, SComboButton)
+							.ButtonContent()
+							[
+								SNew(STextBlock)
+									.TextStyle(_GetEditorStyle(), TEXT("PropertyEditor.AssetClass"))
+									.Font(_GetEditorStyle().GetFontStyle(FName(TEXT("PropertyWindow.NormalFont"))))
+									.ColorAndOpacity(_GetEditorStyle().GetColor(TEXT("AssetThumbnail"), ".ColorAndOpacity"))
+									.Text(MeshNameText)
+							]
+					]
+			];
+
+	}
 
 	TWeakPtr<SComboButton> WeakStaticMeshComboButton(StaticMeshComboButton);
 	StaticMeshComboButton->SetOnGetMenuContent(FOnGetContent::CreateLambda(
 		[MainInput, InInputs, InObjectIdx, WeakStaticMeshComboButton, UpdateGeometryObjectAt]()
 		{
-			TArray<const UClass*> AllowedClasses = UHoudiniInput::GetAllowedClasses(EHoudiniInputType::Geometry);
+			if (!IsValidWeakPointer(MainInput))
+				return SNullWidget::NullWidget;
+
+			TArray<const UClass*> AllowedClasses = UHoudiniInput::GetAllowedClasses(
+				EHoudiniInputType::Geometry, MainInput->IsCOPInput());
+
 			UObject* DefaultObj = MainInput->GetInputObjectAt(InObjectIdx);
 
 			TArray<UFactory*> NewAssetFactories;
@@ -6896,15 +7007,6 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 				FSimpleDelegate::CreateLambda([]() {}));
 		}));
 
-	// Add buttons
-	TSharedPtr<SHorizontalBox> ButtonHorizontalBox;
-	ComboAndButtonBox->AddSlot()
-	.FillHeight(1)
-	.Padding(0)
-	.VAlign(VAlign_Center)
-	[
-		SAssignNew(ButtonHorizontalBox, SHorizontalBox)
-	];
 
 	// Create tooltip.
 	FFormatNamedArguments Args;
@@ -6913,251 +7015,286 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 		LOCTEXT("BrowseToSpecificAssetInContentBrowser",
 			"Browse to '{Asset}' in the content browser."), Args);
 
-	// Button : Use selected in content browser
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		PropertyCustomizationHelpers::MakeUseSelectedButton(
-			FSimpleDelegate::CreateLambda([InInputs, InObjectIdx, UpdateGeometryObjectAt]()
-			{
-				if (GEditor)
-				{
-					TArray<FAssetData> CBSelections;
-					GEditor->GetContentBrowserSelections(CBSelections);
+	TSharedPtr<SHorizontalBox> ButtonHorizontalBox;
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::BrowseToSpecificAssetInContentBrowser);
+		// Add buttons
 
-					TArray<const UClass*> AllowedClasses = UHoudiniInput::GetAllowedClasses(EHoudiniInputType::Geometry);
-					int32 CurrentObjectIdx = InObjectIdx;
-					for (auto& CurAssetData : CBSelections)
-					{
-						UObject* Object = CurAssetData.GetAsset();
-						if (!IsValid(Object))
-							continue;
+		ComboAndButtonBox->AddSlot()
+			.FillHeight(1)
+			.Padding(0)
+			.VAlign(VAlign_Center)
+			[
+				SAssignNew(ButtonHorizontalBox, SHorizontalBox)
+			];
 
-						if (!UHoudiniInput::IsObjectAcceptable(EHoudiniInputType::Geometry, Object))
-							continue;
+	}
 
-						UpdateGeometryObjectAt(InInputs, CurrentObjectIdx++, Object, true);
-					}
-				}
-			}),
-			TAttribute<FText>(LOCTEXT("GeometryInputUseSelectedAssetFromCB", "Use the currently selected asset from the content browser.")))
-	];
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::GeometryInputUseSelectedAssetFromCB);
+		// Button : Use selected in content browser
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeUseSelectedButton(
+					FSimpleDelegate::CreateLambda([InInputs, InObjectIdx, UpdateGeometryObjectAt]()
+						{
+							if(GEditor)
+							{
+								TArray<FAssetData> CBSelections;
+								GEditor->GetContentBrowserSelections(CBSelections);
+
+								bool bIsCOPInput = false;
+								if (!InInputs.IsEmpty() && InInputs[0]->IsCOPInput())
+									bIsCOPInput = true;
+
+								int32 CurrentObjectIdx = InObjectIdx;
+								for(auto& CurAssetData : CBSelections)
+								{
+									UObject* Object = CurAssetData.GetAsset();
+									if(!IsValid(Object))
+										continue;
+
+									if(!UHoudiniInput::IsObjectAcceptable(EHoudiniInputType::Geometry, Object, bIsCOPInput))
+										continue;
+
+									UpdateGeometryObjectAt(InInputs, CurrentObjectIdx++, Object, true);
+								}
+							}
+						}),
+					TAttribute<FText>(LOCTEXT("GeometryInputUseSelectedAssetFromCB", "Use the currently selected asset from the content browser.")))
+			];
+	}
 
 	// Button : Browse Static Mesh
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		PropertyCustomizationHelpers::MakeBrowseButton(
-			FSimpleDelegate::CreateLambda([MainInput, InObjectIdx]()
-			{
-				UObject* InputObject = MainInput->GetInputObjectAt(InObjectIdx);
-				if (GEditor && InputObject)
-				{
-					TArray<UObject*> Objects;
-					Objects.Add(InputObject);
-					GEditor->SyncBrowserToObjects(Objects);
-				}
-			}),
-			TAttribute<FText>(StaticMeshTooltip))
-	];
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::BrowseButton);
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeBrowseButton(
+					FSimpleDelegate::CreateLambda([MainInput, InObjectIdx]()
+						{
+							UObject* InputObject = MainInput->GetInputObjectAt(InObjectIdx);
+							if(GEditor && InputObject)
+							{
+								TArray<UObject*> Objects;
+								Objects.Add(InputObject);
+								GEditor->SyncBrowserToObjects(Objects);
+							}
+						}),
+					TAttribute<FText>(StaticMeshTooltip))
+			];
+	}
 
-	// ButtonBox: Reset
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		PropertyCustomizationHelpers::MakeResetButton(
-			FSimpleDelegate::CreateLambda([UpdateGeometryObjectAt, InInputs, InObjectIdx]()
-			{
-				UpdateGeometryObjectAt(InInputs, InObjectIdx, nullptr, false);
-			}),
-			TAttribute<FText>(LOCTEXT("GeometryInputReset", "Reset this geometry input object.")))
-	];
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::TransformIcon);
+		// ButtonBox: Reset
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeResetButton(
+					FSimpleDelegate::CreateLambda([UpdateGeometryObjectAt, InInputs, InObjectIdx]()
+						{
+							UpdateGeometryObjectAt(InInputs, InObjectIdx, nullptr, false);
+						}),
+					TAttribute<FText>(LOCTEXT("GeometryInputReset", "Reset this geometry input object.")))
+			];
 
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		SNew(SButton)
-		.ToolTipText(LOCTEXT("TransformOffset", "Open transform offset menu below."))
-		.ButtonStyle(_GetEditorStyle(), "NoBorder")
-		.ContentPadding(0)
-		.Visibility(EVisibility::Visible)
-		.OnClicked_Lambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
-		{
-			if (!IsValidWeakPointer(MainInput))
-				return FReply::Handled();
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				SNew(SButton)
+					.ToolTipText(LOCTEXT("TransformOffset", "Open transform offset menu below."))
+					.ButtonStyle(_GetEditorStyle(), "NoBorder")
+					.ContentPadding(0)
+					.Visibility(EVisibility::Visible)
+					.OnClicked_Lambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
+						{
+							if(!IsValidWeakPointer(MainInput))
+								return FReply::Handled();
 
-			FScopedTransaction Transaction(
-				TEXT(HOUDINI_MODULE_EDITOR),
-				LOCTEXT("HoudiniInputChange", "Houdini Input: Toggling Transform Offset Menu for Geometry Input Object"),
-				MainInput->GetOuter());
+							FScopedTransaction Transaction(
+								TEXT(HOUDINI_MODULE_EDITOR),
+								LOCTEXT("HoudiniInputChange", "Houdini Input: Toggling Transform Offset Menu for Geometry Input Object"),
+								MainInput->GetOuter());
 
-			for (auto CurInput : InInputs)
-			{
-				if (!IsValidWeakPointer(CurInput))
-					continue;
+							for(auto CurInput : InInputs)
+							{
+								if(!IsValidWeakPointer(CurInput))
+									continue;
 
-				CurInput->OnTransformUIExpand(InObjectIdx);
-				CurInput->Modify();
-			}
+								CurInput->OnTransformUIExpand(InObjectIdx);
+								CurInput->Modify();
+							}
 
-			if (CategoryBuilder.IsParentLayoutValid())
-				CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+							if(CategoryBuilder.IsParentLayoutValid())
+								CategoryBuilder.GetParentLayout().ForceRefreshDetails();
 
-			return FReply::Handled();
-		})
-		[
-			SNew(SImage)
-			.Image(_GetEditorStyle().GetBrush("Icons.Transform"))
-			.ColorAndOpacity(FSlateColor(FColor(255, 255, 255, 168)))
-		]
-	];
+							return FReply::Handled();
+						})
+					[
+						SNew(SImage)
+							.Image(_GetEditorStyle().GetBrush("Icons.Transform"))
+							.ColorAndOpacity(FSlateColor(FColor(255, 255, 255, 168)))
+					]
+			];
+	}
 
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		PropertyCustomizationHelpers::MakeAddButton(
-			FSimpleDelegate::CreateLambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
-			{
-				if (!IsValidWeakPointer(MainInput))
-					return;
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::GeometryInputAdd);
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeAddButton(
+					FSimpleDelegate::CreateLambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
+						{
+							if(!IsValidWeakPointer(MainInput))
+								return;
 
-				FScopedTransaction Transaction(
-					TEXT(HOUDINI_MODULE_EDITOR),
-					LOCTEXT("HoudiniInputChange", "Houdini Input: Insert a Geometry Input Object"),
-					MainInput->GetOuter());
-				// Insert
-				for (auto CurInput : InInputs)
-				{
-					if (!IsValidWeakPointer(CurInput))
-						continue;
+							FScopedTransaction Transaction(
+								TEXT(HOUDINI_MODULE_EDITOR),
+								LOCTEXT("HoudiniInputChange", "Houdini Input: Insert a Geometry Input Object"),
+								MainInput->GetOuter());
+							// Insert
+							for(auto CurInput : InInputs)
+							{
+								if(!IsValidWeakPointer(CurInput))
+									continue;
 
-					CurInput->Modify();
-					CurInput->InsertInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
-				}
+								CurInput->Modify();
+								CurInput->InsertInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
+							}
 
-				if (CategoryBuilder.IsParentLayoutValid())
-					CategoryBuilder.GetParentLayout().ForceRefreshDetails();
-			}),
-			TAttribute<FText>(LOCTEXT("GeometryInputAdd", "Add a new geometry input object above.")))
-	];
+							if(CategoryBuilder.IsParentLayoutValid())
+								CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+						}),
+					TAttribute<FText>(LOCTEXT("GeometryInputAdd", "Add a new geometry input object above.")))
+			];
 
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		SNew(SButton)
-		.ToolTipText(LOCTEXT("DuplicateGeometryInputObject", "Duplicate this geometry input object."))
-		.ButtonStyle(_GetEditorStyle(), "NoBorder")
-		.ContentPadding(0)
-		.Visibility(EVisibility::Visible)
-		.OnClicked_Lambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
-		{
-			if (!IsValidWeakPointer(MainInput))
-				return FReply::Handled();
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				SNew(SButton)
+					.ToolTipText(LOCTEXT("DuplicateGeometryInputObject", "Duplicate this geometry input object."))
+					.ButtonStyle(_GetEditorStyle(), "NoBorder")
+					.ContentPadding(0)
+					.Visibility(EVisibility::Visible)
+					.OnClicked_Lambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
+						{
+							if(!IsValidWeakPointer(MainInput))
+								return FReply::Handled();
 
-			FScopedTransaction Transaction(
-				TEXT(HOUDINI_MODULE_EDITOR),
-				LOCTEXT("HoudiniInputChange", "Houdini Input: Duplicate a Geometry Input Object"),
-				MainInput->GetOuter());
+							FScopedTransaction Transaction(
+								TEXT(HOUDINI_MODULE_EDITOR),
+								LOCTEXT("HoudiniInputChange", "Houdini Input: Duplicate a Geometry Input Object"),
+								MainInput->GetOuter());
 
-			// Duplicate
-			for (auto CurInput : InInputs)
-			{
-				if (!IsValidWeakPointer(CurInput))
-					continue;
+							// Duplicate
+							for(auto CurInput : InInputs)
+							{
+								if(!IsValidWeakPointer(CurInput))
+									continue;
 
-				CurInput->Modify();
-				CurInput->DuplicateInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
-			}
+								CurInput->Modify();
+								CurInput->DuplicateInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
+							}
 
-			if (CategoryBuilder.IsParentLayoutValid())
-				CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+							if(CategoryBuilder.IsParentLayoutValid())
+								CategoryBuilder.GetParentLayout().ForceRefreshDetails();
 
-			return FReply::Handled();
-		})
-		[
-			SNew(SImage)
-			.Image(_GetEditorStyle().GetBrush("Icons.Duplicate"))
-			.ColorAndOpacity(FSlateColor(FColor(255, 255, 255, 168)))
-		]
-	];
+							return FReply::Handled();
+						})
+					[
+						SNew(SImage)
+							.Image(_GetEditorStyle().GetBrush("Icons.Duplicate"))
+							.ColorAndOpacity(FSlateColor(FColor(255, 255, 255, 168)))
+					]
+			];
+	}
 
-	ButtonHorizontalBox->AddSlot()
-	.AutoWidth()
-	.Padding(1, 0, 3, 0)
-	.VAlign(VAlign_Center)
-	[
-		PropertyCustomizationHelpers::MakeDeleteButton(
-			FSimpleDelegate::CreateLambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
-			{
-				if (!IsValidWeakPointer(MainInput))
-					return;
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::GeometryInputDelete);
+		ButtonHorizontalBox->AddSlot()
+			.AutoWidth()
+			.Padding(1, 0, 3, 0)
+			.VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeDeleteButton(
+					FSimpleDelegate::CreateLambda([&CategoryBuilder, MainInput, InInputs, InObjectIdx]()
+						{
+							if(!IsValidWeakPointer(MainInput))
+								return;
 
-				FScopedTransaction Transaction(
-					TEXT(HOUDINI_MODULE_EDITOR),
-					LOCTEXT("HoudiniInputChange", "Houdini Input: Delete a Geometry Input Object"),
-					MainInput->GetOuter());
+							FScopedTransaction Transaction(
+								TEXT(HOUDINI_MODULE_EDITOR),
+								LOCTEXT("HoudiniInputChange", "Houdini Input: Delete a Geometry Input Object"),
+								MainInput->GetOuter());
 
-				// Delete
-				for (auto CurInput : InInputs)
-				{
-					if (!IsValidWeakPointer(CurInput))
-						continue;
+							// Delete
+							for(auto CurInput : InInputs)
+							{
+								if(!IsValidWeakPointer(CurInput))
+									continue;
 
-					CurInput->Modify();
-					CurInput->DeleteInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
+								CurInput->Modify();
+								CurInput->DeleteInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
 
-					if (GEditor)
-						GEditor->RedrawAllViewports();
-				}
+								if(GEditor)
+									GEditor->RedrawAllViewports();
+							}
 
-				if (CategoryBuilder.IsParentLayoutValid())
-					CategoryBuilder.GetParentLayout().ForceRefreshDetails();
-			}),
-			TAttribute<FText>(LOCTEXT("GeometryInputDelete", "Delete this geometry input object.")))
-	];
+							if(CategoryBuilder.IsParentLayoutValid())
+								CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+						}),
+					TAttribute<FText>(LOCTEXT("GeometryInputDelete", "Delete this geometry input object.")))
+			];
 
-	
+	}
+
 	TSharedPtr<SVerticalBox> TransformOffset_VerticalBox;
 	
-	InVerticalBox->AddSlot()
-	.Padding(5, 0, 0, 0)
-	.AutoHeight()
-	[
-		SAssignNew(TransformOffset_VerticalBox, SVerticalBox)
-		.Visibility(MainInput->IsTransformUIExpanded(InObjectIdx) ? EVisibility::Visible : EVisibility::Collapsed)
-	];
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::GeoInputTransform);
+		InVerticalBox->AddSlot()
+			.Padding(5, 0, 0, 0)
+			.AutoHeight()
+			[
+				SAssignNew(TransformOffset_VerticalBox, SVerticalBox)
+					.Visibility(MainInput->IsTransformUIExpanded(InObjectIdx) ? EVisibility::Visible : EVisibility::Collapsed)
+			];
 
-	TransformOffset_VerticalBox->AddSlot()
-	.Padding(0, 2)
-	.AutoHeight()
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.Padding(1)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("GeoInputTransform", "Transform Offset"))
-			.ToolTipText(LOCTEXT("GeoInputTransformTooltip", "Transform offset used for correction before sending the asset to Houdini."))
-			.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-		]
-	];
-
+		TransformOffset_VerticalBox->AddSlot()
+			.Padding(0, 2)
+			.AutoHeight()
+			[
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.Padding(1)
+					.VAlign(VAlign_Center)
+					.AutoWidth()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GeoInputTransform", "Transform Offset"))
+							.ToolTipText(LOCTEXT("GeoInputTransformTooltip", "Transform offset used for correction before sending the asset to Houdini."))
+							.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+					]
+			];
+	}
 	// Lambda for changing the transform values
-	auto ChangeTransformOffsetAt = [&](float Value, int32 AtIndex, int32 PosRotScaleIndex, int32 XYZIndex, bool DoChange, const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs)
+	auto ChangeTransformOffsetAt = [InInputs](float Value, int32 AtIndex, int32 PosRotScaleIndex, int32 XYZIndex, bool DoChange)
 	{
 		// Record a transaction for undo/redo
 		FScopedTransaction Transaction(
@@ -7198,320 +7335,380 @@ FHoudiniInputDetails::Helper_CreateGeometryInputObjectExpanded(
 	bool bResetButtonVisibleRotation = false;
 	bool bResetButtonVisibleScale = false;
 
-	for (auto& CurInput : InInputs)
 	{
-		if (!IsValidWeakPointer(CurInput))
-			continue;
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::ResetButton);
+		for(auto& CurInput : InInputs)
+		{
+			if(!IsValidWeakPointer(CurInput))
+				continue;
 
-		FTransform* CurTransform = CurInput->GetTransformOffset(InObjectIdx);
-		if (!CurTransform)
-			continue;
+			FTransform* CurTransform = CurInput->GetTransformOffset(InObjectIdx);
+			if(!CurTransform)
+				continue;
 
-		if (CurTransform->GetLocation() != FVector3d::ZeroVector)
-			bResetButtonVisiblePosition = true;
+			if(CurTransform->GetLocation() != FVector3d::ZeroVector)
+				bResetButtonVisiblePosition = true;
 
-		FRotator Rotator = CurTransform->Rotator();
-		if (Rotator.Roll != 0 || Rotator.Pitch != 0 || Rotator.Yaw != 0)
-			bResetButtonVisibleRotation = true;
+			FRotator Rotator = CurTransform->Rotator();
+			if(Rotator.Roll != 0 || Rotator.Pitch != 0 || Rotator.Yaw != 0)
+				bResetButtonVisibleRotation = true;
 
-		if (CurTransform->GetScale3D() != FVector3d::OneVector)
-			bResetButtonVisibleScale = true;
+			if(CurTransform->GetScale3D() != FVector3d::OneVector)
+				bResetButtonVisibleScale = true;
+		}
 	}
 
-	auto ChangeTransformOffsetUniformlyAt = [InObjectIdx, InInputs, ChangeTransformOffsetAt](const float& Val, const int32& PosRotScaleIndex)
+	auto ChangeTransformOffsetUniformlyAt = [InObjectIdx, ChangeTransformOffsetAt](const float& Val, const int32& PosRotScaleIndex)
 	{
-		ChangeTransformOffsetAt(Val, InObjectIdx, PosRotScaleIndex, 0, true, InInputs);
-		ChangeTransformOffsetAt(Val, InObjectIdx, PosRotScaleIndex, 1, true, InInputs);
-		ChangeTransformOffsetAt(Val, InObjectIdx, PosRotScaleIndex, 2, true, InInputs);
+		ChangeTransformOffsetAt(Val, InObjectIdx, PosRotScaleIndex, 0, true);
+		ChangeTransformOffsetAt(Val, InObjectIdx, PosRotScaleIndex, 1, true);
+		ChangeTransformOffsetAt(Val, InObjectIdx, PosRotScaleIndex, 2, true);
 	};
 
-	TransformOffset_VerticalBox->AddSlot()
-	.Padding(0, 2)
-	.AutoHeight()
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.Padding(1.0f)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("GeoInputTranslate", "T"))
-			.ToolTipText(LOCTEXT("GeoInputTranslateTooltip", "Translate"))
-			.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-		]
-		+ SHorizontalBox::Slot()
-		.FillWidth(1.0f)
-		[
-			SNew(SVectorInputBox)
-			.bColorAxisLabels(true)
-			.AllowSpin(true)
-			.X(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetPositionOffsetX, InObjectIdx)))
-			.Y(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetPositionOffsetY, InObjectIdx)))
-			.Z(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetPositionOffsetZ, InObjectIdx)))
-			.OnXCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-				{ ChangeTransformOffsetAt(Val, InObjectIdx, 0, 0, true, InInputs); })
-			.OnYCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-				{ ChangeTransformOffsetAt(Val, InObjectIdx, 0, 1, true, InInputs); })
-			.OnZCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-				{ ChangeTransformOffsetAt(Val, InObjectIdx, 0, 2, true, InInputs); })
-		]
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.HAlign(HAlign_Right)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			.HAlign(HAlign_Right)
-			.VAlign(VAlign_Center)
-			.Padding(0)
-			[
-				SNew(SButton)
-				.ButtonStyle(_GetEditorStyle(), "NoBorder")
-				.ClickMethod(EButtonClickMethod::MouseDown)
-				.Visibility(EVisibility::Hidden)
-				[
-					SNew(SImage)
-					.Image(_GetEditorStyle().GetBrush("Icons.Lock"))
-				]
-			]
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			.HAlign(HAlign_Left)
-			.VAlign(VAlign_Center)
-			.Padding(0)
-			[
-				SNew(SButton)
-				.ButtonStyle(_GetEditorStyle(), "NoBorder")
-				.ClickMethod(EButtonClickMethod::MouseDown)
-				.ToolTipText(LOCTEXT("GeoInputResetButtonToolTip", "Reset To Default"))
-				.Visibility(bResetButtonVisiblePosition ? EVisibility::Visible : EVisibility::Hidden)
-				[
-					SNew(SImage)
-					.Image(_GetEditorStyle().GetBrush("PropertyWindow.DiffersFromDefault"))
-				]
-				.OnClicked_Lambda([MainInput, ChangeTransformOffsetUniformlyAt, &CategoryBuilder]()
-				{
-					ChangeTransformOffsetUniformlyAt(0.0f, 0);
-					if (CategoryBuilder.IsParentLayoutValid())
-						CategoryBuilder.GetParentLayout().ForceRefreshDetails();
 
-					return FReply::Handled();
-				})
-			]
-		]
-	];
-
-	// Rotation
-	TransformOffset_VerticalBox->AddSlot()
-	.Padding(0, 2)
-	.AutoHeight()
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.Padding(1.0f)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("GeoInputRotate", "R"))
-			.ToolTipText(LOCTEXT("GeoInputRotateTooltip", "Rotate"))
-			.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-		]
-		+ SHorizontalBox::Slot()
-		.FillWidth(1.0f)
-		[
-			SNew(SRotatorInputBox)
-			.AllowSpin(true)
-			.bColorAxisLabels(true)
-			.Roll(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetUserInputRoll, InObjectIdx)))
-			.Pitch(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetUserInputPitch, InObjectIdx)))
-			.Yaw(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetUserInputYaw, InObjectIdx)))
-			.OnRollCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-				{ ChangeTransformOffsetAt(Val, InObjectIdx, 1, 0, true, InInputs); })
-			.OnPitchCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-				{ ChangeTransformOffsetAt(Val, InObjectIdx, 1, 1, true, InInputs); })
-			.OnYawCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-				{ ChangeTransformOffsetAt(Val, InObjectIdx, 1, 2, true, InInputs); })
-		]
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.HAlign(HAlign_Right)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().HAlign(HAlign_Right).VAlign(VAlign_Center).Padding(0.0f)
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::TransformPosition);
+		TransformOffset_VerticalBox->AddSlot()
+			.Padding(0, 2)
+			.AutoHeight()
 			[
-				SNew(SButton)
-				.ButtonStyle(_GetEditorStyle(), "NoBorder")
-				.ClickMethod(EButtonClickMethod::MouseDown)
-				.Visibility(EVisibility::Hidden)
-				[
-					SNew(SImage)
-					.Image(_GetEditorStyle().GetBrush("Icons.Lock"))
-				]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(0.0f)
-			[
-				SNew(SButton)
-				.ButtonStyle(_GetEditorStyle(), "NoBorder")
-				.ClickMethod(EButtonClickMethod::MouseDown)
-				.ToolTipText(LOCTEXT("GeoInputResetButtonToolTip", "Reset To Default"))
-				.Visibility(bResetButtonVisibleRotation ? EVisibility::Visible : EVisibility::Hidden)
-				[
-					SNew(SImage)
-					.Image(_GetEditorStyle().GetBrush("PropertyWindow.DiffersFromDefault"))
-				]
-				.OnClicked_Lambda([ChangeTransformOffsetUniformlyAt, MainInput, &CategoryBuilder]()
-				{
-					ChangeTransformOffsetUniformlyAt(0.0f, 1);
-					if (CategoryBuilder.IsParentLayoutValid())
-						CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.Padding(1.0f)
+					.VAlign(VAlign_Center)
+					.AutoWidth()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GeoInputTranslate", "T"))
+							.ToolTipText(LOCTEXT("GeoInputTranslateTooltip", "Translate"))
+							.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+					]
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+					[
+						SNew(SVectorInputBox)
+							.bColorAxisLabels(true)
+							.AllowSpin(true)
+							.X_Lambda([=]()
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetPositionOffsetX(InObjectIdx);
+									else
+										return 0.0f;
 
-					return FReply::Handled();
-				})
-			]
-		]
-	];
+								})
+							.Y_Lambda([=]()
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetPositionOffsetY(InObjectIdx);
+									else
+										return 0.0f;
+
+								})
+							.Z_Lambda([=]()
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetPositionOffsetZ(InObjectIdx);
+									else
+										return 0.0f;
+
+								})
+							.OnXCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{ ChangeTransformOffsetAt(Val, InObjectIdx, 0, 0, true); })
+							.OnYCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{ ChangeTransformOffsetAt(Val, InObjectIdx, 0, 1, true); })
+							.OnZCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{ ChangeTransformOffsetAt(Val, InObjectIdx, 0, 2, true); })
+					]
+				+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.HAlign(HAlign_Right)
+					[
+						SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot()
+							.AutoWidth()
+							.HAlign(HAlign_Right)
+							.VAlign(VAlign_Center)
+							.Padding(0)
+							[
+								SNew(SButton)
+									.ButtonStyle(_GetEditorStyle(), "NoBorder")
+									.ClickMethod(EButtonClickMethod::MouseDown)
+									.Visibility(EVisibility::Hidden)
+									[
+										SNew(SImage)
+											.Image(_GetEditorStyle().GetBrush("Icons.Lock"))
+									]
+							]
+						+ SHorizontalBox::Slot()
+							.AutoWidth()
+							.HAlign(HAlign_Left)
+							.VAlign(VAlign_Center)
+							.Padding(0)
+							[
+								SNew(SButton)
+									.ButtonStyle(_GetEditorStyle(), "NoBorder")
+									.ClickMethod(EButtonClickMethod::MouseDown)
+									.ToolTipText(LOCTEXT("GeoInputResetButtonToolTip", "Reset To Default"))
+									.Visibility(bResetButtonVisiblePosition ? EVisibility::Visible : EVisibility::Hidden)
+									[
+										SNew(SImage)
+											.Image(_GetEditorStyle().GetBrush("PropertyWindow.DiffersFromDefault"))
+									]
+									.OnClicked_Lambda([MainInput, ChangeTransformOffsetUniformlyAt, &CategoryBuilder]()
+										{
+											ChangeTransformOffsetUniformlyAt(0.0f, 0);
+											if(CategoryBuilder.IsParentLayoutValid())
+												CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+
+											return FReply::Handled();
+										})
+							]
+					]
+			];
+	}
+
+
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::TransformRotate);
+		// Rotation
+		TransformOffset_VerticalBox->AddSlot()
+			.Padding(0, 2)
+			.AutoHeight()
+			[
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.Padding(1.0f)
+					.VAlign(VAlign_Center)
+					.AutoWidth()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GeoInputRotate", "R"))
+							.ToolTipText(LOCTEXT("GeoInputRotateTooltip", "Rotate"))
+							.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+					]
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+
+					[
+						SNew(SRotatorInputBox)
+						.AllowSpin(true)
+							.bColorAxisLabels(true)
+
+							.Roll_Lambda([=]()
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetUserInputRoll(InObjectIdx);
+									else
+										return 0.0f;
+
+								})
+							.Pitch_Lambda([=]()  -> TOptional<float>
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetUserInputPitch(InObjectIdx);
+									else
+										return 0.0f;
+								})
+							.Yaw_Lambda([=]()  -> TOptional<float>
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetUserInputYaw(InObjectIdx);
+									else
+										return 0.0f;
+								})
+							.OnRollCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{ ChangeTransformOffsetAt(Val, InObjectIdx, 1, 0, true); })
+							.OnPitchCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{ ChangeTransformOffsetAt(Val, InObjectIdx, 1, 1, true); })
+							.OnYawCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{ ChangeTransformOffsetAt(Val, InObjectIdx, 1, 2, true); })
+					]
+				+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.HAlign(HAlign_Right)
+					[
+						SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().HAlign(HAlign_Right).VAlign(VAlign_Center).Padding(0.0f)
+							[
+								SNew(SButton)
+									.ButtonStyle(_GetEditorStyle(), "NoBorder")
+									.ClickMethod(EButtonClickMethod::MouseDown)
+									.Visibility(EVisibility::Hidden)
+									[
+										SNew(SImage)
+											.Image(_GetEditorStyle().GetBrush("Icons.Lock"))
+									]
+							]
+						+ SHorizontalBox::Slot().AutoWidth().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(0.0f)
+							[
+								SNew(SButton)
+									.ButtonStyle(_GetEditorStyle(), "NoBorder")
+									.ClickMethod(EButtonClickMethod::MouseDown)
+									.ToolTipText(LOCTEXT("GeoInputResetButtonToolTip", "Reset To Default"))
+									.Visibility(bResetButtonVisibleRotation ? EVisibility::Visible : EVisibility::Hidden)
+									[
+										SNew(SImage)
+											.Image(_GetEditorStyle().GetBrush("PropertyWindow.DiffersFromDefault"))
+									]
+									.OnClicked_Lambda([ChangeTransformOffsetUniformlyAt, &CategoryBuilder]()
+										{
+											ChangeTransformOffsetUniformlyAt(0.0f, 1);
+											if(CategoryBuilder.IsParentLayoutValid())
+												CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+
+											return FReply::Handled();
+										})
+							]
+					]
+			];
+	}
 
 	bool bLocked = false;
 	if (HoudiniInputObject)
 		bLocked = HoudiniInputObject->IsUniformScaleLocked();
 
-	TransformOffset_VerticalBox->AddSlot()
-	.Padding(0, 2)
-	.AutoHeight()
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.Padding(1.0f)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SNew(STextBlock)
-			.Text(LOCTEXT("GeoInputScale", "S"))
-			.ToolTipText(LOCTEXT("GeoInputScaleTooltip", "Scale"))
-			.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-		]
-		+ SHorizontalBox::Slot()
-		.FillWidth(1.0f)
-		[
-			SNew(SVectorInputBox)
-			.bColorAxisLabels(true)
-			.X(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetScaleOffsetX, InObjectIdx)))
-			.Y(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetScaleOffsetY, InObjectIdx)))
-			.Z(TAttribute<TOptional<float>>::Create(
-				TAttribute<TOptional<float>>::FGetter::CreateUObject(
-					MainInput.Get(), &UHoudiniInput::GetScaleOffsetZ, InObjectIdx)))
-			.OnXCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-			{
-				if (bLocked)
-					ChangeTransformOffsetUniformlyAt(Val, 2);
-				else
-					ChangeTransformOffsetAt(Val, InObjectIdx, 2, 0, true, InInputs);
-			})
-			.OnYCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-			{
-				if (bLocked)
-					ChangeTransformOffsetUniformlyAt(Val, 2);
-				else
-					ChangeTransformOffsetAt(Val, InObjectIdx, 2, 1, true, InInputs);
-			})
-			.OnZCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
-			{
-				if (bLocked)
-					ChangeTransformOffsetUniformlyAt(Val, 2);
-				else
-					ChangeTransformOffsetAt(Val, InObjectIdx, 2, 2, true, InInputs);
-			})
-		]
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.HAlign(HAlign_Right)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			.HAlign(HAlign_Right)
-			.VAlign(VAlign_Center)
-			.Padding(0)
+
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniInputDetails::TransformScale);
+		TransformOffset_VerticalBox->AddSlot()
+			.Padding(0, 2)
+			.AutoHeight()
 			[
-				SNew(SButton)
-				.ButtonStyle(_GetEditorStyle(), "NoBorder")
-				.ToolTipText(HoudiniInputObject ?
-					LOCTEXT("GeoInputLockButtonToolTip", "When locked, scales uniformly based on the current xyz scale values so the input object maintains its shape in each direction when scaled") :
-					LOCTEXT("GeoInputLockButtonToolTipNoObject", "No input object selected"))
-				.ClickMethod(EButtonClickMethod::MouseDown)
-				.Visibility(EVisibility::Visible)
-				[
-					SNew(SImage)
-					.Image(bLocked ? _GetEditorStyle().GetBrush("Icons.Lock") : _GetEditorStyle().GetBrush("Icons.Unlock"))
-				]
-				.OnClicked_Lambda([InInputs, MainInput, InObjectIdx, HoudiniInputObject, &CategoryBuilder]()
-				{
-					for (auto& CurInput : InInputs)
-					{
-						if (!IsValidWeakPointer(CurInput))
-							continue;
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.Padding(1.0f)
+					.VAlign(VAlign_Center)
+					.AutoWidth()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GeoInputScale", "S"))
+							.ToolTipText(LOCTEXT("GeoInputScaleTooltip", "Scale"))
+							.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+					]
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+					[
+						SNew(SVectorInputBox)
+							.bColorAxisLabels(true)
+							.X_Lambda([MainInput, InObjectIdx]()
+							{
+								if(MainInput.IsValid())
+									return MainInput.Get()->GetScaleOffsetX(InObjectIdx);
+								else 
+									return 0.0f;
 
-						UHoudiniInputObject* CurInputObject = CurInput->GetHoudiniInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
-						if (!IsValid(CurInputObject))
-							continue;
+							})
+							.Y_Lambda([MainInput, InObjectIdx]()
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetScaleOffsetY(InObjectIdx);
+									else
+										return 0.0f;
 
-						CurInputObject->SwitchUniformScaleLock();
-					}
+								})
+							.Z_Lambda([MainInput, InObjectIdx]()
+								{
+									if(MainInput.IsValid())
+										return MainInput.Get()->GetScaleOffsetZ(InObjectIdx);
+									else
+										return 0.0f;
 
-					if (HoudiniInputObject)
-					{
-						if (CategoryBuilder.IsParentLayoutValid())
-							CategoryBuilder.GetParentLayout().ForceRefreshDetails();
-					}
+								})
+							.OnXCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{
+									if(bLocked)
+										ChangeTransformOffsetUniformlyAt(Val, 2);
+									else
+										ChangeTransformOffsetAt(Val, InObjectIdx, 2, 0, true);
+								})
+							.OnYCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{
+									if(bLocked)
+										ChangeTransformOffsetUniformlyAt(Val, 2);
+									else
+										ChangeTransformOffsetAt(Val, InObjectIdx, 2, 1, true);
+								})
+							.OnZCommitted_Lambda([=](float Val, ETextCommit::Type TextCommitType)
+								{
+									if(bLocked)
+										ChangeTransformOffsetUniformlyAt(Val, 2);
+									else
+										ChangeTransformOffsetAt(Val, InObjectIdx, 2, 2, true);
+								})
+					]
+				+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.HAlign(HAlign_Right)
+					[
+						SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot()
+							.AutoWidth()
+							.HAlign(HAlign_Right)
+							.VAlign(VAlign_Center)
+							.Padding(0)
+							[
+								SNew(SButton)
+									.ButtonStyle(_GetEditorStyle(), "NoBorder")
+									.ToolTipText(HoudiniInputObject ?
+										LOCTEXT("GeoInputLockButtonToolTip", "When locked, scales uniformly based on the current xyz scale values so the input object maintains its shape in each direction when scaled") :
+										LOCTEXT("GeoInputLockButtonToolTipNoObject", "No input object selected"))
+									.ClickMethod(EButtonClickMethod::MouseDown)
+									.Visibility(EVisibility::Visible)
+									[
+										SNew(SImage)
+											.Image(bLocked ? _GetEditorStyle().GetBrush("Icons.Lock") : _GetEditorStyle().GetBrush("Icons.Unlock"))
+									]
+									.OnClicked_Lambda([InInputs, MainInput, InObjectIdx, HoudiniInputObject, &CategoryBuilder]()
+										{
+											for(auto& CurInput : InInputs)
+											{
+												if(!IsValidWeakPointer(CurInput))
+													continue;
 
-					return FReply::Handled();
-				})
-			]
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			.HAlign(HAlign_Left)
-			.VAlign(VAlign_Center)
-			.Padding(0)
-			[
-				SNew(SButton)
-				.ButtonStyle(_GetEditorStyle(), "NoBorder")
-				.ClickMethod(EButtonClickMethod::MouseDown)
-				.ToolTipText(LOCTEXT("GeoInputResetButtonToolTip", "Reset To Default"))
-				.Visibility(bResetButtonVisibleScale ? EVisibility::Visible : EVisibility::Hidden)
-				[
-					SNew(SImage)
-					.Image(_GetEditorStyle().GetBrush("PropertyWindow.DiffersFromDefault"))
-				]
-				.OnClicked_Lambda([ChangeTransformOffsetUniformlyAt, MainInput, &CategoryBuilder]()
-				{
-					ChangeTransformOffsetUniformlyAt(1.0f, 2);
-					if (CategoryBuilder.IsParentLayoutValid())
-						CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+												UHoudiniInputObject* CurInputObject = CurInput->GetHoudiniInputObjectAt(EHoudiniInputType::Geometry, InObjectIdx);
+												if(!IsValid(CurInputObject))
+													continue;
 
-					return FReply::Handled();
-				})
-			]
-		]
-	];
+												CurInputObject->SwitchUniformScaleLock();
+											}
+
+											if(HoudiniInputObject)
+											{
+												if(CategoryBuilder.IsParentLayoutValid())
+													CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+											}
+
+											return FReply::Handled();
+										})
+							]
+						+ SHorizontalBox::Slot()
+							.AutoWidth()
+							.HAlign(HAlign_Left)
+							.VAlign(VAlign_Center)
+							.Padding(0)
+							[
+								SNew(SButton)
+									.ButtonStyle(_GetEditorStyle(), "NoBorder")
+									.ClickMethod(EButtonClickMethod::MouseDown)
+									.ToolTipText(LOCTEXT("GeoInputResetButtonToolTip", "Reset To Default"))
+									.Visibility(bResetButtonVisibleScale ? EVisibility::Visible : EVisibility::Hidden)
+									[
+										SNew(SImage)
+											.Image(_GetEditorStyle().GetBrush("PropertyWindow.DiffersFromDefault"))
+									]
+									.OnClicked_Lambda([ChangeTransformOffsetUniformlyAt, MainInput, &CategoryBuilder]()
+										{
+											ChangeTransformOffsetUniformlyAt(1.0f, 2);
+											if(CategoryBuilder.IsParentLayoutValid())
+												CategoryBuilder.GetParentLayout().ForceRefreshDetails();
+
+											return FReply::Handled();
+										})
+							]
+					]
+			];
+	}
 }
 
 FReply
@@ -7890,6 +8087,20 @@ FHoudiniInputDetails::Helper_CancelWorldSelection(const TArray<TWeakObjectPtr<UH
 	}
 
 	return true;
+}
+
+bool FHoudiniInputDetails::IsInsidePCG(const TArray<TWeakObjectPtr<UHoudiniInput>>& InInputs)
+{
+	if(InInputs.IsEmpty() || !InInputs[0].IsValid())
+		return false;
+
+	UHoudiniCookable* HC = InInputs[0]->GetTypedOuter<UHoudiniCookable>();
+
+	if(!HC || !HC->GetIsPCG())
+		return false;
+	else
+		return true;
+
 }
 
 #undef LOCTEXT_NAMESPACE

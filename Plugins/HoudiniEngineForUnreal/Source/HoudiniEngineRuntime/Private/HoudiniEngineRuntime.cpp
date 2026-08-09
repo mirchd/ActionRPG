@@ -28,6 +28,8 @@
 #include "HoudiniEngineRuntimePrivatePCH.h"
 #include "HoudiniRuntimeSettings.h"
 
+#include "HoudiniAssetBlueprintComponent.h"
+
 #include "Modules/ModuleManager.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE 
@@ -230,6 +232,9 @@ FHoudiniEngineRuntime::CleanUpRegisteredHoudiniCookables()
 bool
 FHoudiniEngineRuntime::IsCookableRegistered(UHoudiniCookable* HC) const
 {
+	if (HC && RegisteredHoudiniCookables.Num() == 0)
+		return false;
+
 	// No need for duplicates
 	if (HC && RegisteredHoudiniCookables.Find(HC) != INDEX_NONE)
 		return true;
@@ -250,7 +255,13 @@ FHoudiniEngineRuntime::RegisterHoudiniCookable(UHoudiniCookable* HC, bool bAllow
 	// RF_Transient indicates a temporary/preview object
 	// No need to instantiate/cook those in Houdini
 	// RF_ArchetypeObject is the template for blueprinted HDA, so we need to be able to register those.
-	if (HC->HasAnyFlags(RF_Transient) || (HC->HasAnyFlags(RF_ArchetypeObject) && !bAllowArchetype) || HC->HasAnyFlags(RF_ClassDefaultObject))
+	if (HC->HasAnyFlags(RF_Transient))
+		return;
+	
+	if ((HC->HasAnyFlags(RF_ArchetypeObject) && !bAllowArchetype))
+		return;
+
+	if (HC->HasAnyFlags(RF_ClassDefaultObject))
 		return;
 
 	// No need for duplicates
@@ -368,5 +379,19 @@ bool IsHoudiniPCGLoggingEnabled()
 	bool Enabled = CVarHoudiniPCGLogging.GetValueOnAnyThread() != 0;
 	return Enabled;
 }
+
+static TAutoConsoleVariable<int32> CVarHoudiniPDGLogging(
+	TEXT("Houdini.PDGLogging"),
+	0, // default value
+	TEXT("Enable (1) or disable (0) PDG Logging."),
+	ECVF_Default
+);
+
+bool IsHoudiniPDGLoggingEnabled()
+{
+	bool Enabled = CVarHoudiniPDGLogging.GetValueOnAnyThread() != 0;
+	return Enabled;
+}
+
 #undef LOCTEXT_NAMESPACE
 

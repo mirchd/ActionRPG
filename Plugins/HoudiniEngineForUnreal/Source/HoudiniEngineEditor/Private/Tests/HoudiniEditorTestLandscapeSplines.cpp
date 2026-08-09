@@ -41,13 +41,14 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "HoudiniEditorUnitTestUtils.h"
 #include "LandscapeEdit.h"
+#include "HoudiniEditorTests.h"
 
 IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestLandscapeSplines_Simple, "Houdini.UnitTests.LandscapeSplines.Simple", 
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext  | EAutomationTestFlags::ProductFilter)
 
 bool FHoudiniEditorTestLandscapeSplines_Simple::RunTest(const FString& Parameters)
 {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6
+#if !DISABLE_LANDSCAPE_RELATED_TEST
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// This test various aspects of Landscapes Splines.
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -134,7 +135,7 @@ IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestLandscapeSplines_Worl
 
 bool FHoudiniEditorTestLandscapeSplines_WorldPartition::RunTest(const FString& Parameters)
 {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6
+#if !DISABLE_LANDSCAPE_RELATED_TEST
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// This test various aspects of Landscapes.
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -210,6 +211,98 @@ bool FHoudiniEditorTestLandscapeSplines_WorldPartition::RunTest(const FString& P
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// Done
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#endif
+	return true;
+}
+
+IMPLEMENT_SIMPLE_HOUDINI_AUTOMATION_TEST(FHoudiniEditorTestLandscapeSplineMeshes_Simple, "Houdini.UnitTests.LandscapeSplines.Meshes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProductFilter)
+
+	bool FHoudiniEditorTestLandscapeSplineMeshes_Simple::RunTest(const FString& Parameters)
+{
+#if !DISABLE_LANDSCAPE_RELATED_TEST
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	/// This test various aspects of Landscapes Splines.
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	/// Make sure we have a Houdini Session before doing anything.
+	FHoudiniEditorTestUtils::CreateSessionIfInvalidWithLatentRetries(this, FHoudiniEditorTestUtils::HoudiniEngineSessionPipeName, {}, {});
+
+	// Now create the test context.
+	TSharedPtr<FHoudiniTestContext> Context(new FHoudiniTestContext(this, TEXT("/Game/TestHDAs/LandscapeSplines/Test_LandscapeSplineMeshes"), FTransform::Identity, false));
+	HOUDINI_TEST_EQUAL_ON_FAIL(Context->IsValid(), true, return false);
+
+	Context->SetProxyMeshEnabled(false);
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Create a small landscape and check it loads.
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
+		{
+			//	SET_HDA_PARAMETER(Context, UHoudiniParameterInt, "size", LandscapeSize, 0);
+			Context->StartCookingHDA();
+			return true;
+		}));
+
+	AddCommand(new FHoudiniLatentTestCommand(Context, [this, Context]()
+		{
+			TArray<UHoudiniOutput*> Outputs;
+			Context->GetOutputs(Outputs);
+
+			// We should have two outputs, two meshes
+			HOUDINI_TEST_EQUAL_ON_FAIL(Outputs.Num(), 2, return true);
+
+			TArray<UHoudiniLandscapeSplinesOutput*> SplineOutputs = FHoudiniEditorUnitTestUtils::GetOutputsWithObject<UHoudiniLandscapeSplinesOutput>(Outputs);
+			HOUDINI_TEST_EQUAL_ON_FAIL(SplineOutputs.Num(), 1, return true);
+
+			TArray<UHoudiniLandscapeTargetLayerOutput*> LandscapeOutputs = FHoudiniEditorUnitTestUtils::GetOutputsWithObject<UHoudiniLandscapeTargetLayerOutput>(Outputs);
+			HOUDINI_TEST_EQUAL(LandscapeOutputs.Num(), 1);
+			ALandscape* LandscapeActor = LandscapeOutputs[0]->Landscape;
+
+			//
+			// Check control points. 6 are specified in the Test HDA but only 4 should be output (the first and last + those marked
+			// with >= 0 ids).
+			//
+
+			ULandscapeSplinesComponent* SplineComponent = SplineOutputs[0]->GetLandscapeSplinesComponent();
+			auto ControlPoints = SplineComponent->GetControlPoints();
+
+			FTransform Transform = SplineComponent->GetComponentTransform();
+			HOUDINI_TEST_EQUAL_ON_FAIL(ControlPoints.Num(), 4, return true);
+			TArray<FVector> Positions;
+			for (int Index = 0; Index < ControlPoints.Num(); Index++)
+			{
+				Positions.Add(Transform.TransformPosition(ControlPoints[Index]->Location));
+			}
+			HOUDINI_TEST_EQUAL(Positions[0], FVector(-50000.0f, -50000.0f, 0.0f), 0.1f);
+			HOUDINI_TEST_EQUAL(Positions[1], FVector(0.0f, -50000.0f, 0.0f), 0.1f);
+			HOUDINI_TEST_EQUAL(Positions[2], FVector(0.0f, 50000.0f, 0.0f), 0.1f);
+			HOUDINI_TEST_EQUAL(Positions[3], FVector(0.0f, 0.0f, 0.0f), 0.1f);
+
+			HOUDINI_TEST_EQUAL(IsValid(ControlPoints[1]->Mesh), true);
+			HOUDINI_TEST_EQUAL(ControlPoints[1]->MeshScale, FVector(99.0, 99.0, 99.0));
+
+			//
+			// Check segments
+			//
+			auto Segments = SplineComponent->GetSegments();
+			HOUDINI_TEST_EQUAL_ON_FAIL(Segments.Num(), 3, return true);
+
+			HOUDINI_TEST_EQUAL(Segments[0]->SplineMeshes.Num(), 1);
+			HOUDINI_TEST_NOT_NULL(Segments[0]->SplineMeshes[0].Mesh.Get());
+			HOUDINI_TEST_EQUAL(Segments[0]->SplineMeshes[0].bScaleToWidth, false);
+			HOUDINI_TEST_EQUAL(Segments[0]->SplineMeshes[0].bCenterH, true);
+			HOUDINI_TEST_EQUAL(Segments[0]->bCastShadow, false);
+			return true;
+		}));
+
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	/// Done
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///
 
 #endif
 	return true;

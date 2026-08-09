@@ -35,7 +35,7 @@
 UENUM()
 enum class EHoudiniAssetState : uint8
 {
-	// Loaded / Duplicated HDA,
+	// Imported / Duplicated HDA,
 	// Will need to be instantiated upon change/update
 	NeedInstantiation,
 
@@ -53,6 +53,9 @@ enum class EHoudiniAssetState : uint8
 
 	// Cooking task in progress
 	Cooking,
+
+	// Cooking cancel request in progress
+	Cancelling,
 
 	// Cooking has finished
 	PostCook,

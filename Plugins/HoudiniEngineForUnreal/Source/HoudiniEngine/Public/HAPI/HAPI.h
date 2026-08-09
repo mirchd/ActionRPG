@@ -77,7 +77,7 @@ HAPI_DECL HAPI_CreateInProcessSession( HAPI_Session * session,
 ///
 /// @param[in]      log_file
 ///                 When a filepath is provided for this argument, all logs will
-///                 be appended to the specified file. The specfied path must be
+///                 be appended to the specified file. The specified path must be
 ///                 an absolute path. The server will create any intermediate
 ///                 directories in the filepath that do not already exist. When
 ///                 this argument is NULL/nullptr, logging will be directed to
@@ -549,7 +549,7 @@ HAPI_DECL HAPI_GetSessionEnvInt( const HAPI_Session * session,
 ///                 <!-- default NULL -->
 ///
 /// @param[in]      variable_name
-///                 Name of the environmnet variable.
+///                 Name of the environment variable.
 ///                 <!-- string -->
 ///
 /// @param[out]     value
@@ -570,7 +570,7 @@ HAPI_DECL HAPI_GetServerEnvInt( const HAPI_Session * session,
 ///                 <!-- default NULL -->
 ///
 /// @param[in]      variable_name
-///                 Name of the environmnet variable.
+///                 Name of the environment variable.
 ///                 <!-- string -->
 ///
 /// @param[out]     value
@@ -679,7 +679,7 @@ HAPI_DECL HAPI_SetServerEnvInt( const HAPI_Session * session,
 ///                 <!-- default NULL -->
 ///
 /// @param[in]      variable_name
-///                 Name of the environmnet variable.
+///                 Name of the environment variable.
 ///                 <!-- string -->
 ///
 /// @param[in]      value
@@ -899,7 +899,7 @@ HAPI_DECL HAPI_GetComposedNodeCookResult( const HAPI_Session * session,
 ///             Preferred verbosity level.
 ///
 /// @param[out] buffer_length
-///             Lenght of buffer char array ready to be filled.
+///             Length of buffer char array ready to be filled.
 ///
 HAPI_DECL HAPI_GetNodeCookResultLength( const HAPI_Session * session,
                                         HAPI_NodeId node_id,
@@ -1076,7 +1076,8 @@ HAPI_DECL HAPI_GetConnectionError( char * string_value,
 /// @param[out]     count
 ///                 Total cook count.
 ///
-HAPI_DECL HAPI_GetCookingTotalCount( const HAPI_Session * session,
+HAPI_DECL_DEPRECATED(9.0.0, 22.0.270)
+HAPI_GetCookingTotalCount(const HAPI_Session* session,
                                      int * count );
 
 /// @brief  Get current number of nodes that have already cooked in the
@@ -1096,7 +1097,8 @@ HAPI_DECL HAPI_GetCookingTotalCount( const HAPI_Session * session,
 /// @param[out]     count
 ///                 Current cook count.
 ///
-HAPI_DECL HAPI_GetCookingCurrentCount( const HAPI_Session * session,
+HAPI_DECL_DEPRECATED(9.0.0, 22.0.270)
+HAPI_GetCookingCurrentCount(const HAPI_Session* session,
                                        int * count );
 
 /// @brief  Interrupt a cook or load operation.
@@ -2426,7 +2428,7 @@ HAPI_DECL HAPI_GetManagerNodeId( const HAPI_Session * session,
 ///         and using recursive mode, the recursion will stop as soon as a
 ///         display SOP is found within each OBJ geometry network. It is
 ///         almost never useful to get a list of ALL display SOP nodes
-///         recursively as they would all containt the same geometry. Even so,
+///         recursively as they would all contain the same geometry. Even so,
 ///         this special case only comes up if the display SOP itself is a
 ///         subnet.
 ///
@@ -2535,7 +2537,7 @@ HAPI_DECL HAPI_GetComposedChildNodeList( const HAPI_Session * session,
 ///                 If you are creating an Object or SOP node, you can pass
 ///                 parent_node_id == -1 as long as you include the table name
 ///                 (ie. Object/ or Sop/) as a prefix to the operator_name.
-///                 This covenience is only available for Object or SOP nodes.
+///                 This convenience is only available for Object or SOP nodes.
 ///                 This is the common case for when creating asset nodes
 ///                 from a loaded asset library. In that case, just pass
 ///                 whatever ::HAPI_GetAvailableAssets() returns.
@@ -2613,10 +2615,10 @@ HAPI_DECL HAPI_CreateInputNode( const HAPI_Session * session,
                                 HAPI_NodeId * node_id,
                                 const char * name );
 
-/// @brief  Helper for creating specifically creating a curve input geometry SOP.
+/// @brief  Helper for specifically creating a curve input geometry SOP.
 ///         Inside the specified parent node, this will create a Null SOP that
-///         contains the the HAPI_ATTRIB_INPUT_CURVE_COORDS attribute.
-///         It will setup the node as a curve part with no points.
+///         contains the HAPI_ATTRIB_INPUT_CURVE_COORDS attribute.
+///         It will set up the node as a curve part with no points.
 ///         In addition to creating the input node, it will also commit and cook
 ///         the geometry.
 ///
@@ -3191,7 +3193,7 @@ HAPI_DECL HAPI_GetOutputNodeId( const HAPI_Session * session,
                                 HAPI_NodeId * output_node_id );
 
 /// @defgroup Parms Parms
-/// Functions for wroking with Node parameters (parms)
+/// Functions for working with Node parameters (parms)
 
 /// @brief  Fill an array of ::HAPI_ParmInfo structs with parameter
 ///         information from the asset instance node.
@@ -3884,7 +3886,7 @@ HAPI_DECL HAPI_GetParmNodeValue( const HAPI_Session * session,
 
 /// @brief  Extract a file specified by path on a parameter. This will copy
 ///         the file to the destination directory from wherever it might be,
-///         inlcuding inside the asset definition or online.
+///         including inside the asset definition or online.
 ///
 /// @ingroup Parms
 ///
@@ -4555,7 +4557,7 @@ HAPI_DECL HAPI_GetObjectInfo( const HAPI_Session * session,
                               HAPI_NodeId node_id,
                               HAPI_ObjectInfo * object_info );
 
-/// @brief  Get the tranform of an OBJ node.
+/// @brief  Get the transform of an OBJ node.
 ///
 /// @ingroup Objects
 ///
@@ -7799,6 +7801,158 @@ HAPI_DECL HAPI_GetInstancerPartTransforms( const HAPI_Session * session,
                                            HAPI_RSTOrder rst_order,
                                            HAPI_Transform * transforms_array,
                                            int start, int length );
+
+/// @brief  Retrieves the camera parms for a SOP camera primitive
+///
+/// @ingroup Cameras
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      node_id
+///                 The node id.
+///
+/// @param[in]      part_id
+///                 The part id. The HAPI_PartInfo::type must be
+///                 HAPI_PARTTYPE_CAMERA.
+///
+/// @param[out]     camera_info
+///                 Pointer to a ::HAPI_CameraInfo struct that the SOP camera
+///                 primitive's parms will be written to.
+///                 
+HAPI_DECL HAPI_GetCameraInfo( const HAPI_Session * session,
+                              HAPI_NodeId node_id,
+                              HAPI_PartId part_id,
+                              HAPI_CameraInfo * camera_info );
+
+/// @brief  Retrieves the transform of the SOP camera primitive. Scale is always
+///         locked to [1, 1, 1].
+///
+/// @ingroup Cameras
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      node_id
+///                 The node id.
+///
+/// @param[in]      part_id
+///                 The part id. The HAPI_PartInfo::type must be
+///                 HAPI_PARTTYPE_CAMERA.
+///
+/// @param[out]     transform
+///                 Pointer to a HAPI_Transform that will be written to with the
+///                 camera's transform info.
+///
+HAPI_DECL HAPI_GetCameraTransform( const HAPI_Session * session,
+                                   HAPI_NodeId node_id,
+                                   HAPI_PartId part_id,
+                                   HAPI_Transform * transform );
+
+/// @brief          Creates a SOP Camera node which can then be configured with
+///                 ::HAPI_SetInputCameraInfo() and
+///                 ::HAPI_SetInputCameraTransform().
+///
+/// @ingroup Cameras
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      parent_node_id
+///                 The node id of the parent OBJ node or SOP subnetwork node in
+///                 which the input camera node should be created, or -1 to
+///                 create a new dummy parent OBJ node for this input node.
+///                 <!-- min -1 -->
+///                 <!-- default -1 -->
+///
+/// @param[out]     node_id
+///                 Newly created node's id. Use ::HAPI_GetNodeInfo() to get
+///                 more information about this node.
+///
+/// @param[in]      camera_name
+///                 The name of the camera. The name of the camera will be added
+///                 to the SOP camera primitive as a "name" attribute. You can
+///                 also pass NULL if you want the default name to be used.
+///                 <!-- default NULL -->
+///                 <!-- string -->
+///
+/// @param[in]      node_label
+///                 Give this input node a name for easy debugging.
+///                 The node's parent OBJ node and the Null SOP node will both
+///                 get this given name with "input_" prepended.
+///                 You can also pass NULL in which case the name will
+///                 be "input#" where # is some number.
+///                 <!-- default NULL -->
+///                 <!-- string -->
+///
+HAPI_DECL HAPI_CreateInputCameraNode( const HAPI_Session * session,
+                                      HAPI_NodeId parent_node_id,
+                                      HAPI_NodeId * node_id,
+                                      const char * camera_name,
+                                      const char * node_label ); 
+
+/// @brief          Configures the SOP Camera node's parameters.
+///
+/// @ingroup Cameras
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      node_id
+///                 The node id of a node created with
+///                 ::HAPI_CreateInputCameraNode().
+///
+/// @param[in]      camera_info
+///                 A ::HAPI_CameraInfo struct with camera configuration that
+///                 will be used to set the parameters on the camera node.
+///
+HAPI_DECL HAPI_SetInputCameraInfo( const HAPI_Session * session,
+                                   HAPI_NodeId node_id,
+                                   const HAPI_CameraInfo * camera_info);
+
+/// @brief          Configures the SOP Camera node's transform parameters.
+///
+/// @ingroup Cameras
+///
+/// @param[in]      session
+///                 The session of Houdini you are interacting with.
+///                 See @ref HAPI_Sessions for more on sessions.
+///                 Pass NULL to just use the default in-process session.
+///                 <!-- default NULL -->
+///
+/// @param[in]      node_id
+///                 The node id of a node created with
+///                 ::HAPI_CreateInputCameraNode().
+///
+/// @param[in]      rst_order
+///                 The order in which the camera's transformations occur.
+///
+/// @param[in]      rot_order
+///                 The order in which the camera's rotations occur.
+///
+/// @param[in]      transform
+///                 A ::HAPI_Transform struct that will be used to set the
+///                 transform related parameters on the camera node. Only the
+///                 position and rotation quaternion will be used. Other fields
+///                 will be ignored.
+///
+HAPI_DECL HAPI_SetInputCameraTransform( const HAPI_Session * session,
+                                        HAPI_NodeId node_id,
+                                        HAPI_RSTOrder rst_order,
+                                        HAPI_XYZOrder rot_order,
+                                        const HAPI_Transform * transform );
 
 /// @defgroup GeometrySetters Geometry Setters
 /// Functions for setting geometry (SOP) data
@@ -11180,7 +11334,7 @@ HAPI_DECL HAPI_DeleteGroup( const HAPI_Session * session,
 ///                 Should be less than or equal to the size
 ///                 of @p membership_array. When setting edge group membership,
 ///                 this parameter should be set to the number of points (which
-///                 are used to implictly define the edges), not to the number
+///                 are used to implicitly define the edges), not to the number
 ///                 edges in the group.
 ///		    <!-- source ::HAPI_PartInfo_GetElementCountByGroupType -->
 ///
@@ -11601,7 +11755,7 @@ HAPI_DECL HAPI_ExtractImageToFile( const HAPI_Session * session,
 ///                 <!-- string -->
 ///
 /// @param[in]      destination_folder_path
-///                 The folder where the image file sould be created.
+///                 The folder where the image file should be created.
 ///                 <!-- string -->
 ///
 /// @param[in]      destination_file_name
@@ -11834,6 +11988,10 @@ HAPI_DECL HAPI_GetSupportedImageFileFormats(
 ///                 and at most (size of @p data_array - start).
 ///                 <!-- min 0 -->
 ///
+/// @param[out]     new_node_id
+///                 Newly created node's id. Use ::HAPI_GetNodeInfo()
+///                 to get more information about the node.
+///
 HAPI_DECL HAPI_CreateCOPImage( const HAPI_Session * session,
                                HAPI_NodeId parent_node_id,
                                const int width,
@@ -11842,7 +12000,8 @@ HAPI_DECL HAPI_CreateCOPImage( const HAPI_Session * session,
                                HAPI_Bool flip_x,
                                HAPI_Bool flip_y,
                                const float * data_array,
-                               int start, int length );
+                               int start, int length,
+                               HAPI_NodeId * new_node_id);
 
 /// @defgroup Animation
 /// Functions for working with animation.
@@ -13440,7 +13599,7 @@ HAPI_DECL HAPI_GetViewport( const HAPI_Session * session,
 /// @brief  Set the ::HAPI_Viewport info for synchronizing viewport in
 ///	    SessionSync. When SessionSync is running, this can be
 ///	    used to set the viewport information which Houdini
-///	    will then synchronizse with for its viewport.
+///	    will then synchronize with for its viewport.
 ///
 /// @ingroup SessionSync
 ///
@@ -13700,413 +13859,6 @@ HAPI_DECL HAPI_GetPDGEvents( const HAPI_Session * session,
 HAPI_DECL HAPI_GetPDGState( const HAPI_Session * session, 
                             HAPI_PDG_GraphContextId graph_context_id, 
                             int * pdg_state );
-
-/// @brief  Creates a new pending workitem for the given node.  The workitem
-///         will not be submitted to the graph until it is committed with 
-///         ::HAPI_CommitWorkitems().  The node is expected to be a generator type.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[out]     workitem_id
-///                 The id of the pending workitem.
-///
-/// @param[in]      name
-///                 The null-terminated name of the workitem.  The name will
-///                 be automatically suffixed to make it unique.
-///                 <!-- string -->
-///
-/// @param[in]      index
-///                 The index of the workitem.  The semantics of the index
-///                 are user defined.
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_CreateWorkItem)
-HAPI_CreateWorkitem( const HAPI_Session * session,
-                     HAPI_NodeId node_id,
-                     HAPI_PDG_WorkItemId * workitem_id,
-                     const char * name,
-                     int index );
-
-/// @brief  Retrieves the info of a given workitem by id.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      graph_context_id
-///                 The graph context that the workitem is in.
-///
-/// @param[in]      workitem_id
-///                 The id of the workitem.
-///
-/// @param[out]     workitem_info
-///                 The returned ::HAPI_PDG_WorkItemInfo for the workitem.  Note
-///                 that the enclosed string handle is only valid until the next
-///                 call to this function.
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItemInfo)
-HAPI_GetWorkitemInfo( const HAPI_Session * session,
-                      HAPI_PDG_GraphContextId graph_context_id,
-                      HAPI_PDG_WorkItemId workitem_id,
-                      HAPI_PDG_WorkItemInfo * workitem_info );
-
-/// @brief  Adds integer data to a pending PDG workitem data member for the given node.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the pending workitem returned by ::HAPI_CreateWorkitem()
-///
-/// @param[in]      data_name
-///                 null-terminated name of the data member
-///                 <!-- string -->
-///
-/// @param[in]      values_array
-///                 array of integer values
-///                 <!-- sizeparm length -->
-///
-/// @param[in]      length
-///                 number of values to copy from values_array to the parameter
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_SetWorkItemIntAttribute)
-HAPI_SetWorkitemIntData( const HAPI_Session * session,
-                                   HAPI_NodeId node_id,
-                                   HAPI_PDG_WorkItemId workitem_id,
-                                   const char * data_name,
-                                   const int * values_array,
-                                   int length );
-
-/// @brief  Adds float data to a pending PDG workitem data member for the given node.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the pending workitem returned by ::HAPI_CreateWorkitem()
-///
-/// @param[in]      data_name
-///                 null-terminated name of the workitem data member
-///                 <!-- string -->
-///
-/// @param[in]      values_array
-///                 array of float values
-///                 <!-- sizeparm length -->
-///
-/// @param[in]      length
-///                 number of values to copy from values_array to the parameter
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_SetWorkItemFloatAttribute)
-HAPI_SetWorkitemFloatData( const HAPI_Session * session,
-                           HAPI_NodeId node_id,
-                           HAPI_PDG_WorkItemId workitem_id,
-                           const char * data_name,
-                           const float * values_array,
-                           int length );
-
-/// @brief  Adds integer data to a pending PDG workitem data member for the given node.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the created workitem returned by HAPI_CreateWorkitem()
-///
-/// @param[in]      data_name
-///                 null-terminated name of the data member
-///                 <!-- string -->
-///
-/// @param[in]      data_index
-///                 index of the string data member
-///
-/// @param[in]      value
-///                 null-terminated string to copy to the workitem data member
-///                 <!-- string -->
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_SetWorkItemStringAttribute)
-HAPI_SetWorkitemStringData( const HAPI_Session * session,
-                            HAPI_NodeId node_id,
-                            HAPI_PDG_WorkItemId workitem_id,
-                            const char * data_name,
-                            int data_index,
-                            const char * value );
-
-/// @brief  Commits any pending workitems.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id for which the pending workitems have been
-///                 created but not yet injected.
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_CommitWorkItems)
-HAPI_CommitWorkitems( const HAPI_Session * session,
-                      HAPI_NodeId node_id );
-
-/// @brief  Gets the number of workitems that are available on the given node.
-///         Should be used with ::HAPI_GetWorkitems.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[out]     num
-///                 The number of workitems.
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetNumWorkItems)
-HAPI_GetNumWorkitems( const HAPI_Session * session,
-                      HAPI_NodeId node_id,
-                      int * num );
-
-/// @brief  Gets the list of work item ids for the given node
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[out]     workitem_ids_array
-///                 buffer for resulting array of ::HAPI_PDG_WorkItemId
-///                 <!-- sizeparm length -->
-///
-/// @param[in]      length
-///                 The length of the @p workitem_ids buffer
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItems)
-HAPI_GetWorkitems( const HAPI_Session * session,
-                   HAPI_NodeId node_id,
-                   int * workitem_ids_array, 
-                   int length );
-
-/// @brief  Gets the length of the workitem data member.
-///         It is the length of the array of data.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the workitem
-///
-/// @param[in]      data_name
-///                 null-terminated name of the data member
-///                 <!-- string -->
-///
-/// @param[out]     length
-///                 The length of the data member array
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItemDataSize)
-HAPI_GetWorkitemDataLength( const HAPI_Session * session,
-                            HAPI_NodeId node_id,
-                            HAPI_PDG_WorkItemId workitem_id,
-                            const char * data_name,
-                            int * length );
-
-/// @brief  Gets int data from a work item member.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the workitem
-///
-/// @param[in]      data_name
-///                 null-terminated name of the data member
-///                 <!-- string -->
-///
-/// @param[out]     data_array
-///                 buffer of at least size length to copy the data into.  The required
-///                 length should be determined by ::HAPI_GetWorkitemDataLength().
-///                 <!-- sizeparm length -->
-///
-/// @param[in]      length
-///                 The length of @p data_array
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItemIntAttribute)
-HAPI_GetWorkitemIntData( const HAPI_Session * session,
-                         HAPI_NodeId node_id,
-                         HAPI_PDG_WorkItemId workitem_id,
-                         const char * data_name,
-                         int * data_array,
-                         int length );
-
-/// @brief  Gets float data from a work item member.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the workitem
-///
-/// @param[in]      data_name
-///                 null-terminated name of the data member
-///                 <!-- string -->
-///
-/// @param[out]     data_array
-///                 buffer of at least size length to copy the data into.  The required
-///                 length should be determined by ::HAPI_GetWorkitemDataLength().
-///                 <!-- sizeparm length -->
-///
-/// @param[in]      length
-///                 The length of the @p data_array
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItemFloatAttribute)
-HAPI_GetWorkitemFloatData( const HAPI_Session * session,
-                           HAPI_NodeId node_id,
-                           HAPI_PDG_WorkItemId workitem_id,
-                           const char * data_name,
-                           float * data_array,
-                           int length );
-
-/// @brief  Gets string ids from a work item member.
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the workitem
-///
-/// @param[in]      data_name
-///                 null-terminated name of the data member
-///                 <!-- string -->
-///
-/// @param[out]     data_array
-///                 buffer of at least size length to copy the data into.  The required
-///                 length should be determined by ::HAPI_GetWorkitemDataLength().
-///                 The data is an array of ::HAPI_StringHandle which can be used with 
-///                 ::HAPI_GetString().  The string handles are valid until the 
-///                 next call to this function.
-///                 <!-- sizeparm length -->
-///
-/// @param[in]      length
-///                 The length of @p data_array
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItemStringAttribute)
-HAPI_GetWorkitemStringData( const HAPI_Session * session,
-                            HAPI_NodeId node_id,
-                            HAPI_PDG_WorkItemId workitem_id,
-                            const char * data_name,
-                            HAPI_StringHandle * data_array,
-                            int length );
-
-/// @brief  Gets the info for workitem results.
-///         The number of workitem results is found on the ::HAPI_PDG_WorkItemInfo
-///         returned by ::HAPI_GetWorkitemInfo()
-///
-/// @ingroup PDG
-///
-/// @param[in]      session
-///                 The session of Houdini you are interacting with.
-///                 See @ref HAPI_Sessions for more on sessions.
-///                 Pass NULL to just use the default in-process session.
-///                 <!-- default NULL -->
-///
-/// @param[in]      node_id
-///                 The node id.
-///
-/// @param[in]      workitem_id
-///                 The id of the workitem
-///
-/// @param[out]     resultinfo_array
-///                 Buffer to fill with info structs.  String handles are valid
-///                 until the next call of this function.
-///                 <!-- sizeparm resultinfo_count -->
-///
-/// @param[in]      resultinfo_count
-///                 The length of @p resultinfo_array
-///
-HAPI_DECL_DEPRECATED_REPLACE(5.0.0, 19.5.161, HAPI_GetWorkItemOutputFiles)
-HAPI_GetWorkitemResultInfo( const HAPI_Session * session,
-			    HAPI_NodeId node_id,
-			    HAPI_PDG_WorkItemId workitem_id,
-			    HAPI_PDG_WorkItemOutputFile * resultinfo_array,
-			    int resultinfo_count );
 
 /// @brief  Creates a new pending work item for the given node.  The work item
 ///         will not be submitted to the graph until it is committed with 

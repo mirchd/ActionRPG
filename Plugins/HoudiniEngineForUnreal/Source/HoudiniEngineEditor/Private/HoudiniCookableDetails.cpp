@@ -50,6 +50,7 @@
 #include "FoliageType_InstancedStaticMesh.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "IDetailGroup.h"
+#include "Materials/Material.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "PropertyCustomizationHelpers.h"
 #include "SAssetDropTarget.h"
@@ -67,6 +68,7 @@
 #include "UObject/ObjectMacros.h"
 
 #include "HoudiniEngineEditorPrivatePCH.h"
+#include "HoudiniEngineStatusManager.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE 
 
@@ -88,6 +90,8 @@ FHoudiniCookableDetails::FHoudiniCookableDetails()
 void
 FHoudiniCookableDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniCookableDetails::CustomizeDetails);
+
 	// Get all components which are being customized.
 	TArray<TWeakObjectPtr<UObject>> ObjectsCustomized;
 	DetailBuilder.GetObjectsBeingCustomized(ObjectsCustomized);
@@ -256,6 +260,14 @@ FHoudiniCookableDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
 		}
 
 		//
+		// IMAGE DETAILS
+		//
+		if (MainCookable->IsImageSupported())
+		{
+			CreateImageDetails(DetailBuilder, HCs);
+		}
+
+		//
 		// MESH CONVERSION OPTIONS
 		//
 		if(MainCookable->IsOutputSupported())
@@ -317,24 +329,13 @@ FHoudiniCookableDetails::CreateHoudiniEngineDetails(
 	//HoudiniEngineDetails->CreateHoudiniEngineActionWidget(HouEngineCategory, InCookables);
 
 	// Houdini Engine Session Status
-	HoudiniEngineDetails->AddSessionStatusRow(HouEngineCategory);
+	HoudiniEngineDetails->AddSessionStatusRow(HouEngineCategory, InCookables);
 
-	// Create Generate Category. If not, just so "Reset Parameters" button.
-	if(DetailsFlags.bGenerateBar)
-	{
-		HoudiniEngineDetails->CreateGenerateWidgets(HouEngineCategory, InCookables, DetailsFlags);
-	}
-	else
-	{
-		HoudiniEngineDetails->CreateResetParametersOnlyWidgets(HouEngineCategory, InCookables);
-	}
+	HoudiniEngineDetails->CreateGenerateWidgets(HouEngineCategory, InCookables, DetailsFlags);
 
 	// Create Bake Category
 	HoudiniEngineDetails->CreateBakeWidgets(HouEngineCategory, InCookables, DetailsFlags);
 
-	// Create Asset Options Category
-	if (DetailsFlags.bAssetOptions)
-		HoudiniEngineDetails->CreateAssetOptionsWidgets(HouEngineCategory, InCookables, DetailsFlags);
 
 	// Create Help and Debug Category
 	HoudiniEngineDetails->CreateHelpAndDebugWidgets(HouEngineCategory, InCookables);
@@ -404,7 +405,7 @@ FHoudiniCookableDetails::CreatePDGDetails(
 		FHoudiniEngineDetails::AddEducationLicenseRow(HouPDGCategory);
 
 	// TODO: Handle multi selection ?
-	PDGDetails->CreateWidget(HouPDGCategory, HPDGAL, MainCookable->GetIsPCG());
+	PDGDetails->CreateWidget(HouPDGCategory, MainCookable);
 }
 
 void
@@ -413,14 +414,13 @@ FHoudiniCookableDetails::CreateParameterDetails(
 	TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables,
 	const FString& MultiSelectionIdentifier)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FHoudiniCookableDetails::CreateParameterDetails);
+
 	if(InCookables.IsEmpty())
 		return;
 
 	TWeakObjectPtr<UHoudiniCookable> MainCookable = InCookables[0];
 	if (!IsValidWeakPointer(MainCookable))
-		return;
-
-	if (MainCookable->GetNumParameters() <= 0)
 		return;
 
 	// If we have selected more than one component that have different HDAs, 
@@ -429,72 +429,18 @@ FHoudiniCookableDetails::CreateParameterDetails(
 	ParamCatName += MultiSelectionIdentifier;
 
 	// Create the Parameters details category
-	IDetailCategoryBuilder& HouParameterCategory =
-		DetailBuilder.EditCategory(*ParamCatName, FText::GetEmpty(), ECategoryPriority::Important);
+	IDetailCategoryBuilder& HouParameterCategory = DetailBuilder.EditCategory(*ParamCatName, FText::GetEmpty(), ECategoryPriority::Important);
 
 	// If we are running Houdini Engine Indie license, we need to display a special label.
 	bool bIsIndieLicense = FHoudiniEngine::Get().IsLicenseIndie();
 	bool bIsEduLicense = FHoudiniEngine::Get().IsLicenseEducation();
-	if (bIsIndieLicense)
+	if(bIsIndieLicense)
 		FHoudiniEngineDetails::AddIndieLicenseRow(HouParameterCategory);
-	else if (bIsEduLicense)
+	else if(bIsEduLicense)
 		FHoudiniEngineDetails::AddEducationLicenseRow(HouParameterCategory);
 
-	// Iterate through the component's parameters. JoinedParams is used to build an array of
-	// horizontally joined parameters. For example, with two joined parameters JoinedParams
-	// will look like { { cookable.param1}, { cookable.param2 } } and then call CreateWidget().
-	//
-	// If the parameters are not joined, CreateWidget() will be called twice with two arrays
-	//
-	//		{ { cookable.param1} } and { {cookable.param2 } }
-	//
-	// In addition, each linked parameter will be stored in the inner array. eg.
-	//
-	//		{ { cookable.param1, linked.param1 }, { cookable.param2, linked.param2 } }
-	//
+	ParameterDetails->CreateDetails(HouParameterCategory, DetailBuilder, InCookables);
 
-	TArray<TArray<TWeakObjectPtr<UHoudiniParameter>>> JoinedParams;	
-	for (int32 ParamIdx = 0; ParamIdx < MainCookable->GetNumParameters(); ParamIdx++)
-	{
-		// We only want to create root parameters here, they will recursively create child parameters.
-		UHoudiniParameter* CurrentParam = MainCookable->GetParameterAt(ParamIdx);
-		if (!IsValid(CurrentParam))
-			continue;
-
-		// Build an array of edited parameter for multi edit
-		JoinedParams.Emplace();
-		auto& EditedParams = JoinedParams.Last();
-		EditedParams.Add(CurrentParam);
-
-		// Add the corresponding params in the other HAC. Note that the parameters must be in the same
-		// order for this to work.
-
-		for (int LinkedIdx = 1; LinkedIdx < InCookables.Num(); LinkedIdx++)
-		{
-			UHoudiniParameter* LinkedParam = InCookables[LinkedIdx]->GetParameterAt(ParamIdx);
-			if (!IsValid(LinkedParam))
-				continue;
-
-			// Linked params should match the main param! If not try to find one that matches
-			if (!LinkedParam->Matches(*CurrentParam))
-			{
-				LinkedParam = MainCookable->FindMatchingParameter(CurrentParam);
-				if (!IsValid(LinkedParam) || LinkedParam->IsChildParameter())
-					continue;
-			}
-
-			EditedParams.Add(LinkedParam);
-		}
-
-		if (!ParameterDetails->ShouldJoinNext(*CurrentParam))
-		{
-			// If we are not joining the parameter to the next parameter, create the widget now
-			// using the contents of JointedParams and then reset the array for the next loop.
-			// Note that the last parameter never has the "Joined to Next" flag set.
-			ParameterDetails->CreateWidget(HouParameterCategory, JoinedParams);
-			JoinedParams.Empty();
-		}
-	}
 }
 
 void
@@ -629,7 +575,7 @@ FHoudiniCookableDetails::CreateInputDetails(
 			EditedInputs.Add(LinkedInput);
 		}
 
-		FHoudiniInputDetails::CreateWidget(HouInputCategory, EditedInputs);
+		FHoudiniInputDetails::CreateWidget(DetailBuilder, HouInputCategory, EditedInputs);
 	}
 }
 
@@ -820,7 +766,7 @@ FHoudiniCookableDetails::CreateProxyDetails(
 
 				return MainCookable->IsProxyStaticMeshEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			})
-			.IsEnabled_Lambda([MainCookable]() {return MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
+			.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
 			.OnCheckStateChanged_Lambda([MainCookable, InCookables, RefineCookablesIfNeeded](ECheckBoxState NewState)
 			{
 				if (!IsValidWeakPointer(MainCookable))
@@ -881,7 +827,7 @@ FHoudiniCookableDetails::CreateProxyDetails(
 
 				return MainCookable->GetProxyData()->bEnableProxyStaticMeshRefinementByTimerOverride ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			})
-			.IsEnabled_Lambda([MainCookable]() {return MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
+			.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
 			.OnCheckStateChanged_Lambda([MainCookable, InCookables](ECheckBoxState NewState)
 			{
 				if (!IsValidWeakPointer(MainCookable))
@@ -1067,7 +1013,7 @@ FHoudiniCookableDetails::CreateProxyDetails(
 
 				return MainCookable->GetProxyData()->bEnableProxyStaticMeshRefinementOnPreSaveWorldOverride ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			})
-			.IsEnabled_Lambda([MainCookable]() {return MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
+			.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
 			.OnCheckStateChanged_Lambda([MainCookable, InCookables](ECheckBoxState NewState)
 			{
 				if (!IsValidWeakPointer(MainCookable))
@@ -1125,7 +1071,7 @@ FHoudiniCookableDetails::CreateProxyDetails(
 
 				return MainCookable->GetProxyData()->bEnableProxyStaticMeshRefinementOnPreBeginPIEOverride ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			})
-			.IsEnabled_Lambda([MainCookable]() {return MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
+			.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->IsOverrideGlobalProxyStaticMeshSettings(); })
 			.OnCheckStateChanged_Lambda([MainCookable, InCookables](ECheckBoxState NewState)
 			{
 				if (!IsValidWeakPointer(MainCookable))
@@ -1833,9 +1779,9 @@ FHoudiniCookableDetails::CreateMeshBuildSettingsDetails(
 		.MaxDesiredWidth(125.0f * 3.0f)
 		[
 			SNew(SVectorInputBox)
-			.X_Lambda([MainCookable]() { return MainCookable->GetStaticMeshBuildSettings().BuildScale3D.X; })
-			.Y_Lambda([MainCookable]() { return MainCookable->GetStaticMeshBuildSettings().BuildScale3D.Y; })
-			.Z_Lambda([MainCookable]() { return MainCookable->GetStaticMeshBuildSettings().BuildScale3D.Z; })
+			.X_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) ? MainCookable->GetStaticMeshBuildSettings().BuildScale3D.X : 1.0f; })
+			.Y_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) ? MainCookable->GetStaticMeshBuildSettings().BuildScale3D.Y : 1.0f; })
+			.Z_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) ? MainCookable->GetStaticMeshBuildSettings().BuildScale3D.Z : 1.0f; })
 			.bColorAxisLabels(false)
 			.AllowSpin(false)
 			.OnXCommitted_Lambda([InCookables, OnBuildScaleChange, MarkCookableOutputsNeedUpdate](float NewValue, ETextCommit::Type TextCommitType)
@@ -1885,6 +1831,9 @@ FHoudiniCookableDetails::CreateMeshBuildSettingsDetails(
 			.MaxValue(100.0f)
 			.Value_Lambda([MainCookable]()
 			{	
+				if (!IsValidWeakPointer(MainCookable))
+					return 0.0f;
+
 				return MainCookable->GetStaticMeshBuildSettings().DistanceFieldResolutionScale;
 			})
 			.OnValueChanged_Lambda([InCookables, MarkCookableOutputsNeedUpdate, OnDistanceFieldResChanged](float NewValue)
@@ -1908,6 +1857,9 @@ FHoudiniCookableDetails::CreateMeshBuildSettingsDetails(
 			SNew(SCheckBox)
 			.IsChecked_Lambda([MainCookable]()
 			{		
+				if (!IsValidWeakPointer(MainCookable))
+					return ECheckBoxState::Unchecked;
+
 				return MainCookable->GetStaticMeshBuildSettings().bGenerateDistanceFieldAsIfTwoSided ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			})
 			.OnCheckStateChanged_Lambda([InCookables, MarkCookableOutputsNeedUpdate](ECheckBoxState NewState)
@@ -1936,6 +1888,9 @@ FHoudiniCookableDetails::CreateMeshBuildSettingsDetails(
 		.AllowClear(true)
 		.ObjectPath_Lambda([MainCookable]()
 		{
+			if (!IsValidWeakPointer(MainCookable))
+				return FString("");
+
 			if (MainCookable->GetStaticMeshBuildSettings().DistanceFieldReplacementMesh)
 				return MainCookable->GetStaticMeshBuildSettings().DistanceFieldReplacementMesh->GetPathName();
 			else
@@ -2582,6 +2537,766 @@ FHoudiniCookableDetails::CreateMeshGenerationDetails(
 					})
 					.SliderExponent(4.0f)
 				]
+			]
+		];
+	}
+}
+
+void
+FHoudiniCookableDetails::CreateImageDetails(
+	IDetailLayoutBuilder& DetailBuilder,
+	TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables)
+{
+	if (InCookables.Num() <= 0)
+		return;
+
+	TWeakObjectPtr<UHoudiniCookable> MainCookable = InCookables[0];
+	if (!IsValidWeakPointer(MainCookable))
+		return;
+
+	if (!MainCookable->IsImageSupported())
+		return;
+
+	if(!MainCookable->GetImageData()->bIsCOPHDA)
+		return;
+
+	// Create the Image category
+	FString BuildSettingsCatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_IMAGE);
+
+	// If we have selected more than one component that have different HDAs, 
+	// we need to create multiple categories one for each different HDA
+	// OutputCatName += MultiSelectionIdentifier;
+
+	IDetailCategoryBuilder& HouImageCategory =
+		DetailBuilder.EditCategory(*BuildSettingsCatName, FText::GetEmpty(), ECategoryPriority::Important);
+
+	FString Label = TEXT("COP Image Output Properties");
+	IDetailGroup& ProxyGrp = HouImageCategory.AddGroup(FName(*Label), FText::FromString(Label));
+
+	//
+	// bOverrideDefaultResolution
+	//
+	{
+		FText TooltipText = LOCTEXT("OverrideRes_ToolTip", "Override the resolution of the textures generated by this COP HDA.");
+		ProxyGrp.AddWidgetRow()
+		.NameContent()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Override Default Resolution"))
+			.Font(IDetailLayoutBuilder::GetDetailFont())
+			.ToolTipText(TooltipText)
+		]
+		.ValueContent()
+		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.Padding(2, 2, 5, 2)
+			.AutoHeight()
+			[
+				SNew(SCheckBox)
+				.ToolTipText(TooltipText)
+				.IsChecked_Lambda([MainCookable]()
+				{
+					if (!IsValidWeakPointer(MainCookable))
+						return ECheckBoxState::Unchecked;
+
+					UCookableImageData* ImageData = MainCookable->GetImageData();
+					if (!ImageData)
+						return ECheckBoxState::Unchecked;
+
+					return ImageData->bOverrideDefaultResolution ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+				})
+				.OnCheckStateChanged_Lambda([MainCookable, InCookables](ECheckBoxState NewState)
+				{
+					if (!IsValidWeakPointer(MainCookable))
+						return;
+
+					const bool bNewState = NewState == ECheckBoxState::Checked;
+					if (!MainCookable->GetImageData()
+						|| MainCookable->GetImageData()->bOverrideDefaultResolution == bNewState)
+						return;
+
+					FScopedTransaction Transaction(
+						TEXT(HOUDINI_MODULE_EDITOR),
+						LOCTEXT("HoudiniImageOverrideResolution", "HoudiniImage Properties: Changed bOverrideDefaultResolution"),
+						MainCookable->GetOuter());
+
+					for (auto CurCookable : InCookables)
+					{
+						if (!IsValidWeakPointer(CurCookable))
+							continue;
+
+						UCookableImageData* ImageData = CurCookable->GetImageData();
+						if (!ImageData || ImageData->bOverrideDefaultResolution == bNewState)
+							continue;
+
+						CurCookable->Modify();
+						ImageData->bOverrideDefaultResolution = bNewState;
+
+						// Mark that cookable for recook
+						// TODO: Check cookable has texture output 
+						if(ImageData->bIsCOPHDA)
+							CurCookable->MarkAsNeedCook();
+					}
+				})
+			]
+		];
+	}
+
+	//
+	// FVector2D ResolutionOverride
+	//
+	{
+		FText TooltipText = LOCTEXT("OverrideRes_ToolTip", "Override the resolution of the textures generated by this COP HDA.");
+		// Lambdas for changing the parameter value
+		auto ChangeResolutionValueAt = [InCookables](const int32& Value, const int32& ValueIndex)
+		{
+			if (InCookables.Num() == 0)
+				return;
+
+			if (!IsValidWeakPointer(InCookables[0]))
+				return;
+
+			bool bChanged = false;
+			for (int Idx = 0; Idx < InCookables.Num(); Idx++)
+			{
+				if (!IsValidWeakPointer(InCookables[Idx]))
+					continue;
+
+				InCookables[Idx]->Modify();
+
+				if (!InCookables[Idx]->GetImageData())
+					continue;
+
+				if (ValueIndex == 0)
+				{
+					if (Value != InCookables[Idx]->GetImageData()->ResolutionOverride.X)
+					{
+						InCookables[Idx]->GetImageData()->ResolutionOverride.X = Value;
+						InCookables[Idx]->MarkAsNeedCook();
+						bChanged = true;
+					}
+				}
+				else
+				{
+					if (Value != InCookables[Idx]->GetImageData()->ResolutionOverride.Y)
+					{
+						InCookables[Idx]->GetImageData()->ResolutionOverride.Y = Value;
+						InCookables[Idx]->MarkAsNeedCook();
+						bChanged = true;
+					}
+				}
+			}
+		};
+
+		typedef SNumericVectorInputBox<int32, FIntPoint, 2> SNumericVectorInputBoxInt2;
+		{
+			ProxyGrp.AddWidgetRow()
+			.NameContent()
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString("Resolution Override"))
+				.Font(IDetailLayoutBuilder::GetDetailFont())
+				.ToolTipText(TooltipText)
+			]
+			.ValueContent()
+			.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+				.Padding(2, 2, 5, 2)
+				.AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.MaxWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+					.FillWidth(1.0)
+					[
+						SNew(SNumericVectorInputBoxInt2)
+						.Font(FAppStyle::Get().GetFontStyle("PropertyWindow.NormalFont"))
+						.AllowSpin(false)
+						.bColorAxisLabels(true)
+						.X_Lambda([MainCookable]()
+						{
+							if (!IsValidWeakPointer(MainCookable) || !MainCookable->GetImageData())
+								return 0;
+
+							return MainCookable->GetImageData()->ResolutionOverride.X;
+						})
+						.Y_Lambda([MainCookable]()
+						{
+							if (!IsValidWeakPointer(MainCookable) || !MainCookable->GetImageData())
+								return 0;
+
+							return MainCookable->GetImageData()->ResolutionOverride.Y;
+						})
+						.OnXCommitted_Lambda([InCookables, ChangeResolutionValueAt](int32 NewValue, ETextCommit::Type TextCommitType)
+							{ ChangeResolutionValueAt(NewValue, 0); })
+						.OnYCommitted_Lambda([InCookables, ChangeResolutionValueAt](int32 NewValue, ETextCommit::Type TextCommitType)
+							{ ChangeResolutionValueAt(NewValue, 1); })
+						.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->GetImageData() && MainCookable->GetImageData()->bOverrideDefaultResolution; })
+						.ToolTipText(TooltipText)
+					]
+				]
+			];
+		}
+	}
+
+	//
+	// bOverridePixelScale
+	//
+	{
+		FText TooltipText = LOCTEXT("OverridePixScale_ToolTip", "Override the pixel scale of the textures generated by this COP HDA.");
+
+		ProxyGrp.AddWidgetRow()
+		.NameContent()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Override Default Pixel Scale"))
+			.Font(IDetailLayoutBuilder::GetDetailFont())
+			.ToolTipText(TooltipText)
+		]
+		.ValueContent()
+		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.Padding(2, 2, 5, 2)
+			.AutoHeight()
+			[
+				SNew(SCheckBox)
+				.IsChecked_Lambda([MainCookable]()
+				{
+					if (!IsValidWeakPointer(MainCookable))
+						return ECheckBoxState::Unchecked;
+
+					UCookableImageData* ImageData = MainCookable->GetImageData();
+					if (!ImageData)
+						return ECheckBoxState::Unchecked;
+
+					return ImageData->bOverridePixelScale ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+				})
+				.OnCheckStateChanged_Lambda([MainCookable, InCookables](ECheckBoxState NewState)
+				{
+					if (!IsValidWeakPointer(MainCookable))
+						return;
+
+					const bool bNewState = NewState == ECheckBoxState::Checked;
+					if (!MainCookable->GetImageData()
+						|| MainCookable->GetImageData()->bOverridePixelScale == bNewState)
+						return;
+
+					FScopedTransaction Transaction(
+						TEXT(HOUDINI_MODULE_EDITOR),
+						LOCTEXT("HoudiniImageOverridePxlScale", "HoudiniImage Properties: Changed bOverridePixelScale"),
+						MainCookable->GetOuter());
+
+					for (auto CurCookable : InCookables)
+					{
+						if (!IsValidWeakPointer(CurCookable))
+							continue;
+
+						UCookableImageData* ImageData = CurCookable->GetImageData();
+						if (!ImageData || ImageData->bOverridePixelScale == bNewState)
+							continue;
+
+						CurCookable->Modify();
+						ImageData->bOverridePixelScale = bNewState;
+
+						// Mark that cookable for recook
+						// TODO: Check cookable has texture output 
+						if(ImageData->bIsCOPHDA)
+							CurCookable->MarkAsNeedCook();
+					}
+				})
+				.ToolTipText(TooltipText)
+			]
+		];
+	}
+
+	//
+	// PixelScale
+	//
+	{
+		FText TooltipText = LOCTEXT("OverridePixScale_ToolTip", "Override the pixel scale of the textures generated by this COP HDA.");
+
+		// Lambdas for changing the the pixel scale values on cookables
+		auto ChangePixelScaleValue = [InCookables](const float& Value)
+		{
+			if (InCookables.Num() == 0)
+				return;
+
+			bool bChanged = false;
+			for (int Idx = 0; Idx < InCookables.Num(); Idx++)
+			{
+				if (!IsValidWeakPointer(InCookables[Idx]))
+					continue;
+
+				InCookables[Idx]->Modify();
+
+				if (InCookables[Idx]->GetImageData())
+				{
+					if (Value != InCookables[Idx]->GetImageData()->PixelScale)
+					{
+						InCookables[Idx]->GetImageData()->PixelScale = Value;
+						InCookables[Idx]->MarkAsNeedCook();
+						bChanged = true;
+					}
+				}
+			}
+		};
+
+		ProxyGrp.AddWidgetRow()
+		.NameContent()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Pixel Scale"))
+			.Font(IDetailLayoutBuilder::GetDetailFont())
+			.ToolTipText(TooltipText)
+		]
+		.ValueContent()
+		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.Padding(2, 2, 5, 2)
+			.AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+				.MaxWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+				.FillWidth(1.0)
+				[
+					SNew(SNumericEntryBox<float>)
+					.Font(FAppStyle::Get().GetFontStyle("PropertyWindow.NormalFont"))
+					.AllowSpin(false)
+					.Value_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->GetImageData() ? MainCookable->GetImageData()->PixelScale : 0.0f; })
+					.OnValueCommitted_Lambda([InCookables, ChangePixelScaleValue](int32 NewValue, ETextCommit::Type TextCommitType)
+						{ ChangePixelScaleValue(NewValue); })
+					.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->GetImageData() && MainCookable->GetImageData()->bOverridePixelScale; })
+					.ToolTipText(TooltipText)
+				]
+			]
+		];
+	}
+
+	//
+	// ImageDataFormat
+	//
+	{
+		FText TooltipText = LOCTEXT("OverrideDataFormat_ToolTip", "Override the data format of the textures generated by this COP HDA: RGBA8 or HDR (INT16/Float32/Float16) .");
+
+		ProxyGrp.AddWidgetRow()
+		.NameContent()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Image Data Format"))
+			.Font(IDetailLayoutBuilder::GetDetailFont())
+			.ToolTipText(TooltipText)
+		]
+		.ValueContent()
+		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.Padding(2, 2, 5, 2)
+			.AutoHeight()
+			[
+				SNew(SComboBox<TSharedPtr<FString>>)
+				//.IsEnabled(HoudiniSplineComponent->GetCurveMethod() == EHoudiniCurveMethod::Breakpoints)
+				.OptionsSource(FHoudiniEngineEditor::Get().GetHoudiniEngineImageDataFormatsLabels())
+				.InitiallySelectedItem((*FHoudiniEngineEditor::Get().GetHoudiniEngineImageDataFormatsLabels())[(int32)MainCookable->GetImageData()->ImageDataFormat])
+				.OnGenerateWidget_Lambda([](TSharedPtr<FString> ChoiceEntry)
+				{
+					FText ChoiceEntryText = FText::FromString(*ChoiceEntry);
+						return SNew(STextBlock)
+						.Text(ChoiceEntryText)
+						.ToolTipText(ChoiceEntryText)
+						.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
+				})
+				.OnSelectionChanged_Lambda(
+				[MainCookable, InCookables](TSharedPtr<FString> NewChoice, ESelectInfo::Type SelectType)
+				{
+					if(!NewChoice.IsValid())
+						return;
+
+					const EHoudiniEngineImageDataFormat NewFormat =
+						FHoudiniEngineEditor::Get().StringToImageDataFormat(*NewChoice.Get());
+
+					for(auto& CurCookable : InCookables)
+					{
+						if (!IsValidWeakPointer(CurCookable))
+							continue;
+
+						UCookableImageData* ImageData = CurCookable->GetImageData();
+						if (!ImageData || ImageData->ImageDataFormat == NewFormat)
+							continue;
+
+						CurCookable->Modify();
+						ImageData->ImageDataFormat = NewFormat;
+
+						// Mark that cookable for recook
+						// TODO: Check cookable has texture output 
+						if (ImageData->bIsCOPHDA)
+							CurCookable->MarkAsNeedCook();
+					}
+
+					//if(MainCookable.IsValid())
+					//	FHoudiniEngineUtils::UpdateEditorProperties(true);
+				})
+				.ToolTipText(TooltipText)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([MainCookable]()
+					{
+						if(!IsValidWeakPointer(MainCookable))
+							return FText();
+
+						return FText::FromString(
+							FHoudiniEngineEditor::Get().GetStringFromHoudiniImageDataFormat(MainCookable->GetImageData()->ImageDataFormat));
+					})
+					.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+					.ToolTipText(TooltipText)
+				]
+			]
+		];
+	}
+
+	//
+	// bGenerateMaterial
+	//
+	{
+		FText TooltipText = LOCTEXT("GenMat_ToolTip", 
+			"When enabled, a Material Instance using the textures generated by this COP HDA will be created.\n \
+			 The COP output names must match the name of the texture parameters in the source Material.\n \
+			 For the default material, possible output names are:\n \
+			 diffuse, metallic, specular, roughness, emissive, opacity, normal, ao, displacement.");
+
+		ProxyGrp.AddWidgetRow()
+		.NameContent()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Generate Material"))
+			.Font(IDetailLayoutBuilder::GetDetailFont())
+			.ToolTipText(TooltipText)
+		]
+		.ValueContent()
+		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.Padding(2, 2, 5, 2)
+			.AutoHeight()
+			[
+				SNew(SCheckBox)
+				.IsChecked_Lambda([MainCookable]()
+				{
+					if (!IsValidWeakPointer(MainCookable))
+						return ECheckBoxState::Unchecked;
+
+					UCookableImageData* ImageData = MainCookable->GetImageData();
+					if (!ImageData)
+						return ECheckBoxState::Unchecked;
+
+					return ImageData->bGenerateMaterial ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+				})
+				.OnCheckStateChanged_Lambda([MainCookable, InCookables](ECheckBoxState NewState)
+				{
+					if (!IsValidWeakPointer(MainCookable))
+						return;
+
+					const bool bNewState = NewState == ECheckBoxState::Checked;
+					if (!MainCookable->GetImageData()
+						|| MainCookable->GetImageData()->bGenerateMaterial == bNewState)
+						return;
+
+					FScopedTransaction Transaction(
+						TEXT(HOUDINI_MODULE_EDITOR),
+						LOCTEXT("HoudiniImageOverrideResolution", "HoudiniImage Properties: Changed bGenerateMaterial"),
+						MainCookable->GetOuter());
+
+					for (auto CurCookable : InCookables)
+					{
+						if (!IsValidWeakPointer(CurCookable))
+							continue;
+
+						UCookableImageData* ImageData = CurCookable->GetImageData();
+						if (!ImageData || ImageData->bGenerateMaterial == bNewState)
+							continue;
+
+						CurCookable->Modify();
+						ImageData->bGenerateMaterial = bNewState;
+
+						// Mark that cookable for recook
+						// TODO: Check cookable has texture output 
+						if(ImageData->bIsCOPHDA)
+							CurCookable->MarkAsNeedCook();
+					}
+				})
+				.ToolTipText(TooltipText)
+			]
+		];
+	}
+
+	//
+	// MaterialOverride
+	//
+	{
+		FText TooltipText = LOCTEXT("MatOverride_ToolTip", "Source Material used to generate a Material Instance when \"GenerateMaterial\" is enabled.");
+
+		// Lambda used to update the MaterialToInstance
+		auto UpdateMaterialToInstance = [InCookables](UMaterialInterface* InMat)
+		{
+			for (auto CurCookable : InCookables)
+			{
+				if (!IsValidWeakPointer(CurCookable))
+					continue;
+
+				UCookableImageData* ImageData = CurCookable->GetImageData();
+				if (!ImageData || ImageData->MaterialToInstance == InMat)
+					continue;
+
+				FScopedTransaction Transaction(
+					TEXT(HOUDINI_MODULE_EDITOR),
+					LOCTEXT("HoudiniImageOverrideResolution", "HoudiniImage Properties: Changed MaterialInstance"),
+					CurCookable->GetOuter());
+
+				CurCookable->Modify();
+				ImageData->MaterialToInstance = InMat;
+
+				// Mark that cookable for recook
+				// TODO: Check cookable has texture output 
+				if (ImageData->bIsCOPHDA)
+					CurCookable->MarkAsNeedCook();
+			}
+		};
+
+		UMaterialInterface * MaterialInterface = MainCookable->GetImageData() ? MainCookable->GetImageData()->MaterialToInstance : nullptr;
+		TSharedPtr<SBorder> MaterialThumbnailBorder;
+		TSharedPtr<SHorizontalBox> HorizontalBox = NULL;
+
+		FString MaterialName, MaterialPathName;
+		if ( IsValid(MaterialInterface)
+			&& IsValid(MaterialInterface->GetOuter()) )
+		{
+			MaterialName = MaterialInterface->GetName();
+			MaterialPathName = MaterialInterface->GetPathName();
+		}
+		else
+		{
+			MaterialInterface = Cast<UMaterialInterface>(FHoudiniEngine::Get().GetHoudiniDefaultCOPOutputMaterial());
+			MaterialName = TEXT("Default Material");
+			MaterialPathName = TEXT("Default Material");
+		}
+
+		TSharedPtr<FAssetThumbnailPool> AssetThumbnailPool = DetailBuilder.GetThumbnailPool();
+
+		// Create thumbnail for this material.
+		TSharedPtr< FAssetThumbnail > MaterialInterfaceThumbnail =
+			MakeShareable( new FAssetThumbnail( MaterialInterface, 64, 64, AssetThumbnailPool ) );
+
+		ProxyGrp.AddWidgetRow()
+		.NameContent()
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Source Material"))
+			.Font(IDetailLayoutBuilder::GetDetailFont())
+			.ToolTipText(TooltipText)
+		]
+		.ValueContent()
+		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.Padding(2, 2, 5, 2)
+			.AutoHeight()
+			[
+				SNew(SAssetDropTarget)
+				.OnAreAssetsAcceptableForDrop_Lambda([](TArrayView<FAssetData> InAssets)
+				{
+					UObject* InObject = InAssets[0].GetAsset();
+					return (InObject && InObject->IsA(UMaterialInterface::StaticClass()));
+				})
+				.OnAssetsDropped_Lambda([UpdateMaterialToInstance, InCookables](const FDragDropEvent&, TArrayView<FAssetData> InAssets)
+				{
+					UMaterialInterface* DroppedMat = Cast<UMaterialInterface>(InAssets[0].GetAsset());
+					UpdateMaterialToInstance(DroppedMat);
+				})
+				.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->GetImageData() && MainCookable->GetImageData()->bGenerateMaterial; })
+				.ToolTipText(TooltipText)
+				[
+					SAssignNew(HorizontalBox, SHorizontalBox)
+				]
+			]
+		];
+
+		HorizontalBox->AddSlot()
+		.Padding(0.0f, 0.0f, 2.0f, 0.0f)
+		.AutoWidth()
+		[
+			SAssignNew(MaterialThumbnailBorder, SBorder)
+			.Padding(5.0f)
+			.OnMouseDoubleClick_Lambda([MaterialInterface](
+				const FGeometry& InMyGeometry,
+				const FPointerEvent& InMouseEvent)
+			{
+				UObject* Object = Cast<UObject>(MaterialInterface);
+				if (Object && GEditor)
+					GEditor->EditObject(Object);
+
+				return FReply::Handled();
+			})
+			[
+				SNew(SBox)
+				.WidthOverride(64)
+				.HeightOverride(64)
+				.ToolTipText(FText::FromString(MaterialPathName))
+				[
+					MaterialInterfaceThumbnail->MakeThumbnailWidget()
+				]
+			]
+		];
+
+		// ComboBox and buttons
+		TSharedPtr<SVerticalBox> ComboAndButtonBox;
+		HorizontalBox->AddSlot()
+		.FillWidth(1.0f)
+		.Padding(0.0f, 4.0f, 4.0f, 4.0f)
+		[
+			SAssignNew(ComboAndButtonBox, SVerticalBox)
+		];
+
+		// Add Combo box
+		TSharedPtr<SComboButton> AssetComboButton;
+		ComboAndButtonBox->AddSlot()
+		.VAlign(VAlign_Center)
+		.FillHeight(1.0f)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.VAlign(VAlign_Center)
+			.FillHeight(1.0f)
+			[
+				SAssignNew(AssetComboButton, SComboButton)
+				.ButtonStyle(_GetEditorStyle(), "PropertyEditor.AssetComboStyle")
+				.ForegroundColor(_GetEditorStyle().GetColor("PropertyEditor.AssetName.ColorAndOpacity"))
+				.OnGetMenuContent_Lambda([UpdateMaterialToInstance, InCookables, MaterialInterface, AssetComboButton]()
+				{
+					TArray<const UClass*> AllowedClasses;
+					AllowedClasses.Add(UMaterialInterface::StaticClass());
+
+					TArray<UFactory*> NewAssetFactories;
+					return PropertyCustomizationHelpers::MakeAssetPickerWithMenu(
+						FAssetData(MaterialInterface),
+						true,
+						AllowedClasses,
+						NewAssetFactories,
+						FOnShouldFilterAsset(),
+						FOnAssetSelected::CreateLambda(
+							[UpdateMaterialToInstance, InCookables, AssetComboButton](const FAssetData& AssetData)
+							{
+								if (AssetComboButton.IsValid())
+									AssetComboButton->SetIsOpen(false);
+
+								UMaterialInterface* InMat = Cast<UMaterialInterface>(AssetData.GetAsset());
+								UpdateMaterialToInstance(InMat);
+							}
+						),
+						FSimpleDelegate::CreateLambda([]() {})
+					);
+				})
+				.ContentPadding(2.0f)
+				.ToolTipText(TooltipText)
+				.IsEnabled_Lambda([MainCookable]() { return IsValidWeakPointer(MainCookable) && MainCookable->GetImageData() && MainCookable->GetImageData()->bGenerateMaterial; })
+				.ButtonContent()
+				[
+					SNew(STextBlock)
+					.TextStyle(_GetEditorStyle(), "PropertyEditor.AssetClass")
+					.Font(_GetEditorStyle().GetFontStyle(FName(TEXT("PropertyWindow.NormalFont"))))
+					.Text(FText::FromString(MaterialName))
+				]
+			]
+		];
+
+		// Create tooltip.
+		FFormatNamedArguments Args;
+		Args.Add(TEXT("Asset"), FText::FromString(MaterialName));
+		FText MaterialTooltip = FText::Format(
+			LOCTEXT("BrowseToSpecificAssetInContentBrowser", "Browse to '{Asset}' in Content Browser"), Args);
+
+		// Add buttons
+		TSharedPtr< SHorizontalBox > ButtonBox;
+		ComboAndButtonBox->AddSlot().FillHeight(1.0f)
+		[
+			SAssignNew(ButtonBox, SHorizontalBox)
+		];
+
+		// Use CB selection arrow button
+		ButtonBox->AddSlot()
+		.AutoWidth()
+		.Padding(2.0f, 0.0f)
+		.VAlign(VAlign_Center)
+		[
+			PropertyCustomizationHelpers::MakeUseSelectedButton(
+				FSimpleDelegate::CreateLambda([UpdateMaterialToInstance, InCookables]()
+				{
+					if (!GEditor)
+						return;
+
+					TArray<FAssetData> CBSelections;
+					GEditor->GetContentBrowserSelections(CBSelections);
+						
+					for (auto& CurAssetData : CBSelections)
+					{
+						UMaterialInterface* Mat = Cast<UMaterialInterface>(CurAssetData.GetAsset());
+						if (!IsValid(Mat))
+							continue;
+
+						return UpdateMaterialToInstance(Mat);
+					}
+				}),
+				TAttribute< FText >(LOCTEXT("UseSelectedAssetFromContentBrowser", "Use Selected Asset from Content Browser")))
+		];
+
+		// Browse CB button
+		ButtonBox->AddSlot()
+		.AutoWidth()
+		.Padding( 2.0f, 0.0f )
+		.VAlign( VAlign_Center )
+		[
+			PropertyCustomizationHelpers::MakeBrowseButton(
+				FSimpleDelegate::CreateLambda([MaterialInterface]()
+					{
+						if (GEditor)
+						{
+							TArray<UObject*> Objects;
+							Objects.Add(MaterialInterface);
+							GEditor->SyncBrowserToObjects(Objects);
+						}
+					})
+				)
+		];
+
+		// Reset button
+		ButtonBox->AddSlot()
+		.AutoWidth()
+		.Padding(2.0f, 0.0f)
+		.VAlign(VAlign_Center)
+		[
+			SNew(SButton)
+			.ToolTipText( LOCTEXT( "ResetToBaseMaterial", "Reset to default material" ) )
+			.ButtonStyle(_GetEditorStyle(), "NoBorder" )
+			.ContentPadding(0)
+			.Visibility(EVisibility::Visible)
+			.OnClicked_Lambda([UpdateMaterialToInstance, InCookables]()
+			{
+				UpdateMaterialToInstance(nullptr);
+				return FReply::Handled();
+			})
+			[
+				SNew( SImage )
+				.Image(_GetEditorStyle().GetBrush( "PropertyWindow.DiffersFromDefault" ) )
 			]
 		];
 	}

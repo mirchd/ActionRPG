@@ -876,17 +876,17 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const FHoudiniBakedOutputObjec
 	// Result &= TestExpressionError(A.Actor.Equals(B.Actor), Header, "Actor");
 	// Result &= TestExpressionError(A.Blueprint.Equals(B.Blueprint), Header, "Blueprint");
 	Result &= TestExpressionError(A.ActorBakeName.IsEqual(B.ActorBakeName), Header, "ActorBakeName");
-	Result &= TestExpressionError(A.BakedObject.Equals(B.BakedObject), Header, "BakedObject");
-	Result &= TestExpressionError(A.BakedComponent.Equals(B.BakedComponent), Header, "BakedComponent");
-	Result &= TestExpressionError(A.InstancedActors.Num() == B.InstancedActors.Num(), Header, "InstancedActors.Num");
-	for (int i = 0; i < FMath::Min(A.InstancedActors.Num(), B.InstancedActors.Num()); i++)
+	Result &= TestExpressionError(A.BakedObjectPath.ToString().Equals(B.BakedObjectPath.ToString()), Header, "BakedObject");
+	Result &= TestExpressionError(A.BakedComponentPath.ToString().Equals(B.BakedComponentPath.ToString()), Header, "BakedComponent");
+	Result &= TestExpressionError(A.InstancedActorPaths.Num() == B.InstancedActorPaths.Num(), Header, "InstancedActors.Num");
+	for (int i = 0; i < FMath::Min(A.InstancedActorPaths.Num(), B.InstancedActorPaths.Num()); i++)
 	{
-		Result &= TestExpressionError(A.InstancedActors[i].Equals(B.InstancedActors[i]), Header, "InstancedActors");	
+		Result &= TestExpressionError(A.InstancedActorPaths[i].ToString().Equals(B.InstancedActorPaths[i].ToString()), Header, "InstancedActors");	
 	}
-	Result &= TestExpressionError(A.InstancedComponents.Num() == B.InstancedComponents.Num(), Header, "InstancedComponents.Num");
-	for (int i = 0; i < FMath::Min(A.InstancedComponents.Num(), B.InstancedComponents.Num()); i++)
+	Result &= TestExpressionError(A.InstancedComponentPaths.Num() == B.InstancedComponentPaths.Num(), Header, "InstancedComponents.Num");
+	for (int i = 0; i < FMath::Min(A.InstancedComponentPaths.Num(), B.InstancedComponentPaths.Num()); i++)
 	{
-		Result &= TestExpressionError(A.InstancedComponents[i].Equals(B.InstancedComponents[i]), Header, "InstancedComponents");	
+		Result &= TestExpressionError(A.InstancedComponentPaths[i].ToString().Equals(B.InstancedComponentPaths[i].ToString()), Header, "InstancedComponents");	
 	}
 	
 	return Result;
@@ -1494,7 +1494,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameterChoice*
 
 	Result &= TestExpressionError(A->IntValue == B->IntValue, Header, "IntValue");
 	Result &= TestExpressionError(A->DefaultIntValue == B->DefaultIntValue, Header, "DefaultIntValue");
-	Result &= TestExpressionError(A->StringValue.Equals(B->StringValue), Header, "StringValue");
+	Result &= TestExpressionError(A->GetSelectedValueAsString().Equals(B->GetSelectedValueAsString()), Header, "StringValue");
 	Result &= TestExpressionError(A->DefaultStringValue.Equals(B->DefaultStringValue), Header, "DefaultStringValue");
 	Result &= TestExpressionError(A->StringChoiceValues.Num() == B->StringChoiceValues.Num(), Header, "StringChoiceValues.Num");
 	for (int i = 0; i < FMath::Min(A->StringChoiceValues.Num(), B->StringChoiceValues.Num()); i++)
@@ -1606,7 +1606,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameterFloat* 
 
 bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameterFolder* A, const UHoudiniParameterFolder* B)
 {
-	const FString Header = "UHoudiniParameterColor";
+	const FString Header = "UHoudiniParameterFolder";
 
 	bool Result = true;
 	
@@ -1621,7 +1621,7 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameterFolder*
 	Result &= TestExpressionError(A->bExpanded == B->bExpanded, Header, "bExpanded");
 	Result &= TestExpressionError(A->bChosen == B->bChosen, Header, "bChosen");
 	Result &= TestExpressionError(A->ChildCounter == B->ChildCounter, Header, "ChildCounter");
-	//Result &= TestExpressionError(A->bIsContentShown == B->bIsContentShown, Header, "bIsContentShown");
+	Result &= TestExpressionError(A->bIsContentShown == B->bIsContentShown, Header, "bIsContentShown");
 	
 	return Result;
 }
@@ -1640,7 +1640,6 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameterFolderL
 	}
 
 	Result &= TestExpressionError(A->bIsTabMenu == B->bIsTabMenu, Header, "bIsTabMenu");
-	//Result &= TestExpressionError(A->bIsTabsShown == B->bIsTabsShown, Header, "bIsTabsShown");
 
 	return Result;
 }
@@ -1721,15 +1720,9 @@ bool FHoudiniEditorEquivalenceUtils::IsEquivalent(const UHoudiniParameterMultiPa
 	Result &= TestExpressionError(A->Value == B->Value, Header, "Value");
 	Result &= TestExpressionError(A->TemplateName.Equals(B->TemplateName), Header, "TemplateName");
 	Result &= TestExpressionError(A->MultiparmValue == B->MultiparmValue, Header, "MultiparmValue");
-	Result &= TestExpressionError(A->MultiParmInstanceNum == B->MultiParmInstanceNum, Header, "MultiParmInstanceNum");
 	Result &= TestExpressionError(A->MultiParmInstanceLength == B->MultiParmInstanceLength, Header, "MultiParmInstanceLength");
 	Result &= TestExpressionError(A->MultiParmInstanceCount == B->MultiParmInstanceCount, Header, "MultiParmInstanceCount");
 	Result &= TestExpressionError(A->InstanceStartOffset == B->InstanceStartOffset, Header, "InstanceStartOffset");
-	Result &= TestExpressionError(A->MultiParmInstanceLastModifyArray.Num() == B->MultiParmInstanceLastModifyArray.Num(), Header, "MultiParmInstanceLastModifyArray.Num");
-	for (int i = 0; i < FMath::Min(A->MultiParmInstanceLastModifyArray.Num(), B->MultiParmInstanceLastModifyArray.Num()); i++)
-	{
-		Result &= TestExpressionError(A->MultiParmInstanceLastModifyArray[i] == B->MultiParmInstanceLastModifyArray[i], Header, "MultiParmInstanceLastModifyArray");
-	}
 	Result &= TestExpressionError(A->DefaultInstanceCount == B->DefaultInstanceCount, Header, "DefaultInstanceCount");
 
 	return Result;

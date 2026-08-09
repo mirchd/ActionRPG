@@ -1199,10 +1199,7 @@ void FHoudiniEditorTestUtils::LoadMap(FHoudiniAutomationTest* Test, const FStrin
 	{
 		*HasLoadedMap = true;
 	});
-
-	// Introduce an artifical delay in attempt to work around UE5.6 garbage collection issues.
-	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
-
+	
 	Test->AddCommand(new FFunctionLatentCommand([=]()
 	{
 		const double CurrentTime = FPlatformTime::Seconds();
@@ -1449,11 +1446,14 @@ void UHoudiniEditorTestObject::PreInstantiationCallback(UHoudiniPublicAPIAssetWr
 		OnPreInstantiationDelegate.Broadcast(InAssetWrapper, this);
 }
 
-void UHoudiniEditorTestObject::PostInstantiationCallback(UHoudiniPublicAPIAssetWrapper* AssetWrapper)
+void UHoudiniEditorTestObject::PostInstantiationCallback(UHoudiniPublicAPIAssetWrapper* InAssetWrapper)
 {
 	this->IsInstantiating = false;
 
-	AssetWrapper->GetOnPostInstantiationDelegate().RemoveDynamic(this, &UHoudiniEditorTestObject::PostInstantiationCallback);
+	InAssetWrapper->GetOnPostInstantiationDelegate().RemoveDynamic(this, &UHoudiniEditorTestObject::PostInstantiationCallback);
+
+	if(OnPostInstantiationDelegate.IsBound())
+		OnPostInstantiationDelegate.Broadcast(InAssetWrapper, this);
 }
 
 void UHoudiniEditorTestObject::PostCookCallback(UHoudiniPublicAPIAssetWrapper* AssetWrapper, const bool bInCookSuccess)

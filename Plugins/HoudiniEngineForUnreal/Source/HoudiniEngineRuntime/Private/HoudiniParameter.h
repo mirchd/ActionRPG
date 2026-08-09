@@ -165,10 +165,10 @@ public:
 
 	virtual void SetIsChildOfMultiParm(const bool& IsChildOfMultiParam) { bIsChildOfMultiParm = IsChildOfMultiParam; };
 	virtual bool GetIsChildOfMultiParm() const { return bIsChildOfMultiParm; };
-
 	virtual void SetIsDirectChildOfMultiParm(const bool& IsDirectChildOfMultiParam) { bIsDirectChildOfMultiParm = IsDirectChildOfMultiParam; };
 	virtual bool IsDirectChildOfMultiParm() const { return bIsDirectChildOfMultiParm; };
-
+	virtual void SetMultiParmInstanceNumber(int Num) { MultiParmInstanceNum = Num; };
+	virtual int GetMultiParmInstanceNumber() const { return MultiParmInstanceNum; };
 	virtual void SetVisible(const bool& InIsVisible) { bIsVisible = InIsVisible; };
 	virtual void SetVisibleParent(const bool& InIsVisible) { bIsParentFolderVisible = InIsVisible; };
 	virtual void SetDisabled(const bool& InIsDisabled) { bIsDisabled = InIsDisabled; };
@@ -180,8 +180,8 @@ public:
 	virtual void SetTagCount(const uint32& InTagCount) { TagCount = InTagCount; };
 	virtual void SetValueIndex(const uint32& InValueIndex) { ValueIndex = InValueIndex; };
 
-	virtual void MarkChanged(const bool& bInChanged) { bHasChanged = bInChanged; SetNeedsToTriggerUpdate(bInChanged); };
-	virtual void SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate) { bNeedsToTriggerUpdate = bInTriggersUpdate; };
+	virtual void MarkChanged(const bool& bInChanged);
+	virtual void SetNeedsToTriggerUpdate(const bool& bInTriggersUpdate);
 	virtual void RevertToDefault();
 	virtual void RevertToDefault(const int32& TupleIndex);
 	virtual void MarkDefault(const bool& bInDefault);
@@ -212,6 +212,8 @@ public:
 	// Invalidate ids
 	virtual void InvalidateData();
 
+	UHoudiniCookable* GetCookable() const;
+
 	//------------------------------------------------------------------------------------------------
 	// Notifications
 	//------------------------------------------------------------------------------------------------
@@ -220,7 +222,19 @@ public:
 
 	void OnSessionConnected();
 
+	// Family management. We construct parent and child relationships based off ParmIds.
+	const TObjectPtr<UHoudiniParameter> GetParent();
+	const TArray<TObjectPtr<UHoudiniParameter>>& GetChildren();
+	void SetParent(UHoudiniParameter* Parent);
+	void ClearTree();
+
 protected:
+
+	UPROPERTY()
+	TObjectPtr<UHoudiniParameter> Parent = nullptr;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UHoudiniParameter>> Children;
 
 	//---------------------------------------------------------------------------------------------
 	// ParmInfos
@@ -250,11 +264,11 @@ protected:
 	UPROPERTY(DuplicateTransient)
 	int32 NodeId;
 
-	// Id of this parameter.
+	// Id of this parameter.  TODO: make transient, but needed for backwards compatibility for now.
 	UPROPERTY()
 	int32 ParmId;
 
-	// Id of parent parameter, -1 if root is parent.
+	// Id of parent parameter, -1 if root is parent. TODO: make transient, but needed for backwards compatibility for now.,
 	UPROPERTY()
 	int32 ParentParmId;
 
@@ -275,11 +289,11 @@ protected:
 	bool bIsDisabled;
 
 	// Is set to true if value of this parameter has been changed by user.
-	UPROPERTY()
+	UPROPERTY(Transient)
 	bool bHasChanged;
 
 	// Is set to true if value of this parameter will trigger an update of the asset
-	UPROPERTY()
+	UPROPERTY(Transient)
 	bool bNeedsToTriggerUpdate;
 
 	// Indicates that this parameter is still using its default value
@@ -305,6 +319,9 @@ protected:
 	UPROPERTY()
 	bool bIsDirectChildOfMultiParm;
 
+	UPROPERTY()
+	uint32 MultiParmInstanceNum;
+
 	// Indicates a parameter value needs to be reverted to its default
 	UPROPERTY(DuplicateTransient)
 	bool bPendingRevertToDefault;
@@ -321,8 +338,8 @@ protected:
 	uint32 TagCount;	
 
 	// The index to use to look into the values array in order to retrieve the actual value(s) of this parameter.
-	UPROPERTY()
-	int32 ValueIndex;
+	UPROPERTY(DuplicateTransient, Transient)
+	int32 ValueIndex = INDEX_NONE;
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// Expression

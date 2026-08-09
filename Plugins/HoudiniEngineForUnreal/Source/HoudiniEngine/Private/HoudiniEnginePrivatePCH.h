@@ -52,6 +52,7 @@
 #define HAPI_UNREAL_RESOURCE_HOUDINI_COP_MESH			TEXT( "/HoudiniEngine/houdini_default_cop_mesh" )
 #define HAPI_UNREAL_RESOURCE_EDITOR_PLANE				TEXT( "/Engine/EditorMeshes/EditorPlane" )
 #define HAPI_UNREAL_RESOURCE_HOUDINI_COP_MATERIAL		TEXT( "/HoudiniEngine/houdini_default_cop_material" )
+#define HAPI_UNREAL_RESOURCE_HOUDINI_COP_OUT_MATERIAL	TEXT( "/HoudiniEngine/houdini_cop_output_material" )
 
 #define HAPI_UNREAL_RESOURCE_HOUDINI_DEFAULT_REFERENCE_MESH             TEXT("/HoudiniEngine/default_reference_static_mesh.default_reference_static_mesh")
 #define HAPI_UNREAL_RESOURCE_HOUDINI_DEFAULT_REFERENCE_MESH_MATERIAL    TEXT("/HoudiniEngine/default_reference_static_mesh_material.default_reference_static_mesh_material")
@@ -273,10 +274,13 @@
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_SEGMENT_PAINT_LAYER_NAME	    "unreal_landscape_spline_segment_paint_layer_name"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_SEGMENT_RAISE_TERRAIN			"unreal_landscape_spline_segment_raise_terrain"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_SEGMENT_LOWER_TERRAIN			"unreal_landscape_spline_segment_lower_terrain"
+#define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_SEGMENT_CAST_SHADOW			    "unreal_landscape_spline_segment_cast_shadow"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_SEGMENT_MESH					"unreal_landscape_spline_segment_mesh"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_MESH_MATERIAL_OVERRIDE_SUFFIX	"_material_override"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_MESH_SCALE_SUFFIX				"_scale"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_MESH_CENTER_ADJUST_SUFFIX       "_center_adjust"
+#define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_SCALE_TO_WIDTH_SUFFIX           "_scale_to_width"
+#define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_CENTER_H_SUFFIX                 "_center_h"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_MESH_SOCKET_NAME	            "unreal_landscape_spline_mesh_socket_name"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_TANGENT_LENGTH		            "unreal_landscape_spline_tangent_length"
 #define HAPI_UNREAL_ATTRIB_LANDSCAPE_SPLINE_CONNECTION0_MESH_SOCKET_NAME	"unreal_landscape_spline_connection0_mesh_socket_name"
@@ -329,6 +333,14 @@
 
 // PDG Attributes
 #define HAPI_UNREAL_ATTRIB_PDG_ASSET                        "unreal_pdg_asset"
+
+// COP Attributes
+
+#define HAPI_UNREAL_ATTRIB_COP_RESOLUTION_OVERRIDE          "unreal_image_resolution_override"
+#define HAPI_UNREAL_ATTRIB_COP_PIXEL_SCALE_OVERRIDE         "unreal_image_pixel_scale_override"
+#define HAPI_UNREAL_ATTRIB_COP_IMAGE_DATA_FORMAT            "unreal_image_data_format"
+#define HAPI_UNREAL_ATTRIB_HDR_TEXTURE                      "unreal_hdr_texture"
+#define HAPI_UNREAL_ATTRIB_HDR_TEXTURE_CHANNEL              "unreal_hdr_texture_channel"
 
 // Geometry Node
 #define HAPI_UNREAL_PARAM_TRANSLATE							"t"
@@ -497,6 +509,7 @@
 
 // Materials Emissive.
 #define HAPI_UNREAL_PARAM_VALUE_EMISSIVE				"emitcolor"
+#define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_ENABLED		"emit_enable"
 #define HAPI_UNREAL_PARAM_VALUE_EMISSIVE_INTENSITY		"emitint"
 #define HAPI_UNREAL_PARAM_MAP_EMISSIVE					"emitcolor_texture"
 #define HAPI_UNREAL_PARAM_MAP_EMISSIVE_ENABLED			"emitcolor_useTexture"
@@ -605,4 +618,3 @@
 #define HAPI_UNREAL_PARAM_PACKED_FRAGMENTS                                              "packedfragments"
 
 #define HOUDINI_DATA_LAYER_PREFIX                                                        "unreal_data_layer_"
-

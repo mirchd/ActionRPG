@@ -56,7 +56,8 @@
 #include "Logging/LogMacros.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Misc/FileHelper.h"
-
+#include "HoudiniEngineStatusManager.h"
+#include "HoudiniParameterTranslator.h"
 #if WITH_EDITOR
 	#include "Widgets/Notifications/SNotificationList.h"
 	#include "Framework/Notifications/NotificationManager.h"
@@ -90,6 +91,7 @@ FHoudiniEngine::FHoudiniEngine()
 	, HoudiniTemplateMaterial(nullptr)
 	, HoudiniCOPStaticMesh(nullptr)
 	, HoudiniDefaultCOPMaterial(nullptr)
+	, HoudiniDefaultCOPOutputMaterial(nullptr)
 	, HoudiniLogoBrush(nullptr)
 	, HoudiniDefaultReferenceMesh(nullptr)
 	, HoudiniDefaultReferenceMeshMaterial(nullptr)
@@ -148,6 +150,8 @@ FHoudiniEngine::StartupModule()
 		}
 	}
 
+	FHoudiniEngineStatusManager::Initialize();
+
 	// Create static mesh Houdini logo.
 	HoudiniLogoStaticMesh = LoadObject<UStaticMesh>(
 		nullptr, HAPI_UNREAL_RESOURCE_HOUDINI_LOGO, nullptr, LOAD_None, nullptr);
@@ -178,11 +182,16 @@ FHoudiniEngine::StartupModule()
 	if (HoudiniCOPStaticMesh.IsValid())
 		HoudiniCOPStaticMesh->AddToRoot();
 
-	// Create default COP material.
+	// Create default COP materials.
 	HoudiniDefaultCOPMaterial = LoadObject<UMaterial>(
 		nullptr, HAPI_UNREAL_RESOURCE_HOUDINI_COP_MATERIAL, nullptr, LOAD_None, nullptr);
 	if (HoudiniDefaultCOPMaterial.IsValid())
 		HoudiniDefaultCOPMaterial->AddToRoot();
+	
+	HoudiniDefaultCOPOutputMaterial = LoadObject<UMaterial>(
+		nullptr, HAPI_UNREAL_RESOURCE_HOUDINI_COP_OUT_MATERIAL, nullptr, LOAD_None, nullptr);
+	if (HoudiniDefaultCOPOutputMaterial.IsValid())
+		HoudiniDefaultCOPOutputMaterial->AddToRoot();
 
 	// Houdini Logo Brush
 	FString Icon128FilePath = FHoudiniEngineUtils::GetHoudiniEnginePluginDir() / TEXT("Resources/Icon128.png");
@@ -237,6 +246,8 @@ FHoudiniEngine::StartupModule()
 
 	// Create Unreal Object Input manager and its implementation (the singleton takes ownership of the implementation)
 	FUnrealObjectInputManager::SetSingleton(new FUnrealObjectInputManagerImpl());
+
+	FHoudiniParameterUpdater::SetInstance(new FHoudiniEngineParameterUpdater);
 
 	// Set the session status to Not Started
 	SetSessionStatus(EHoudiniSessionStatus::NotStarted);
@@ -308,11 +319,17 @@ FHoudiniEngine::ShutdownModule()
 		HoudiniCOPStaticMesh = nullptr;
 	}
 
-	// We no longer need the COP default material
+	// We no longer need the COP default materials
 	if (HoudiniDefaultCOPMaterial.IsValid())
 	{
 		HoudiniDefaultCOPMaterial->RemoveFromRoot();
 		HoudiniDefaultCOPMaterial = nullptr;
+	}
+
+	if (HoudiniDefaultCOPOutputMaterial.IsValid())
+	{
+		HoudiniDefaultCOPOutputMaterial->RemoveFromRoot();
+		HoudiniDefaultCOPOutputMaterial = nullptr;
 	}
 
 	// We no longer need the Houdini default reference mesh
@@ -1309,6 +1326,7 @@ FHoudiniEngine::StopSessionInternal()
 	}
 
 	Sessions.Empty();
+	FUnrealObjectInputManager::Get().Clear();
 	SetSessionStatus(EHoudiniSessionStatus::Stopped);
 	bEnableSessionSync = false;
 
@@ -2118,12 +2136,10 @@ FHoudiniEngine::StartAndConnectToSessionSync(
 				HOUDINI_LOG_ERROR(TEXT("Failed to start SessionSync - No licenses were available"));
 				FHoudiniEngine::Get().SetSessionStatus(EHoudiniSessionStatus::NoLicense);
 				return false;
-				break;
 			default:
 				HOUDINI_LOG_ERROR(TEXT("Failed to start SessionSync - Unknown error"));
 				FHoudiniEngine::Get().SetSessionStatus(EHoudiniSessionStatus::Failed);
 				return false;
-				break;
 			}
 		}
 
@@ -2160,4 +2176,3 @@ FHoudiniEngine::StartAndConnectToSessionSync(
 }
 
 #undef LOCTEXT_NAMESPACE
-

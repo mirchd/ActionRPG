@@ -50,11 +50,14 @@
 #include "HoudiniParameterRamp.h"
 #include "HoudiniParameterString.h"
 #include "HoudiniParameterToggle.h"
+#include "HoudiniParameterButtonStrip.h"
 #include "HoudiniPDGManager.h"
 #include "HoudiniPublicAPI.h"
 #include "HoudiniPublicAPIBlueprintLib.h"
 #include "HoudiniPublicAPIInputTypes.h"
 #include <Selection.h>
+
+#include "HoudiniParameterTranslator.h"
 #include "Landscape.h"
 #include "LandscapeInfo.h"
 #include "LandscapeStreamingProxy.h"
@@ -342,6 +345,38 @@ UHoudiniPublicAPIAssetWrapper::IsAutoBakeEnabled_Implementation() const
 }
 
 bool
+UHoudiniPublicAPIAssetWrapper::UnlinkBakedOutputs_Implementation(EHoudiniEngineBakeType BakeType)
+{
+	UHoudiniCookable* HC = nullptr;
+	if(!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if(BakeType == EHoudiniEngineBakeType::All || BakeType == EHoudiniEngineBakeType::CookedOutputs)
+		FHoudiniEngineBakeUtils::UnlinkBakedOutputs(HC);
+
+	if(BakeType == EHoudiniEngineBakeType::All || BakeType == EHoudiniEngineBakeType::PDGOutputs)
+		FHoudiniEngineBakeUtils::UnlinkBakedPDGOutputs(HC->GetPDGAssetLink());
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::DeleteBakedOutputs_Implementation(EHoudiniEngineBakeType BakeType)
+{
+	UHoudiniCookable* HC = nullptr;
+	if(!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if(BakeType == EHoudiniEngineBakeType::All || BakeType == EHoudiniEngineBakeType::CookedOutputs)
+		FHoudiniEngineBakeUtils::DeleteBakedOutputs(HC);
+
+	if(BakeType == EHoudiniEngineBakeType::All || BakeType == EHoudiniEngineBakeType::PDGOutputs)
+		FHoudiniEngineBakeUtils::DeleteBakedPDGOutputs(HC->GetPDGAssetLink());
+	
+	return true;
+}
+
+bool
 UHoudiniPublicAPIAssetWrapper::SetBakeMethod_Implementation(const EHoudiniEngineBakeOption InBakeMethod)
 {
 	UHoudiniCookable* HC = nullptr;
@@ -365,6 +400,34 @@ UHoudiniPublicAPIAssetWrapper::GetBakeMethod_Implementation(EHoudiniEngineBakeOp
 		return false;
 
 	OutBakeMethod = HC->GetHoudiniEngineBakeOption();
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::SetBakeActorGrouping_Implementation(const EHoudiniEngineActorBakeOption InActorBakeOption)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (HC->GetActorBakeOption() != InActorBakeOption)
+	{
+		HC->SetActorBakeOption(InActorBakeOption);
+		HC->Modify();
+	}
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::GetBakeActorGrouping_Implementation(EHoudiniEngineActorBakeOption& OutActorBakeOption)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	OutActorBakeOption = HC->GetActorBakeOption();
 
 	return true;
 }
@@ -476,6 +539,157 @@ UHoudiniPublicAPIAssetWrapper::GetBakedOutputActors_Implementation()
 
 	return OutputActors;
 }
+
+// COP / IMAGE
+bool 
+UHoudiniPublicAPIAssetWrapper::GetOverrideDefaultResolution_Implementation(FIntPoint& OutResolutionOverride) const
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if(!HC->GetImageData())
+		return false;
+
+	OutResolutionOverride = HC->GetImageData()->ResolutionOverride;
+	
+	return HC->GetImageData()->bOverrideDefaultResolution;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::SetOverrideDefaultResolution_Implementation(const FIntPoint& InResolutionOverride)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	HC->GetImageData()->ResolutionOverride = InResolutionOverride;
+	HC->GetImageData()->bOverrideDefaultResolution = true;
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::GetOverridePixelScale_Implementation(float& OutPixelScale) const
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	OutPixelScale = HC->GetImageData()->PixelScale;
+	return HC->GetImageData()->bOverridePixelScale;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::SetOverridePixelScale_Implementation(const float& InPixelScale)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	HC->GetImageData()->PixelScale = InPixelScale;
+	HC->GetImageData()->bOverridePixelScale = true;
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::GetImageDataFormat_Implementation(EHoudiniEngineImageDataFormat& OutImageDataFormat) const
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	OutImageDataFormat = HC->GetImageData()->ImageDataFormat;
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::SetImageDataFormat_Implementation(const EHoudiniEngineImageDataFormat& InImageDataFormat)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+	
+	HC->GetImageData()->ImageDataFormat = InImageDataFormat;
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::GetGenerateMaterial_Implementation(bool& OutGenerateMaterial) const
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	OutGenerateMaterial = HC->GetImageData()->bGenerateMaterial;
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::SetGenerateMaterial_Implementation(const bool InGenerateMaterial)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	HC->GetImageData()->bGenerateMaterial = InGenerateMaterial;
+
+	return true;
+}
+
+UMaterialInterface*
+UHoudiniPublicAPIAssetWrapper::GetMaterialToInstance_Implementation() const
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return nullptr;
+
+	if (!HC->GetImageData())
+		return nullptr;
+
+	return HC->GetImageData()->MaterialToInstance;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::SetMaterialToInstance_Implementation(UMaterialInterface* InMaterial)
+{
+	UHoudiniCookable* HC = nullptr;
+	if (!GetValidHoudiniCookableWithError(HC))
+		return false;
+
+	if (!HC->GetImageData())
+		return false;
+
+	HC->GetImageData()->MaterialToInstance = InMaterial;
+
+	return true;
+}
+
 
 bool
 UHoudiniPublicAPIAssetWrapper::GetValidHoudiniAssetActorWithError(AHoudiniAssetActor*& OutActor) const
@@ -749,7 +963,7 @@ UHoudiniPublicAPIAssetWrapper::Rebuild_Implementation()
 }
 
 bool
-UHoudiniPublicAPIAssetWrapper::Recook_Implementation()
+UHoudiniPublicAPIAssetWrapper::Recook_Implementation() const
 {
 	UHoudiniCookable* HC = nullptr;
 	if (!GetValidHoudiniCookableWithError(HC))
@@ -1014,8 +1228,14 @@ UHoudiniPublicAPIAssetWrapper::SetFloatParameterValue_Implementation(FName InPar
 		return false;
 	}
 
-	if (bDidChangeValue && bInMarkChanged)
+	if(bDidChangeValue && bInMarkChanged)
+	{
 		Param->MarkChanged(true);
+		Param->GetCookable()->UpdateParameters();
+
+		if(this->IsAutoCookingEnabled())
+			this->Recook();
+	}
 	
 	return true;
 }
@@ -1103,8 +1323,11 @@ UHoudiniPublicAPIAssetWrapper::SetColorParameterValue_Implementation(FName InPar
 	}
 
 	if (bDidChangeValue && bInMarkChanged)
+	{
 		Param->MarkChanged(true);
-	
+		if(this->IsAutoCookingEnabled())
+			this->Recook();
+	}
 	return true;
 }
 
@@ -1173,7 +1396,7 @@ UHoudiniPublicAPIAssetWrapper::SetIntParameterValue_Implementation(FName InParam
 			return false;
 		}
 
-		bDidChangeValue = ChoiceParam->SetIntValue(InValue);
+		bDidChangeValue = ChoiceParam->SetChoiceSelection(InValue);
 	}
 	else if (ParamType == EHoudiniParameterType::MultiParm)
 	{
@@ -1185,7 +1408,13 @@ UHoudiniPublicAPIAssetWrapper::SetIntParameterValue_Implementation(FName InParam
 			return false;
 		}
 
-		bDidChangeValue = MultiParam->SetNumElements(InValue);
+		bDidChangeValue = false;
+		if (MultiParam->GetInstanceCount() != InValue)
+		{
+			bDidChangeValue = true;
+			FHoudiniParameterTranslator::SetNumMultiParmElements(MultiParam, InValue);
+		}
+
 	}
 	else if (ParamType == EHoudiniParameterType::Toggle)
 	{
@@ -1221,6 +1450,17 @@ UHoudiniPublicAPIAssetWrapper::SetIntParameterValue_Implementation(FName InParam
 		// For ramps we have to use the appropriate function so that delete/insert operations are managed correctly
 		bDidChangeValue = SetRampParameterNumPoints(InParameterTupleName, InValue);
 	}
+	else if(ParamType == EHoudiniParameterType::ButtonStrip)
+	{
+		UHoudiniParameterButtonStrip* BSParam = Cast<UHoudiniParameterButtonStrip>(Param);
+		if(!IsValid(BSParam))
+		{
+			SetErrorMessage(FString::Printf(
+				TEXT("Unexpected parameter class (%s) vs type (%d)"), *Param->GetClass()->GetName(), ParamType));
+			return false;
+		}
+		bDidChangeValue = BSParam->SetValue(InValue);
+	}
 	else
 	{
 		SetErrorMessage(FString::Printf(
@@ -1228,8 +1468,14 @@ UHoudiniPublicAPIAssetWrapper::SetIntParameterValue_Implementation(FName InParam
 		return false;
 	}
 
-	if (bDidChangeValue && bInMarkChanged)
+	if(bDidChangeValue && bInMarkChanged)
+	{
 		Param->MarkChanged(true);
+		Param->GetCookable()->UpdateParameters();
+
+		if(this->IsAutoCookingEnabled())
+			this->Recook();
+	}
 
 	return true;
 }
@@ -1268,7 +1514,7 @@ UHoudiniPublicAPIAssetWrapper::GetIntParameterValue_Implementation(FName InParam
 			return false;
 		}
 
-		OutValue = ChoiceParam->GetIntValue(ChoiceParam->GetIntValueIndex());
+		OutValue = ChoiceParam->GetIntValues()[ChoiceParam->GetChoiceSelection()];
 		return true;
 	}
 	else if (ParamType == EHoudiniParameterType::MultiParm)
@@ -1281,7 +1527,7 @@ UHoudiniPublicAPIAssetWrapper::GetIntParameterValue_Implementation(FName InParam
 			return false;
 		}
 
-		OutValue = MultiParam->GetNextInstanceCount();
+		OutValue = MultiParam->GetInstanceCount();
 		return true;
 	}
 	else if (ParamType == EHoudiniParameterType::Toggle)
@@ -1308,6 +1554,15 @@ UHoudiniPublicAPIAssetWrapper::GetIntParameterValue_Implementation(FName InParam
 		}
 
 		OutValue = FolderParam->IsChosen();
+		return true;
+	}
+	if(ParamType == EHoudiniParameterType::ButtonStrip)
+	{
+		UHoudiniParameterButtonStrip * BSParam = Cast<UHoudiniParameterButtonStrip>(Param);
+		if(!IsValid(BSParam))
+			return false;
+
+		OutValue = BSParam->GetValue();
 		return true;
 	}
 
@@ -1360,8 +1615,13 @@ UHoudiniPublicAPIAssetWrapper::SetBoolParameterValue_Implementation(FName InPara
 	}
 
 	if (bDidChangeValue && bInMarkChanged)
+	{
 		Param->MarkChanged(true);
+		Param->GetCookable()->UpdateParameters();
 
+		if(this->IsAutoCookingEnabled())
+			this->Recook();
+	}
 	return true;
 }
 
@@ -1468,7 +1728,17 @@ UHoudiniPublicAPIAssetWrapper::SetStringParameterValue_Implementation(FName InPa
 			return false;
 		}
 
-		bDidChangeValue = ChoiceParam->SetStringValue(InValue);
+		int Index = ChoiceParam->GetStringValues().Find(InValue);
+		if (Index != INDEX_NONE)
+		{
+			bDidChangeValue = ChoiceParam->SetChoiceSelection(Index);
+		}
+		else
+		{
+			HOUDINI_LOG_ERROR(TEXT("Cannot apply preset choice %s to parameter %s as it does not exist."), *InValue, *ChoiceParam->GetParameterName());
+			bDidChangeValue = false;
+		}
+
 	}
 	else if (ParamType == EHoudiniParameterType::File || ParamType == EHoudiniParameterType::FileDir ||
 		ParamType == EHoudiniParameterType::FileGeo || ParamType == EHoudiniParameterType::FileImage)
@@ -1497,9 +1767,14 @@ UHoudiniPublicAPIAssetWrapper::SetStringParameterValue_Implementation(FName InPa
 		return false;
 	}
 
-	if (bDidChangeValue && bInMarkChanged)
+	if(bDidChangeValue && bInMarkChanged)
+	{
 		Param->MarkChanged(true);
+		Param->GetCookable()->UpdateParameters();
 
+		if(this->IsAutoCookingEnabled())
+			this->Recook();
+	}
 	return true;
 }
 
@@ -1559,7 +1834,7 @@ UHoudiniPublicAPIAssetWrapper::GetStringParameterValue_Implementation(FName InPa
 			return false;
 		}
 
-		OutValue = ChoiceParam->GetStringValue();
+		OutValue = ChoiceParam->GetSelectedValueAsString();
 		return true;
 	}
 	else if (ParamType == EHoudiniParameterType::File || ParamType == EHoudiniParameterType::FileDir ||
@@ -1630,8 +1905,13 @@ UHoudiniPublicAPIAssetWrapper::SetAssetRefParameterValue_Implementation(FName In
 	}
 
 	if (bDidChangeValue && bInMarkChanged)
+	{
 		Param->MarkChanged(true);
+		Param->GetCookable()->UpdateParameters();
 
+		if(this->IsAutoCookingEnabled())
+			this->Recook();
+	}
 	return true;
 }
 
@@ -1854,6 +2134,10 @@ UHoudiniPublicAPIAssetWrapper::SetRampParameterNumPoints_Implementation(FName In
 			}
 
 			Param->MarkChanged(true);
+			Param->GetCookable()->UpdateParameters();
+
+			if(this->IsAutoCookingEnabled())
+				this->Recook();
 		}
 		else if (InNumPoints > CurrentNumPoints)
 		{
@@ -1882,6 +2166,10 @@ UHoudiniPublicAPIAssetWrapper::SetRampParameterNumPoints_Implementation(FName In
 			}
 			
 			Param->MarkChanged(true);
+			Param->GetCookable()->UpdateParameters();
+
+			if(this->IsAutoCookingEnabled())
+				this->Recook();
 		}
 
 		// If at this point InNumPoints != CurrentNumPoints then something went wrong, we couldn't delete all the
@@ -2545,7 +2833,10 @@ UHoudiniPublicAPIAssetWrapper::TriggerButtonParameter_Implementation(FName InBut
 		if (!ButtonParam->HasChanged() || !ButtonParam->NeedsToTriggerUpdate())
 		{
 			ButtonParam->MarkChanged(true);
-			// bDidTrigger = true;
+			ButtonParam->GetCookable()->UpdateParameters();
+
+			if(this->IsAutoCookingEnabled())
+				this->Recook();
 		}
 	}
 	else
@@ -3256,6 +3547,15 @@ UHoudiniPublicAPIAssetWrapper::HasPDGAssetLink_Implementation() const
 	return IsValid(GetHoudiniPDGAssetLink());
 }
 
+EPDGLinkState
+UHoudiniPublicAPIAssetWrapper::GetPDGAssetLinkState_Implementation() const
+{
+	if(!IsValid(GetHoudiniPDGAssetLink()))
+		return EPDGLinkState::Inactive;
+	else
+		return GetHoudiniPDGAssetLink()->LinkState;
+}
+
 bool
 UHoudiniPublicAPIAssetWrapper::GetPDGTOPNetworkPaths_Implementation(TArray<FString>& OutTOPNetworkPaths) const
 {
@@ -3287,6 +3587,26 @@ UHoudiniPublicAPIAssetWrapper::GetPDGTOPNodePaths_Implementation(const FString& 
 	{
 		OutTOPNodePaths.Add(TOPNode->NodePath);
 	}
+
+	return true;
+}
+
+bool
+UHoudiniPublicAPIAssetWrapper::GetPDGWorkItemStatus_Implementation(FHoudiniPublicAPIPDGStatus& OutStatus) const
+{
+	OutStatus = {};
+
+	UHoudiniPDGAssetLink* AssetLink =  GetHoudiniPDGAssetLink();
+	if(!IsValid(AssetLink))
+		return false;
+
+	auto & WorkTally = AssetLink->WorkItemTally;
+
+	OutStatus.NumCookedWorkItems = WorkTally.NumCookedWorkItems();
+	OutStatus.NumCookingWorkItems = WorkTally.NumCookingWorkItems();
+	OutStatus.NumFailedWorkItems = WorkTally.NumErroredWorkItems();
+	OutStatus.NumImportedWorkItems = WorkTally.NumLoadedWorkItems();
+	OutStatus.NumWaitingWorkItems = WorkTally.NumWaitingWorkItems();
 
 	return true;
 }
@@ -3362,7 +3682,7 @@ UHoudiniPublicAPIAssetWrapper::PDGCookOutputsForNetwork_Implementation(const FSt
 	if (!GetValidTOPNetworkByPathWithError(InNetworkRelativePath, NetworkIndex, TOPNet))
 		return false;
 
-	return FHoudiniPDGManager::CookOutput(TOPNet);
+	return FHoudiniPDGManager::CookOutput(GetHoudiniCookable(), TOPNet);
 }
 
 bool

@@ -293,7 +293,8 @@ UHoudiniAssetComponent::~UHoudiniAssetComponent()
 	//FHoudiniEngineRuntime::Get().UnRegisterHoudiniCookable(GetCookable());
 }
 
-void UHoudiniAssetComponent::PostInitProperties()
+void 
+UHoudiniAssetComponent::PostInitProperties()
 {
 	Super::PostInitProperties();
 
@@ -314,8 +315,9 @@ void UHoudiniAssetComponent::PostInitProperties()
 		StaticMeshGenerationProperties_DEPRECATED.GeneratedAssetUserData = HoudiniRuntimeSettings->AssetUserData;
 	}
 
-	// Register ourself to the HER singleton
-	FHoudiniEngineRuntime::Get().RegisterHoudiniCookable(GetCookable());
+	// Register our cookable to the HER singleton
+	// Calling this instead of RegisterHoudiniCookable allow BP integration to override this...
+	RegisterHoudiniComponent(this);
 }
 
 UWorld* 
@@ -351,15 +353,13 @@ UHoudiniAssetComponent::GetDisplayName() const
 }
 
 #if WITH_EDITORONLY_DATA
-TArray<TObjectPtr<UHoudiniParameter>>&
-UHoudiniAssetComponent::GetParameters()
-{ 
-	if (GetCookable())
-		return GetCookable()->GetParameters();
-
-	return Parameters_DEPRECATED; 
+void UHoudiniAssetComponent::SetParameters(const TArray<TObjectPtr<UHoudiniParameter>>& Parameters)
+{
+	if(GetCookable())
+		return GetCookable()->SetParameters(Parameters);
 }
 #endif
+
 
 #if WITH_EDITORONLY_DATA
 const TArray<TObjectPtr<UHoudiniParameter>>&
@@ -658,10 +658,6 @@ UHoudiniAssetComponent::SetEnableProxyStaticMeshRefinementOnPreBeginPIEOverride(
 void
 UHoudiniAssetComponent::SetHoudiniAsset(UHoudiniAsset * InHoudiniAsset)
 {
-	// Check the asset validity
-	if (!IsValid(InHoudiniAsset))
-		return;
-
 	if (GetCookable())
 		GetCookable()->SetHoudiniAsset(InHoudiniAsset);
 }
@@ -1241,12 +1237,15 @@ UHoudiniAssetComponent::PostEditChangeProperty(FPropertyChangedEvent & PropertyC
 
 	// TODO: COOKABLE - Still working?
 
+	// TODO: COOKABLE - fix proxy settings!!!!
+
 	// Changing the Houdini Asset?
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UHoudiniAssetComponent, HoudiniAsset_DEPRECATED))
-	{
-		OnHoudiniAssetChanged();
-	}
-	else if (PropertyName == GetRelativeLocationPropertyName()
+	//if (PropertyName == GET_MEMBER_NAME_CHECKED(UCookableHoudiniAssetData, HoudiniAsset))
+	//{
+	//	OnHoudiniAssetChanged();
+	//}
+	//else
+	if (PropertyName == GetRelativeLocationPropertyName()
 			|| PropertyName == GetRelativeRotationPropertyName()
 			|| PropertyName == GetRelativeScale3DPropertyName())
 	{
@@ -1659,34 +1658,21 @@ UHoudiniAssetComponent::SetAssetCookCount(const int32& InCount)
 }
 
 FBoxSphereBounds
-UHoudiniAssetComponent::CalcBounds(const FTransform & LocalToWorld) const
+UHoudiniAssetComponent::CalcBounds(const FTransform& InLocalToWorld) const
 {
-	FBoxSphereBounds LocalBounds;
-	FBox BoundingBox = GetAssetBounds(nullptr, false);
-	if (BoundingBox.GetExtent() == FVector3d::ZeroVector)
-		BoundingBox = BoundingBox.ExpandBy(1.0);
-
-	LocalBounds = FBoxSphereBounds(BoundingBox);
-	// fix for offset bounds - maintain local bounds origin
-	LocalBounds = LocalBounds.TransformBy(LocalToWorld);
-
-	const auto& LocalAttachedChildren = GetAttachChildren();
-	for (int32 Idx = 0; Idx < LocalAttachedChildren.Num(); ++Idx)
+	FBoxSphereBounds BoxBound = Super::CalcBounds(InLocalToWorld);
+	if (BoxBound.ContainsNaN() || BoxBound.SphereRadius <= 0.0f || BoxBound.BoxExtent.IsZero())
 	{
-		if (!LocalAttachedChildren[Idx])
-			continue;
-
-		FBoxSphereBounds ChildBounds = LocalAttachedChildren[Idx]->CalcBounds(LocalToWorld);
-		if (!ChildBounds.ContainsNaN())
-			LocalBounds = LocalBounds + ChildBounds;
+		// Never return an zero-bounds, this spams errors in the log
+		return FBoxSphereBounds(InLocalToWorld.GetLocation(), FVector(0.5, 0.5, 0.5), 1.0);
 	}
 
-	return LocalBounds;
+	return BoxBound;
 }
 
 
 FBox
-UHoudiniAssetComponent::GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreGeneratedLandscape) const
+UHoudiniAssetComponent::GetAssetBoundsForLandscapeSelection(UHoudiniInput* IgnoreInput, bool bIgnoreGeneratedLandscape) const
 {
 	FBox BoxBounds(ForceInitToZero);
 
@@ -1699,9 +1685,7 @@ UHoudiniAssetComponent::GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreG
 	// This can cause random ensure to trigger when deleting HACs
 	if (IsBeingDestroyed() || HasAnyFlags(RF_BeginDestroyed | RF_FinishDestroyed))
 		return BoxBounds;
-
 	
-	// Commented out: Creates incorrect focus bounds..
 	// Query the bounds for all output objects
 	if (GetCookable() && GetCookable()->GetOutputData())
 	{
@@ -1716,7 +1700,7 @@ UHoudiniAssetComponent::GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreG
 
 	/*
 	// Query the bounds for all our inputs
-	// Update! Bug: 148321. Thi casues other issues too. Just don't.
+	// Update! Bug: 148321. This causes other issues too. Just don't.
 	// Bug: 134158: For some reason using inputs in this manner during cooking will crash the cooker
 	// when using World Partition. So ignore inputs during cooking.
 	if (!IsRunningCookCommandlet())
@@ -1732,6 +1716,7 @@ UHoudiniAssetComponent::GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreG
 	}	
 	*/
 
+	// DPT: Well, I guess we shouldn't query bounds for input params as well then...
 	// Query the bounds for all input parameters
 	//TArray<TObjectPtr<UHoudiniParameter>>& MyParams = GetParameters();
 #if WITH_EDITORONLY_DATA
@@ -1764,31 +1749,6 @@ UHoudiniAssetComponent::GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreG
 	}
 
 	/*
-	// Commented out: Creates incorrect focus bounds..
-	// Also scan all our decendants for SMC bounds not just top-level children
-	// ( split mesh instances' mesh bounds were not gathered properly )
-	TArray<USceneComponent*> LocalAttachedChildren;
-	LocalAttachedChildren.Reserve(16);
-	GetChildrenComponents(true, LocalAttachedChildren);
-	for (int32 Idx = 0; Idx < LocalAttachedChildren.Num(); ++Idx)
-	{
-		if (!LocalAttachedChildren[Idx])
-			continue;
-
-		USceneComponent * pChild = LocalAttachedChildren[Idx];
-		if (UStaticMeshComponent * StaticMeshComponent = Cast<UStaticMeshComponent>(pChild))
-		{
-			if (!IsValid(StaticMeshComponent))
-				continue;
-
-			FBox StaticMeshBounds = StaticMeshComponent->Bounds.GetBox();
-			if (StaticMeshBounds.IsValid)
-				BoxBounds += StaticMeshBounds;
-		}
-	}
-	*/
-
-	/*
 	// Commented out: This also created incorrect focus bounds..
 	// If nothing was found, init with the asset's location
 	if (BoxBounds.GetVolume() == 0.0f)
@@ -1796,6 +1756,7 @@ UHoudiniAssetComponent::GetAssetBounds(UHoudiniInput* IgnoreInput, bool bIgnoreG
 	*/
 	return BoxBounds;
 }
+
 
 #if WITH_EDITORONLY_DATA
 EHoudiniEngineBakeOption
@@ -2865,6 +2826,8 @@ UHoudiniAssetComponent::TransferDataToCookable(UHoudiniCookable* HC)
 #if WITH_EDITORONLY_DATA
 	HC->InputData->Inputs = Inputs_DEPRECATED; // COOKABLE - INPUTS
 	Inputs_DEPRECATED.Empty();
+
+	HC->FixupInputPointers();
 #endif
 
 	HC->OutputData->Outputs = Outputs_DEPRECATED; // COOKABLE - OUTPUTS

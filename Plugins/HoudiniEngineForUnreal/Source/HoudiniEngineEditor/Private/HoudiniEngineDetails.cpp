@@ -41,6 +41,8 @@
 #include "HoudiniEditorNodeSyncSubsystem.h"
 #include "HoudiniEngineRuntime.h"
 #include "HoudiniEngineRuntimePrivatePCH.h"
+#include "HoudiniOutput.h"
+#include "HoudiniOutputTranslator.h"
 #include "HoudiniEngineStyle.h"
 #include "HoudiniEngineUtils.h"
 #include "HoudiniLandscapeTranslator.h"
@@ -90,6 +92,7 @@
 #include "Widgets/Layout/SUniformGridPanel.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/SRichTextBlock.h"
+#include "HoudiniEngineStatusManager.h"
 
 #define LOCTEXT_NAMESPACE HOUDINI_LOCTEXT_NAMESPACE
 
@@ -99,9 +102,7 @@
 #define HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG										4
 #define HOUDINI_ENGINE_UI_SECTION_PARAMETER_RESET										5
 
-#define HOUDINI_ENGINE_UI_BUTTON_WIDTH											   150.0f
-
-#define HOUDINI_ENGINE_UI_SECTION_GENERATE_HEADER_TEXT								"Generate"
+#define HOUDINI_ENGINE_UI_SECTION_GENERATE_HEADER_TEXT								"Cook"
 #define HOUDINI_ENGINE_UI_SECTION_BAKE_HEADER_TEXT									"Bake"
 #define HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS_HEADER_TEXT							"Asset Options"
 #define HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG_HEADER_TEXT						"Help and Debug"
@@ -215,15 +216,18 @@ FHoudiniEngineDetails::CreateHoudiniAssetDetails(
 		.Font(IDetailLayoutBuilder::GetDetailFont())
 		.ToolTipText_Lambda([MainCookable]()
 		{
+			if (!IsValidWeakPointer(MainCookable))
+				return FText();
+
 			// Display the full name of the node for tooltip
 			return FText::FromString(MainCookable->GetHoudiniAssetData()->HapiAssetName);
 		})
 	];
 
 	// Lambda for updating the Houdini asset
-	auto UpdateHoudiniAsset = [MainHDA](const TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables, UObject* InObject)
+	auto UpdateHoudiniAsset = [MainCookable](const TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables, UObject* InObject)
 	{
-		if (!IsValid(MainHDA))
+		if (!IsValidWeakPointer(MainCookable))
 			return;
 
 		if (!InObject->IsA<UHoudiniAsset>())
@@ -237,7 +241,7 @@ FHoudiniEngineDetails::CreateHoudiniAssetDetails(
 		FScopedTransaction Transaction(
 			TEXT(HOUDINI_MODULE_EDITOR),
 			LOCTEXT("HoudiniAssetChange", "Houdini Engine: Changed the Houdini Asset."),
-			MainHDA->GetOuter());
+			MainCookable->GetOuter());
 
 		for (auto CurCookable : InCookables)
 		{
@@ -297,6 +301,9 @@ FHoudiniEngineDetails::CreateHoudiniAssetDetails(
 			.NewAssetFactories(TArray<UFactory*>())
 			.ToolTipText_Lambda([MainCookable]()
 			{
+				if (!IsValidWeakPointer(MainCookable))
+					return FText();
+
 				// Display the full name of the node for tooltip
 				return FText::FromString(MainCookable->GetHoudiniAssetData()->HapiAssetName);
 			})
@@ -387,157 +394,6 @@ FHoudiniEngineDetails::CreateHoudiniEngineActionWidget(
 	Row.WholeRowWidget.Widget = Box;
 }
 
-bool
-ShouldEnableParametersButton(const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
-{
-	for(auto& NextHC : InHCs)
-	{
-		if(!IsValidWeakPointer(NextHC))
-			continue;
-
-		// Reset parameters to default values?
-		for(int32 n = 0; n < NextHC->GetNumParameters(); ++n)
-		{
-			UHoudiniParameter* NextParm = NextHC->GetParameterAt(n);
-			if(IsValid(NextParm) && !NextParm->IsDefault())
-				return true;
-		}
-	}
-
-	return false;
-}
-
-void ResetParameters(const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
-{
-	for(auto& NextHC : InHCs)
-	{
-		if(!IsValidWeakPointer(NextHC))
-			continue;
-
-		// Reset parameters to default values?
-		for(int32 n = 0; n < NextHC->GetNumParameters(); ++n)
-		{
-			UHoudiniParameter* NextParm = NextHC->GetParameterAt(n);
-			if(IsValid(NextParm) && !NextParm->IsDefault())
-			{
-				NextParm->RevertToDefault();
-			}
-		}
-	}
-}
-
-void FHoudiniEngineDetails::CreateResetParametersButton(const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, TSharedRef<SHorizontalBox> ButtonHorizontalBox)
-{
-	auto ShouldEnableResetParametersButtonLambda = [InHCs]()
-		{
-			return ShouldEnableParametersButton(InHCs);
-		};
-
-	auto OnResetParametersClickedLambda = [InHCs]()
-		{
-			ResetParameters(InHCs);
-			return FReply::Handled();
-		};
-
-	TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIResetParametersIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIResetParametersIconBrush();
-
-	TSharedPtr<SButton> ResetParametersButton;
-	TSharedPtr<SHorizontalBox> ResetParametersButtonHorizontalBox;
-	ButtonHorizontalBox->AddSlot()
-		.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-		//.Padding(2.0f, 0.0f, 0.0f, 2.0f)
-		[
-			SNew(SBox)
-				.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-				[
-					SAssignNew(ResetParametersButton, SButton)
-						.VAlign(VAlign_Center)
-						.HAlign(HAlign_Center)
-						.ToolTipText(LOCTEXT("HoudiniAssetDetailsResetParametersAssetButton", "Reset the selected Houdini Asset's parameters to their default values."))
-						//.Text(FText::FromString("Reset Parameters"))
-						.IsEnabled_Lambda(ShouldEnableResetParametersButtonLambda)
-						.Visibility(EVisibility::Visible)
-						.OnClicked_Lambda(OnResetParametersClickedLambda)
-						.Content()
-						[
-							SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot()
-								.HAlign(HAlign_Center)
-								[
-									SAssignNew(ResetParametersButtonHorizontalBox, SHorizontalBox)
-								]
-						]
-				]
-		];
-
-	if(HoudiniEngineUIResetParametersIconBrush.IsValid())
-	{
-		TSharedPtr<SImage> ResetParametersImage;
-		ResetParametersButtonHorizontalBox->AddSlot()
-			.MaxWidth(16.0f)
-			//.Padding(0.0f, 0.0f, 3.0f, 0.0f)
-			[
-				SNew(SBox)
-					.WidthOverride(16.0f)
-					.HeightOverride(16.0f)
-					[
-						SAssignNew(ResetParametersImage, SImage)
-							//.ColorAndOpacity(FSlateColor::UseForeground())
-					]
-			];
-
-		ResetParametersImage->SetImage(
-			TAttribute<const FSlateBrush*>::Create(
-				TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIResetParametersIconBrush]()
-					{
-						return HoudiniEngineUIResetParametersIconBrush.Get();
-					})
-			)
-		);
-	}
-
-	ResetParametersButtonHorizontalBox->AddSlot()
-		.Padding(5.0, 0.0, 0.0, 0.0)
-		//.FillWidth(4.2f)
-		.VAlign(VAlign_Center)
-		.HAlign(HAlign_Center)
-		.AutoWidth()
-		[
-			SNew(STextBlock)
-				//.MinDesiredWidth(160.f)
-				.Text(FText::FromString("Reset Parameters"))
-		];
-}
-
-void FHoudiniEngineDetails::CreateResetParametersOnlyWidgets(
-	IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
-{
-	if(InHCs.Num() <= 0)
-		return;
-
-	const TWeakObjectPtr<UHoudiniCookable>& MainHC = InHCs[0];
-	if(!IsValidWeakPointer(MainHC))
-		return;
-
-	FHoudiniEngineDetails::AddHeaderRowForCookable(HoudiniEngineCategoryBuilder, MainHC, HOUDINI_ENGINE_UI_SECTION_PARAMETER_RESET);
-
-	// Button Row (draw only if expanded)
-	if(!MainHC->bGenerateMenuExpanded)
-		return;
-
-	FDetailWidgetRow& ButtonRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::GetEmpty());
-	TSharedRef<SHorizontalBox> ButtonHorizontalBox = SNew(SHorizontalBox);
-	ButtonRow.WholeRowWidget.Widget = ButtonHorizontalBox;
-	ButtonRow.IsEnabled(true);
-
-	//----------------------------------------------------------------
-	// Reset Parameters button
-	//----------------------------------------------------------------
-
-	CreateResetParametersButton(InHCs, ButtonHorizontalBox);
-}
-
 void
 FHoudiniEngineDetails::CreateGenerateWidgets(
 	IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
@@ -547,575 +403,644 @@ FHoudiniEngineDetails::CreateGenerateWidgets(
 	if (InHCs.Num() <= 0)
 		return;
 
-	const TWeakObjectPtr<UHoudiniCookable>& MainHC = InHCs[0];
-	if (!IsValidWeakPointer(MainHC))
-		return;
-	
-	auto OnReBuildClickedLambda = [InHCs]()
+	IDetailGroup& GenerateGroup = HoudiniEngineCategoryBuilder.AddGroup(
+		FName(TEXT(HOUDINI_ENGINE_UI_SECTION_GENERATE_HEADER_TEXT)),
+		FText::FromString(TEXT(HOUDINI_ENGINE_UI_SECTION_GENERATE_HEADER_TEXT)), false, false);
+	IDetailLayoutBuilder* SavedLayoutBuilder = &HoudiniEngineCategoryBuilder.GetParentLayout();
+
+	if(Flags.bCookButtons)
 	{
-		for (auto& NextHC : InHCs)
-		{
-			if (!IsValidWeakPointer(NextHC))
-				continue;
+		const TWeakObjectPtr<UHoudiniCookable>& MainHC = InHCs[0];
+		if(!IsValidWeakPointer(MainHC))
+			return;
 
-			NextHC->MarkAsNeedRebuild();
-		}
+		auto OnReBuildClickedLambda = [InHCs]()
+			{
+				for(auto& NextHC : InHCs)
+				{
+					if(!IsValidWeakPointer(NextHC))
+						continue;
 
-		return FReply::Handled();
-	};
+					NextHC->MarkAsNeedRebuild();
+				}
 
-	auto OnRecookClickedLambda = [InHCs]()
-	{
-		for(auto& NextHC : InHCs)
-		{
-			if(!IsValidWeakPointer(NextHC))
-				continue;
+				return FReply::Handled();
+			};
 
-			NextHC->MarkAsNeedCook();
-		}
-		return FReply::Handled();
-	};
+		auto OnRecookClickedLambda = [InHCs]()
+			{
+				for(auto& NextHC : InHCs)
+				{
+					if(!IsValidWeakPointer(NextHC))
+						continue;
 
-	auto OnCookFolderTextCommittedLambda = [InHCs, MainHC](const FText& Val, ETextCommit::Type TextCommitType)
-	{
-		SetFolderPath(Val, false, MainHC, InHCs);
-	};
+					NextHC->MarkAsNeedCook();
+				}
+				return FReply::Handled();
+			};
 
-	auto OnCookFolderBrowseButtonClickedLambda = [InHCs, MainHC]()
-	{
-		TSharedRef<SSelectFolderPathDialog> Dialog =
-			SNew(SSelectFolderPathDialog)
-			.InitialPath(FText::FromString(MainHC->GetTemporaryCookFolderOrDefault()))
-			.TitleText(LOCTEXT("CookFolderDialogTitle", "Select Temporary Cook Folder"));
+		auto OnDeleteClickedLambda = [InHCs, SavedLayoutBuilder]()
+			{
+				TArray<AActor*> OwnersToRefresh;
 
-		if (Dialog->ShowModal() != EAppReturnType::Cancel)
-		{
-			SetFolderPath(Dialog->GetFolderPath(), false, MainHC, InHCs);
-		}
+				// Remove outputs
+				for (auto& NextHC : InHCs)
+				{
+					if (!IsValidWeakPointer(NextHC))
+						continue;
 
-		return FReply::Handled();
-	};
+					if (AActor* OwnerActor = NextHC->GetOwner())
+					{
+						OwnersToRefresh.AddUnique(OwnerActor);
+					}
 
-	auto OnCookFolderResetButtonClickedLambda = [InHCs, MainHC]()
-	{
-		FText EmptyText;
-		SetFolderPath(EmptyText, false, MainHC, InHCs);
+					FHoudiniOutputTranslator::ClearAndRemoveOutputs(
+						NextHC->GetOutputs(),
+						EHoudiniClearFlags::EHoudiniClear_Actors
+						| EHoudiniClearFlags::EHoudiniClear_Assets
+						| EHoudiniClearFlags::EHoudiniClear_LandscapeLayers);
+				}
 
-		return FReply::Handled();
-	};
+				// We need to notify Unreal that the actors changed to force a UI refresh
+				// or we get random [unnamed] components in the details panel
 
-	FHoudiniEngineDetails::AddHeaderRowForCookable(HoudiniEngineCategoryBuilder, MainHC, HOUDINI_ENGINE_UI_SECTION_GENERATE);
+				for (AActor* OwnerActor : OwnersToRefresh)
+				{
+					if (!IsValid(OwnerActor))
+						continue;
 
-	// Button Row (draw only if expanded)
-	if (!MainHC->bGenerateMenuExpanded)
-		return;
+					OwnerActor->PostEditChange();
+				}
 
-	TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIRebuildIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIRebuildIconBrush();
-	TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIRecookIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIRecookIconBrush();
+				if (GEditor)
+				{
+					GEditor->NoteSelectionChange();
+				}
 
-	FDetailWidgetRow& ButtonRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::GetEmpty());
-	TSharedRef<SHorizontalBox> ButtonHorizontalBox = SNew(SHorizontalBox);
+				if (SavedLayoutBuilder)
+				{
+					SavedLayoutBuilder->ForceRefreshDetails();
+				}
 
-	// We will need to hide some UI elements in the asset editor
-	bool bIsAssetEditor = !MainHC->AssetEditorId.IsNone();
+				return FReply::Handled();
+			};
 
-	//----------------------------------------------------------------
-	// Recook button
-	//----------------------------------------------------------------
-	TSharedPtr<SButton> RecookButton;
-	TSharedPtr<SHorizontalBox> RecookButtonHorizontalBox;
-	ButtonHorizontalBox->AddSlot()
-	.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-	//.Padding(2.0f, 0.0f, 0.0f, 2.0f)
-	[
-		SNew(SBox)
-		.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-		[
-			SAssignNew(RecookButton, SButton)
-			.VAlign(VAlign_Center)
-			.HAlign(HAlign_Center)
-			.ToolTipText(LOCTEXT("HoudiniAssetDetailsRecookAssetButton", "Recook the selected Houdini Asset: all parameters and inputs are re-upload to Houdini and the asset is then forced to recook."))
-			//.Text(FText::FromString("Recook"))
-			.Visibility(EVisibility::Visible)
-			.OnClicked_Lambda(OnRecookClickedLambda)
-			.Content()
+		auto OnCancelClickedLambda = [InHCs]()
+			{
+				for (auto& NextHC : InHCs)
+				{
+					if (!IsValidWeakPointer(NextHC))
+						continue;
+
+					if (NextHC->GetCurrentState() == EHoudiniAssetState::Cooking)
+						NextHC->SetCurrentState(EHoudiniAssetState::Cancelling);
+				}
+
+				return FReply::Handled();
+			};
+
+		auto IsCancelButtonEnabled = [InHCs]()
+			{
+				for (const auto& NextHC : InHCs)
+				{
+					if (!IsValidWeakPointer(NextHC))
+						continue;
+
+					if (NextHC->GetCurrentState() == EHoudiniAssetState::Cooking)
+						return true;
+				}
+
+				return false;
+			};
+
+		auto AreGenerateButtonsEnabled = [InHCs]()
+			{
+				for (const auto& NextHC : InHCs)
+				{
+					if (!IsValidWeakPointer(NextHC))
+						continue;
+
+					switch (NextHC->GetCurrentState())
+					{
+						case EHoudiniAssetState::PreCook:
+						case EHoudiniAssetState::Cooking:
+						case EHoudiniAssetState::Cancelling:
+						case EHoudiniAssetState::PostCook:
+						case EHoudiniAssetState::PreProcess:
+						case EHoudiniAssetState::Processing:
+							return false;
+
+						case EHoudiniAssetState::None:
+						case EHoudiniAssetState::NeedInstantiation:
+						case EHoudiniAssetState::NewHDA:
+						case EHoudiniAssetState::PreInstantiation:
+						case EHoudiniAssetState::Instantiating:
+						case EHoudiniAssetState::NeedRebuild:
+						case EHoudiniAssetState::NeedDelete:
+						case EHoudiniAssetState::Deleting:
+						case EHoudiniAssetState::ProcessTemplate:
+						case EHoudiniAssetState::Dormant:
+							break;
+					}
+				}
+
+				return true;
+			};
+
+		auto GetCancelButtonText = [InHCs]()
+			{
+				for (const auto& NextHC : InHCs)
+				{
+					if (!IsValidWeakPointer(NextHC))
+						continue;
+
+					if (NextHC->GetCurrentState() == EHoudiniAssetState::Cancelling)
+						return LOCTEXT("HoudiniAssetDetailsCancellingButtonLabel", "Cancelling");
+				}
+
+				return LOCTEXT("HoudiniAssetDetailsCancelButtonLabel", "Cancel");
+			};
+
+		TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIRebuildIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIRebuildIconBrush();
+		TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIRecookIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIRecookIconBrush();
+		TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIDeleteIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIDeleteCookIconBrush();
+		TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUICancelIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIPDGCancelIconBrush();
+
+		FDetailWidgetRow& ButtonRow = GenerateGroup.AddWidgetRow();
+		TSharedRef<SHorizontalBox> ButtonHorizontalBox = SNew(SHorizontalBox);
+
+		// We will need to hide some UI elements in the asset editor
+		bool bIsAssetEditor = !MainHC->AssetEditorId.IsNone();
+
+		//----------------------------------------------------------------
+		// Recook button
+		//----------------------------------------------------------------
+		TSharedPtr<SButton> RecookButton;
+		TSharedPtr<SHorizontalBox> RecookButtonHorizontalBox;
+		ButtonHorizontalBox->AddSlot()
+			.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
 			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot()
-				.HAlign(HAlign_Center)
-				[
-					SAssignNew(RecookButtonHorizontalBox, SHorizontalBox)
-				]
-			]
-		]
-	];
+				SNew(SBox)
+					.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+					[
+						SAssignNew(RecookButton, SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.ToolTipText(LOCTEXT("HoudiniAssetDetailsRecookAssetButton", "Recook the selected Houdini Asset: all parameters and inputs are re-upload to Houdini and the asset is then forced to recook."))
+							//.Text(FText::FromString("Recook"))
+							.Visibility(EVisibility::Visible)
+							.IsEnabled_Lambda(AreGenerateButtonsEnabled)
+							.OnClicked_Lambda(OnRecookClickedLambda)
+							.Content()
+							[
+								SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot()
+									.HAlign(HAlign_Center)
+									[
+										SAssignNew(RecookButtonHorizontalBox, SHorizontalBox)
+									]
+							]
+					]
+			];
 
-	if (HoudiniEngineUIRecookIconBrush.IsValid())
-	{
-		TSharedPtr<SImage> RecookImage;
+		if(HoudiniEngineUIRecookIconBrush.IsValid())
+		{
+			TSharedPtr<SImage> RecookImage;
+			RecookButtonHorizontalBox->AddSlot()
+				.MaxWidth(16.0f)
+				//.Padding(23.0f, 0.0f, 3.0f, 0.0f)
+				[
+					SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SAssignNew(RecookImage, SImage)
+								//.ColorAndOpacity(FSlateColor::UseForeground())
+						]
+				];
+
+			RecookImage->SetImage(
+				TAttribute<const FSlateBrush*>::Create(
+					TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIRecookIconBrush]()
+						{
+							return HoudiniEngineUIRecookIconBrush.Get();
+						})
+				)
+			);
+		}
+
 		RecookButtonHorizontalBox->AddSlot()
-		.MaxWidth(16.0f)
-		//.Padding(23.0f, 0.0f, 3.0f, 0.0f)
-		[
-			SNew(SBox)
-			.WidthOverride(16.0f)
-			.HeightOverride(16.0f)
-			[
-				SAssignNew(RecookImage, SImage)
-				//.ColorAndOpacity(FSlateColor::UseForeground())
-			]
-		];
-
-		RecookImage->SetImage(
-			TAttribute<const FSlateBrush*>::Create(
-				TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIRecookIconBrush]() 
-				{
-					return HoudiniEngineUIRecookIconBrush.Get();
-				})
-			)
-		);
-	}
-
-	RecookButtonHorizontalBox->AddSlot()
-	.Padding(5.0, 0.0, 0.0, 0.0)
-	//.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-	.VAlign(VAlign_Center)
-	.AutoWidth()
-	[
-		SNew(STextBlock)
-		.Text(FText::FromString("Recook"))
-	];
-
-
-
-	//----------------------------------------------------------------
-	// Rebuild button
-	//----------------------------------------------------------------
-	TSharedPtr<SButton> RebuildButton;
-	TSharedPtr<SHorizontalBox> RebuildButtonHorizontalBox;
-	ButtonHorizontalBox->AddSlot()
-	.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-	//.Padding(15.0f, 0.0f, 0.0f, 2.0f)
-	//.Padding(2.0f, 0.0f, 0.0f, 2.0f)
-	[
-		SNew(SBox)
-		.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-		[
-			SAssignNew(RebuildButton, SButton)
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			//.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
 			.VAlign(VAlign_Center)
-			.HAlign(HAlign_Center)
-			.ToolTipText(LOCTEXT("HoudiniAssetDetailsRebuildAssetButton", "Rebuild the selected Houdini Asset: its source .HDA file is reimported and updated, the asset's nodes in Houdini are destroyed and recreated, and the asset is then forced to recook."))
-			//.Text(FText::FromString("Rebuild"))
-			.Visibility(EVisibility::Visible)
-			.Content()
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot()
-				.HAlign(HAlign_Center)
-				[
-					SAssignNew(RebuildButtonHorizontalBox, SHorizontalBox)
-				]
-			]
-			.OnClicked_Lambda(OnReBuildClickedLambda)
-		]
-	];
-
-	if (HoudiniEngineUIRebuildIconBrush.IsValid())
-	{
-		TSharedPtr<SImage> RebuildImage;
-		RebuildButtonHorizontalBox->AddSlot()
-		//.Padding(25.0f, 0.0f, 3.0f, 0.0f)
-		//.Padding(2.0f, 0.0f, 0.0f, 2.0f)
-		.MaxWidth(16.0f)
-		[
-			SNew(SBox)
-			.WidthOverride(16.0f)
-			.HeightOverride(16.0f)
-			[
-				SAssignNew(RebuildImage, SImage)
-				//.ColorAndOpacity(FSlateColor::UseForeground())
-			]
-		];
-
-		RebuildImage->SetImage(
-			TAttribute<const FSlateBrush*>::Create(
-				TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIRebuildIconBrush]() 
-				{
-					return HoudiniEngineUIRebuildIconBrush.Get();
-				})
-			)
-		);
-	}
-
-	RebuildButtonHorizontalBox->AddSlot()
-	.VAlign(VAlign_Center)
-	.AutoWidth()
-	.Padding(5.0, 0.0, 0.0, 0.0)
-	[
-		SNew(STextBlock)
-		.Text(FText::FromString("Rebuild"))
-	];
-
-	ButtonRow.WholeRowWidget.Widget = ButtonHorizontalBox;
-	ButtonRow.IsEnabled(true);
-
-	//----------------------------------------------------------------
-	// Reset Parameters button
-	//----------------------------------------------------------------
-	bool bParameterSupported = MainHC->IsParameterSupported();
-	if (bParameterSupported)
-	{
-		CreateResetParametersButton(InHCs, ButtonHorizontalBox);
-	}
-
-	if(Flags.bTemporaryCookFolderRow)
-	{
-		//----------------------------------------------------------------
-		// Temp Cook Folder Row
-		//----------------------------------------------------------------
-		FDetailWidgetRow& TempCookFolderRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::FromString("Temporary Cook Folder"));
-
-		TSharedRef<SHorizontalBox> TempCookFolderRowHorizontalBox = SNew(SHorizontalBox);
-
-		TempCookFolderRowHorizontalBox->AddSlot()
-		.MaxWidth(155.0f)
-		.VAlign(VAlign_Center)
-		[
-			SNew(SBox)
-			.WidthOverride(155.0f)
+			.AutoWidth()
 			[
 				SNew(STextBlock)
-				.Text(LOCTEXT("HoudiniEngineTemporaryCookFolderLabel", "Temporary Cook Folder"))
-				.ToolTipText(LOCTEXT(
-					"HoudiniEngineTemporaryCookFolderTooltip",
-					"Default folder used to store the temporary files (Static Meshes, Materials, Textures..) that are "
-					"generated by Houdini Assets when they cook. If this value is blank, the default from the plugin "
-					"settings is used."))
-			]
-		];
+					.Text(FText::FromString("Recook"))
+			];
 
-		TempCookFolderRowHorizontalBox->AddSlot()
-		//.MaxWidth(235.0f)
-		[
-			SNew(SBox)
-			//.WidthOverride(235.0f)
-			.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+
+
+		//----------------------------------------------------------------
+		// Rebuild button
+		//----------------------------------------------------------------
+		TSharedPtr<SButton> RebuildButton;
+		TSharedPtr<SHorizontalBox> RebuildButtonHorizontalBox;
+		ButtonHorizontalBox->AddSlot()
+			.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+			//.Padding(15.0f, 0.0f, 0.0f, 2.0f)
+			//.Padding(2.0f, 0.0f, 0.0f, 2.0f)
 			[
-				SNew(SEditableTextBox)
-				.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
-				.ToolTipText(LOCTEXT(
-					"HoudiniEngineTemporaryCookFolderTooltip",
-					"Default folder used to store the temporary files (Static Meshes, Materials, Textures..) that are "
-					"generated by Houdini Assets when they cook. If this value is blank, the default from the plugin "
-					"settings is used."))
-				.HintText(LOCTEXT("HoudiniEngineTempCookFolderHintText", "Input to set temporary cook folder"))
-				.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-				.Text_Lambda([MainHC]()
-				{
-					if (!IsValidWeakPointer(MainHC))
-						return FText();
-					return FText::FromString(MainHC->GetTemporaryCookFolderOrDefault());
-				})
-				.OnTextCommitted_Lambda(OnCookFolderTextCommittedLambda)
-			]
-		];
+				SNew(SBox)
+					.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+					[
+						SAssignNew(RebuildButton, SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.ToolTipText(LOCTEXT("HoudiniAssetDetailsRebuildAssetButton", "Rebuild the selected Houdini Asset: its source .HDA file is reimported and updated, the asset's nodes in Houdini are destroyed and recreated, and the asset is then forced to recook."))
+							//.Text(FText::FromString("Rebuild"))
+							.Visibility(EVisibility::Visible)
+							.IsEnabled_Lambda(AreGenerateButtonsEnabled)
+							.Content()
+							[
+								SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot()
+									.HAlign(HAlign_Center)
+									[
+										SAssignNew(RebuildButtonHorizontalBox, SHorizontalBox)
+									]
+							]
+						.OnClicked_Lambda(OnReBuildClickedLambda)
+					]
+			];
 
-		TempCookFolderRowHorizontalBox->AddSlot()
-		.Padding(5.0, 0.0, 0.0, 0.0)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SNew(SButton)
-			//.ContentPadding(FMargin(6.0, 2.0))
+		if(HoudiniEngineUIRebuildIconBrush.IsValid())
+		{
+			TSharedPtr<SImage> RebuildImage;
+			RebuildButtonHorizontalBox->AddSlot()
+				//.Padding(25.0f, 0.0f, 3.0f, 0.0f)
+				//.Padding(2.0f, 0.0f, 0.0f, 2.0f)
+				.MaxWidth(16.0f)
+				[
+					SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SAssignNew(RebuildImage, SImage)
+								//.ColorAndOpacity(FSlateColor::UseForeground())
+						]
+				];
+
+			RebuildImage->SetImage(
+				TAttribute<const FSlateBrush*>::Create(
+					TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIRebuildIconBrush]()
+						{
+							return HoudiniEngineUIRebuildIconBrush.Get();
+						})
+				)
+			);
+		}
+
+		RebuildButtonHorizontalBox->AddSlot()
 			.VAlign(VAlign_Center)
-			.HAlign(HAlign_Center)
-			.IsEnabled(true)
-			.Text(LOCTEXT("BrowseButtonText", "Browse"))
-			.ToolTipText(LOCTEXT("CookFolderBrowseButtonToolTip", "Browse to select temporary cook folder"))
-			.OnClicked_Lambda(OnCookFolderBrowseButtonClickedLambda)
-		];
+			.AutoWidth()
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			[
+				SNew(STextBlock)
+					.Text(FText::FromString("Rebuild"))
+			];
 
-		TempCookFolderRowHorizontalBox->AddSlot()
-		.AutoWidth()
-		.Padding(5.0, 0.0, 0.0, 0.0)
-		.VAlign(VAlign_Center)
-		[
-			SNew(SButton)
-			//.ContentPadding(FMargin(6.0, 2.0))
+		//----------------------------------------------------------------
+		// Cancel button
+		//----------------------------------------------------------------
+		TSharedPtr<SButton> CancelButton;
+		TSharedPtr<SHorizontalBox> CancelButtonHorizontalBox;
+		ButtonHorizontalBox->AddSlot()
+			.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+			[
+				SNew(SBox)
+					.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+					[
+						SAssignNew(CancelButton, SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.ToolTipText(LOCTEXT("HoudiniAssetDetailsCancelCookButton", "Interrupt the active Houdini cook for the selected asset."))
+							.IsEnabled_Lambda(IsCancelButtonEnabled)
+							.OnClicked_Lambda(OnCancelClickedLambda)
+							.Content()
+							[
+								SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot()
+									.HAlign(HAlign_Center)
+									[
+										SAssignNew(CancelButtonHorizontalBox, SHorizontalBox)
+									]
+							]
+					]
+			];
+
+		if (HoudiniEngineUICancelIconBrush.IsValid())
+		{
+			TSharedPtr<SImage> CancelImage;
+			CancelButtonHorizontalBox->AddSlot()
+				.MaxWidth(16.0f)
+				[
+					SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SAssignNew(CancelImage, SImage)
+						]
+				];
+
+			CancelImage->SetImage(
+				TAttribute<const FSlateBrush*>::Create(
+					TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUICancelIconBrush]()
+						{
+							return HoudiniEngineUICancelIconBrush.Get();
+						})
+				)
+			);
+		}
+
+		CancelButtonHorizontalBox->AddSlot()
 			.VAlign(VAlign_Center)
-			.HAlign(HAlign_Center)
-			.IsEnabled(true)
-			.Text(LOCTEXT("ResetButtonText", "Reset"))
-			.ToolTipText(LOCTEXT("CookFolderResetButtonToolTip", "Reset the cook folder to default setting"))
-			.OnClicked_Lambda(OnCookFolderResetButtonClickedLambda)
-		];
+			.AutoWidth()
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			[
+				SNew(STextBlock)
+					.Text_Lambda(GetCancelButtonText)
+			];
 
-		TempCookFolderRow.WholeRowWidget.Widget = TempCookFolderRowHorizontalBox;
+		//----------------------------------------------------------------
+		// Delete button
+		//----------------------------------------------------------------
+		TSharedPtr<SButton> DeleteButton;
+		TSharedPtr<SHorizontalBox> DeleteButtonHorizontalBox;
+		ButtonHorizontalBox->AddSlot()
+			.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+			[
+				SNew(SBox)
+					.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
+					[
+						SAssignNew(DeleteButton, SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.ToolTipText(LOCTEXT("HoudiniAssetDetailsDeleteAssetButton", "Delete the selected Houdini Asset's cooked outputs."))
+							.Visibility(EVisibility::Visible)
+							.IsEnabled_Lambda(AreGenerateButtonsEnabled)
+							.Content()
+							[
+								SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot()
+									.HAlign(HAlign_Center)
+									[
+										SAssignNew(DeleteButtonHorizontalBox, SHorizontalBox)
+									]
+							]
+							.OnClicked_Lambda(OnDeleteClickedLambda)
+					]
+			];
+
+		if (HoudiniEngineUIDeleteIconBrush.IsValid())
+		{
+			TSharedPtr<SImage> DeleteImage;
+			DeleteButtonHorizontalBox->AddSlot()
+				.MaxWidth(16.0f)
+				[
+					SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SAssignNew(DeleteImage, SImage)
+						]
+				];
+
+			DeleteImage->SetImage(
+				TAttribute<const FSlateBrush*>::Create(
+					TAttribute<const FSlateBrush*>::FGetter::CreateLambda([HoudiniEngineUIDeleteIconBrush]()
+						{
+							return HoudiniEngineUIDeleteIconBrush.Get();
+						})
+				)
+			);
+		}
+
+		DeleteButtonHorizontalBox->AddSlot()
+			.VAlign(VAlign_Center)
+			.AutoWidth()
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			[
+				SNew(STextBlock)
+					.Text(FText::FromString("Delete"))
+			];
+
+		ButtonRow.WholeRowWidget.Widget = ButtonHorizontalBox;
+		ButtonRow.IsEnabled(true);
 	}
+
+	if (Flags.bCookTriggers)
+		CreateCookTriggerWidgets(GenerateGroup, InHCs, Flags);
+
+	CreateOutputWidgets(GenerateGroup, InHCs, Flags);
+
+	if (Flags.bAssetOptions)
+		CreateMiscOptionsWidgets(GenerateGroup, InHCs, Flags);
 }
 
 void
 FHoudiniEngineDetails::AddRemovedHDAOutputAfterBakeCheckBox(
+	IDetailGroup& OptionsGroup,
 	const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
-	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs, 
-	TSharedPtr<SVerticalBox>& LeftColumnVerticalBox)
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
-	TSharedPtr<SCheckBox> CheckBoxRemoveOutput;
-	LeftColumnVerticalBox->AddSlot()
-		.AutoHeight()
-		.Padding(0.0f, 0.0f, 0.0f, 3.5f)
+	FDetailWidgetRow& WidgetRow = OptionsGroup.AddWidgetRow();
+
+	WidgetRow.NameWidget.Widget = SNew(STextBlock)
+		.Text(FText::FromString("Remove Cooked Output After Bake"))
+		.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+		.ToolTipText(FText::FromString(TEXT("Whether cooked temporary data should be removed after baking.")));
+
+	WidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
 		[
-			SNew(SBox)
-				.WidthOverride(160.f)
-				[
-					SAssignNew(CheckBoxRemoveOutput, SCheckBox)
-						.Content()
-						[
-							SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIRemoveOutputCheckBox", "Remove HDA Output After Bake"))
-								.ToolTipText(LOCTEXT("HoudiniEngineUIRemoveOutputCheckBoxToolTip", "After baking the existing output of this Houdini Asset Actor will be removed."))
-								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-						]
-						.IsChecked_Lambda([MainHC]()
-							{
-								if(!IsValidWeakPointer(MainHC))
-									return ECheckBoxState::Unchecked;
+			SNew(SCheckBox)
+				.IsChecked_Lambda([MainHC]()
+					{
+						if(!IsValidWeakPointer(MainHC))
+							return ECheckBoxState::Unchecked;
 
-								return MainHC->GetRemoveOutputAfterBake() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-							})
-						.OnCheckStateChanged_Lambda([InHCs](ECheckBoxState NewState)
-							{
-								const bool bNewState = (NewState == ECheckBoxState::Checked);
+						return MainHC->GetRemoveOutputAfterBake() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+					})
+				.OnCheckStateChanged_Lambda([InHCs](ECheckBoxState NewState)
+					{
+						const bool bNewState = (NewState == ECheckBoxState::Checked);
 
-								for(auto& NextHC : InHCs)
-								{
-									if(!IsValidWeakPointer(NextHC))
-										continue;
+						for(auto& NextHC : InHCs)
+						{
+							if(!IsValidWeakPointer(NextHC))
+								continue;
 
-									if(NextHC->GetRemoveOutputAfterBake() == bNewState)
-										continue;
+							if(NextHC->GetRemoveOutputAfterBake() == bNewState)
+								continue;
 
-									NextHC->SetRemoveOutputAfterBake(bNewState);
-									NextHC->MarkPackageDirty();
-								}
-							})
-				]
+							NextHC->SetRemoveOutputAfterBake(bNewState);
+							NextHC->MarkPackageDirty();
+						}
+					})
 		];
 }
 
 void
 FHoudiniEngineDetails::AddRenterBakedActorsCheckbox(
+	IDetailGroup& OptionsGroup,
 	const TWeakObjectPtr<UHoudiniCookable>& MainHC,
-	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
-	TSharedPtr<SVerticalBox>& LeftColumnVerticalBox)
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
-	TSharedPtr<SCheckBox> CheckBoxRecenterBakedActors;
+	FDetailWidgetRow& WidgetRow = OptionsGroup.AddWidgetRow();
 
-	LeftColumnVerticalBox->AddSlot()
-		.AutoHeight()
-		.Padding(0.0f, 0.0f, 0.0f, 3.5f)
+	WidgetRow.NameWidget.Widget = SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIRecenterBakedActorsCheckBox", "Recenter Baked Actors"))
+		.ToolTipText(LOCTEXT("HoudiniEngineUIRecenterBakedActorsCheckBoxToolTip", "After baking recenter the baked actors to their bounding box center."))
+		.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
+
+	WidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
 		[
-			SNew(SBox)
-				.WidthOverride(160.f)
-				[
-					SAssignNew(CheckBoxRecenterBakedActors, SCheckBox)
-						.Content()
-						[
-							SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIRecenterBakedActorsCheckBox", "Recenter Baked Actors"))
-								.ToolTipText(LOCTEXT("HoudiniEngineUIRecenterBakedActorsCheckBoxToolTip", "After baking recenter the baked actors to their bounding box center."))
-								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-						]
-						.IsChecked_Lambda([MainHC]()
-							{
-								if(!IsValidWeakPointer(MainHC))
-									return ECheckBoxState::Unchecked;
+			SNew(SCheckBox)
+				.IsChecked_Lambda([MainHC]()
+					{
+						if(!IsValidWeakPointer(MainHC))
+							return ECheckBoxState::Unchecked;
 
-								return MainHC->GetRecenterBakedActors() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-							})
-						.OnCheckStateChanged_Lambda([InHCs](ECheckBoxState NewState)
-							{
-								const bool bNewState = (NewState == ECheckBoxState::Checked);
+						return MainHC->GetRecenterBakedActors() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+					})
+				.OnCheckStateChanged_Lambda([InHCs](ECheckBoxState NewState)
+					{
+						const bool bNewState = (NewState == ECheckBoxState::Checked);
 
-								for(auto& NextHC : InHCs)
-								{
-									if(!IsValidWeakPointer(NextHC))
-										continue;
+						for(auto& NextHC : InHCs)
+						{
+							if(!IsValidWeakPointer(NextHC))
+								continue;
 
-									if(NextHC->GetRecenterBakedActors() == bNewState)
-										continue;
+							if(NextHC->GetRecenterBakedActors() == bNewState)
+								continue;
 
-									NextHC->SetRecenterBakedActors(bNewState);
-									NextHC->MarkPackageDirty();
-								}
+							NextHC->SetRecenterBakedActors(bNewState);
+							NextHC->MarkPackageDirty();
+						}
 
-								// FHoudiniEngineUtils::UpdateEditorProperties(MainHC, true);
-							})
-				]
+						// FHoudiniEngineUtils::UpdateEditorProperties(MainHC, true);
+					})
 		];
 }
 
 void FHoudiniEngineDetails::AddAutoBakeCheckbox(
+	IDetailGroup& OptionsGroup,
 	const TWeakObjectPtr<UHoudiniCookable>& MainHC,
-	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
-	TSharedPtr<SVerticalBox>& RightColumnVerticalBox)
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
-	TSharedPtr<SCheckBox> CheckBoxAutoBake;
+	FDetailWidgetRow& WidgetRow = OptionsGroup.AddWidgetRow();
 
-	RightColumnVerticalBox->AddSlot()
-		.AutoHeight()
-		.Padding(0.0f, 0.0f, 0.0f, 3.5f)
+	WidgetRow.NameWidget.Widget = SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIAutoBakeCheckBox", "Auto Bake"))
+		.ToolTipText(LOCTEXT("HoudiniEngineUIAutoBakeCheckBoxToolTip", "Automatically bake the next cook."))
+		.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
+
+	WidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
 		[
-			SNew(SBox)
-				.WidthOverride(160.f)
-				[
-					SAssignNew(CheckBoxAutoBake, SCheckBox)
-						.Content()
-						[
-							SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIAutoBakeCheckBox", "Auto Bake"))
-								.ToolTipText(LOCTEXT("HoudiniEngineUIAutoBakeCheckBoxToolTip", "Automatically bake the next cook."))
-								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-						]
-						.IsChecked_Lambda([MainHC]()
-							{
-								if(!IsValidWeakPointer(MainHC))
-									return ECheckBoxState::Unchecked;
+			SNew(SCheckBox)
+				.IsChecked_Lambda([MainHC]()
+					{
+						if(!IsValidWeakPointer(MainHC))
+							return ECheckBoxState::Unchecked;
 
-								return MainHC->IsBakeAfterNextCookEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-							})
-						.OnCheckStateChanged_Lambda([InHCs](ECheckBoxState NewState)
-							{
-								const bool bNewState = (NewState == ECheckBoxState::Checked);
+						return MainHC->IsBakeAfterNextCookEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+					})
+				.OnCheckStateChanged_Lambda([InHCs](ECheckBoxState NewState)
+					{
+						const bool bNewState = (NewState == ECheckBoxState::Checked);
 
-								for(auto& NextHC : InHCs)
-								{
-									if(!IsValidWeakPointer(NextHC))
-										continue;
+						for(auto& NextHC : InHCs)
+						{
+							if(!IsValidWeakPointer(NextHC))
+								continue;
 
-									if(NextHC->IsBakeAfterNextCookEnabled() == bNewState)
-										continue;
+							if(NextHC->IsBakeAfterNextCookEnabled() == bNewState)
+								continue;
 
-									NextHC->SetBakeAfterNextCook(bNewState ? EHoudiniBakeAfterNextCook::Always : EHoudiniBakeAfterNextCook::Disabled);
-									NextHC->MarkPackageDirty();
-								}
+							NextHC->SetBakeAfterNextCook(bNewState ? EHoudiniBakeAfterNextCook::Always : EHoudiniBakeAfterNextCook::Disabled);
+							NextHC->MarkPackageDirty();
+						}
 
-								// FHoudiniEngineUtils::UpdateEditorProperties(MainHC, true);
-							})
-				]
+						// FHoudiniEngineUtils::UpdateEditorProperties(MainHC, true);
+					})
 		];
 
 }
 
 
 void FHoudiniEngineDetails::AddReplaceCheckbox(
+	IDetailGroup& OptionsGroup,
 	const TWeakObjectPtr<UHoudiniCookable>& MainHC,
-	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
-	TSharedPtr<SVerticalBox>& RightColumnVerticalBox)
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
-	TSharedPtr<SCheckBox> CheckBoxReplacePreviousBake;
+	FDetailWidgetRow& WidgetRow = OptionsGroup.AddWidgetRow();
 
-	// Replace Checkbox
-	RightColumnVerticalBox->AddSlot()
-		.AutoHeight()
-		.Padding(0.0f, 0.0f, 0.0f, 3.5f)
+	WidgetRow.NameWidget.Widget = SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIBakeReplaceWithPreviousCheckBox", "Replace Previous Bake"))
+		.ToolTipText(LOCTEXT("HoudiniEngineUIBakeReplaceWithPreviousCheckBoxToolTip", "When baking replace the previous bake's output instead of creating additional output actors/components/objects."))
+		.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
+
+	WidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
 		[
-			SNew(SBox)
-				.WidthOverride(160.f)
-				[
-					SAssignNew(CheckBoxReplacePreviousBake, SCheckBox)
-						.Content()
-						[
-							SNew(STextBlock).Text(LOCTEXT("HoudiniEngineUIBakeReplaceWithPreviousCheckBox", "Replace Previous Bake"))
-								.ToolTipText(LOCTEXT("HoudiniEngineUIBakeReplaceWithPreviousCheckBoxToolTip", "When baking replace the previous bake's output instead of creating additional output actors/components/objects."))
-								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-						]
-						.IsChecked_Lambda([MainHC]()
-							{
-								if(!IsValidWeakPointer(MainHC))
-									return ECheckBoxState::Unchecked;
+			SNew(SCheckBox)
+				.IsChecked_Lambda([MainHC]()
+					{
+						if(!IsValidWeakPointer(MainHC))
+							return ECheckBoxState::Unchecked;
 
-								return MainHC->GetReplacePreviousBake() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-							})
-						.OnCheckStateChanged_Lambda([MainHC, InHCs](ECheckBoxState NewState)
-							{
-								const bool bNewState = (NewState == ECheckBoxState::Checked);
+						return MainHC->GetReplacePreviousBake() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+					})
+				.OnCheckStateChanged_Lambda([MainHC, InHCs](ECheckBoxState NewState)
+					{
+						const bool bNewState = (NewState == ECheckBoxState::Checked);
 
-								for(auto& NextHC : InHCs)
-								{
-									if(!IsValidWeakPointer(NextHC))
-										continue;
+						for(auto& NextHC : InHCs)
+						{
+							if(!IsValidWeakPointer(NextHC))
+								continue;
 
-									if(NextHC->GetReplacePreviousBake() == bNewState)
-										continue;
+							if(NextHC->GetReplacePreviousBake() == bNewState)
+								continue;
 
-									NextHC->SetReplacePreviousBake(bNewState);
-									NextHC->MarkPackageDirty();
-								}
+							NextHC->SetReplacePreviousBake(bNewState);
+							NextHC->MarkPackageDirty();
+						}
 
-								if(MainHC.IsValid())
-									FHoudiniEngineUtils::UpdateEditorProperties(true);
-							})
-				]
+						if(MainHC.IsValid())
+							FHoudiniEngineUtils::UpdateEditorProperties(true);
+					})
 		];
+
 }
 
 void
-FHoudiniEngineDetails::AddBakeFolderSelector(IDetailCategoryBuilder& HoudiniEngineCategoryBuilder, const TWeakObjectPtr<UHoudiniCookable>& MainHC, const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
+FHoudiniEngineDetails::AddBakeFolderSelector(
+	IDetailGroup& OptionsGroup, 
+	const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
 	auto OnBakeFolderTextCommittedLambda = [InHCs, MainHC](const FText& Val, ETextCommit::Type TextCommitType)
 		{
 			SetFolderPath(Val, true, MainHC, InHCs);
 		};
 
-	// Bake Folder Row
-	FDetailWidgetRow& BakeFolderRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::FromString("Bake Folder"));
-
-	TSharedRef<SHorizontalBox> BakeFolderRowHorizontalBox = SNew(SHorizontalBox);
-
-	BakeFolderRowHorizontalBox->AddSlot()
-		.MaxWidth(155.0f)
-		.VAlign(VAlign_Center)
-		[
-			SNew(SBox)
-				.WidthOverride(155.0f)
-				[
-					SNew(STextBlock)
-						.Text(LOCTEXT("HoudiniEngineBakeFolderLabel", "Bake Folder"))
-						.ToolTipText(LOCTEXT(
-							"HoudiniEngineBakeFolderTooltip",
-							"The folder used to store the objects that are generated by this Houdini Asset when baking, if the "
-							"unreal_bake_folder attribute is not set on the geometry. If this value is blank, the default from the "
-							"plugin settings is used."))
-				]
-		];
-
-	BakeFolderRowHorizontalBox->AddSlot()
-		.MaxWidth(235.0)
-		[
-			SNew(SBox)
-				.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-				[
-					SNew(SEditableTextBox)
-						.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
-						.ToolTipText(LOCTEXT(
-							"HoudiniEngineBakeFolderTooltip",
-							"The folder used to store the objects that are generated by this Houdini Asset when baking, if the "
-							"unreal_bake_folder attribute is not set on the geometry. If this value is blank, the default from the "
-							"plugin settings is used."))
-						.HintText(LOCTEXT("HoudiniEngineBakeFolderHintText", "Input to set bake folder"))
-						.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-						.Text_Lambda([MainHC]()
-							{
-								if(!IsValidWeakPointer(MainHC))
-									return FText();
-								return FText::FromString(MainHC->GetBakeFolderOrDefault());
-							})
-						.OnTextCommitted_Lambda(OnBakeFolderTextCommittedLambda)
-				]
-		];
-
-	TArray<TSharedPtr<FString>>* ActorBakeOptionSources = FHoudiniEngineEditor::Get().GetHoudiniEngineBakeActorOptionsLabels();
-
-	auto OnBakeFolderBrowseButtonClickedLambda = [BakeFolderRowHorizontalBox, MainHC, InHCs]()
+	auto OnBakeFolderBrowseButtonClickedLambda = [MainHC, InHCs]()
 		{
+			if (!IsValidWeakPointer(MainHC))
+				return FReply::Handled();
+
 			TSharedRef<SSelectFolderPathDialog> Dialog =
 				SNew(SSelectFolderPathDialog)
 				.InitialPath(FText::FromString(MainHC->GetBakeFolderOrDefault()))
@@ -1137,54 +1062,253 @@ FHoudiniEngineDetails::AddBakeFolderSelector(IDetailCategoryBuilder& HoudiniEngi
 			return FReply::Handled();
 		};
 
-	BakeFolderRowHorizontalBox->AddSlot()
-		.Padding(5.0, 0.0, 0.0, 0.0)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
+	FDetailWidgetRow& WidgetRow = OptionsGroup.AddWidgetRow();
+
+	WidgetRow.NameWidget.Widget = SNew(STextBlock)
+		.Text(LOCTEXT("HoudiniEngineBakeFolderLabel", "Bake Folder"))
+		.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+		.ToolTipText(LOCTEXT(
+			"HoudiniEngineBakeFolderTooltip",
+			"The folder used to store the objects that are generated by this Houdini Asset when baking, if the "
+			"unreal_bake_folder attribute is not set on the geometry. If this value is blank, the default from the "
+			"plugin settings is used."));
+
+	WidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
 		[
-			SNew(SButton)
-				//.ContentPadding(FMargin(6.0, 2.0))
-				.VAlign(VAlign_Center)
-				.HAlign(HAlign_Center)
-				.IsEnabled(true)
-				.Text(LOCTEXT("BrowseButtonText", "Browse"))
-				.ToolTipText(LOCTEXT("BakeFolderBrowseButtonToolTip", "Browse to select bake folder"))
-				.OnClicked_Lambda(OnBakeFolderBrowseButtonClickedLambda)
+			SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+					[
+						SNew(SBox)
+							[
+								SNew(SEditableTextBox)
+									.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+									.ToolTipText_Lambda([MainHC]()
+										{
+											if (!IsValidWeakPointer(MainHC))
+												return FText();
+
+											FFormatNamedArguments Args;
+											Args.Add(TEXT("Folder"), FText::FromString(MainHC->GetBakeFolderOrDefault()));
+
+											FText Tip = FText::Format(LOCTEXT(
+												"HoudiniEngineBakeFolderTooltip",
+												"The folder used to store the objects that are generated by this Houdini Asset when baking, if the "
+												"unreal_bake_folder attribute is not set on the geometry. If this value is blank, the default from the "
+												"plugin settings is used. Currently {Folder}"), Args);
+											return Tip;
+										})
+									.HintText(LOCTEXT("HoudiniEngineBakeFolderHintText", "Input to set bake folder"))
+									.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+									.Text_Lambda([MainHC]()
+										{
+											if(!IsValidWeakPointer(MainHC))
+												return FText();
+											return FText::FromString(MainHC->GetBakeFolderOrDefault());
+										})
+									.OnTextCommitted_Lambda(OnBakeFolderTextCommittedLambda)
+							]
+					]
+				+ SHorizontalBox::Slot()
+					.Padding(5.0, 0.0, 0.0, 0.0)
+					.VAlign(VAlign_Center)
+					.AutoWidth()
+					[
+						SNew(SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.IsEnabled(true)
+							.ButtonStyle(FAppStyle::Get(), "NoBorder")
+							.ToolTipText(LOCTEXT("BakeFolderBrowseButtonToolTip", "Browse to select bake folder"))
+							.OnClicked_Lambda(OnBakeFolderBrowseButtonClickedLambda)
+							[
+								SNew(SImage)
+									.Image(FAppStyle::GetBrush("Icons.BrowseContent"))
+							]
+					]
+				+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.Padding(5.0, 0.0, 0.0, 0.0)
+					.VAlign(VAlign_Center)
+					[
+						SNew(SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.IsEnabled(true)
+							.ButtonStyle(FAppStyle::Get(), "NoBorder")
+							.ToolTipText(LOCTEXT("BrowseButtonToolTip", "Reset the bake folder to default setting"))
+							.OnClicked_Lambda(OnBakeFolderResetButtonClickedLambda)
+							[
+								SNew(SImage)
+									.Image(FAppStyle::GetBrush("PropertyWindow.DiffersFromDefault"))
+							]
+					]
+		];
+}
+
+void 
+FHoudiniEngineDetails::AddBakeOutputTypes(
+	IDetailGroup& Group,
+	const TWeakObjectPtr<UHoudiniCookable>& MainHC,
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+	EHoudiniDetailsFlags DetailsFlags)
+{
+	TSharedPtr<SComboBox<TSharedPtr<FString>>> TypeComboBox;
+
+	TArray<TSharedPtr<FString>>* BakeOptionSources = FHoudiniEngineEditor::Get().GetHoudiniEngineBakeTypeOptionsLabels();
+	TSharedPtr<FString> IntialSelec = MakeShareable(new FString(FHoudiniEngineEditor::Get().GetStringFromHoudiniEngineBakeOption(MainHC->GetHoudiniEngineBakeOption())));
+
+	FDetailWidgetRow& BakeTargetDetailWidgetRow = Group.AddWidgetRow();
+
+	BakeTargetDetailWidgetRow.NameWidget.Widget = SNew(STextBlock)
+		.Text(FText::FromString("Bake Output Type"))
+		.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+		.ToolTipText(FText::FromString(TEXT("The type of Unreal object the baked outputs should use.")));
+
+	BakeTargetDetailWidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
+		[
+			SNew(SBox)
+				.WidthOverride(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+				[
+					SAssignNew(TypeComboBox, SComboBox<TSharedPtr<FString>>)
+						.OptionsSource(BakeOptionSources)
+						.InitiallySelectedItem(IntialSelec)
+						.OnGenerateWidget_Lambda(
+							[](TSharedPtr< FString > InItem)
+							{
+								FText ChoiceEntryText = FText::FromString(*InItem);
+								return SNew(STextBlock)
+									.Text(ChoiceEntryText)
+									.ToolTipText(ChoiceEntryText)
+									.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
+							})
+						.OnSelectionChanged_Lambda(
+							[MainHC, InHCs](TSharedPtr<FString> NewChoice, ESelectInfo::Type SelectType)
+							{
+								if(!NewChoice.IsValid())
+									return;
+
+								const EHoudiniEngineBakeOption NewOption =
+									FHoudiniEngineEditor::Get().StringToHoudiniEngineBakeOption(*NewChoice.Get());
+
+								for(auto& NextHC : InHCs)
+								{
+									if(!IsValidWeakPointer(NextHC))
+										continue;
+
+									NextHC->SetHoudiniEngineBakeOption(NewOption);
+									NextHC->MarkPackageDirty();
+								}
+
+								if(MainHC.IsValid())
+									FHoudiniEngineUtils::UpdateEditorProperties(true);
+							})
+						[
+							SNew(STextBlock)
+								.Text_Lambda([MainHC]()
+									{
+										if(!IsValidWeakPointer(MainHC))
+											return FText();
+
+										return FText::FromString(
+											FHoudiniEngineEditor::Get().GetStringFromHoudiniEngineBakeOption(MainHC->GetHoudiniEngineBakeOption()));
+									})
+								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+						]
+				]
 		];
 
-	BakeFolderRowHorizontalBox->AddSlot()
-		.AutoWidth()
-		.Padding(5.0, 0.0, 0.0, 0.0)
-		.VAlign(VAlign_Center)
+
+	TArray<TSharedPtr<FString>>* ActorBakeOptionSources = FHoudiniEngineEditor::Get().GetHoudiniEngineBakeActorOptionsLabels();
+
+	FDetailWidgetRow& BakeGroupingDetailWidgetRow = Group.AddWidgetRow();
+
+	BakeGroupingDetailWidgetRow.NameWidget.Widget = SNew(STextBlock)
+		.Text(FText::FromString("Bake Actor Grouping"))
+		.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+		.ToolTipText(FText::FromString(TEXT("How outputs should be grouped. Many output types can be grouped as components under one actor, or as multiple actors.")));
+
+	BakeGroupingDetailWidgetRow.ValueWidget.Widget = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot()
 		[
-			SNew(SButton)
-				//.ContentPadding(FMargin(6.0, 2.0))
-				.VAlign(VAlign_Center)
-				.HAlign(HAlign_Center)
-				.IsEnabled(true)
-				.Text(LOCTEXT("ResetButtonText", "Reset"))
-				.ToolTipText(LOCTEXT("BrowseButtonToolTip", "Reset the bake folder to default setting"))
-				.OnClicked_Lambda(OnBakeFolderResetButtonClickedLambda)
+			SNew(SBox)
+				.WidthOverride(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+				[
+					SAssignNew(TypeComboBox, SComboBox<TSharedPtr<FString>>)
+						.OptionsSource(ActorBakeOptionSources)
+						.InitiallySelectedItem(IntialSelec)
+						.IsEnabled_Lambda([MainHC]()
+							{
+								if (!IsValidWeakPointer(MainHC))
+									return false;
+
+								// Only enabled when in "Bake To Actor" mode
+								return (MainHC->GetHoudiniEngineBakeOption() == EHoudiniEngineBakeOption::ToActor);
+							})
+						.OnGenerateWidget_Lambda(
+							[](TSharedPtr< FString > InItem)
+							{
+								FText ChoiceEntryText = FText::FromString(*InItem);
+								return SNew(STextBlock)
+									.Text(ChoiceEntryText)
+									.ToolTipText(ChoiceEntryText)
+									.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
+							})
+						.OnSelectionChanged_Lambda(
+							[MainHC, InHCs](TSharedPtr< FString > NewChoice, ESelectInfo::Type SelectType)
+							{
+								if(!NewChoice.IsValid())
+									return;
+
+								const EHoudiniEngineActorBakeOption NewOption =
+									FHoudiniEngineEditor::Get().StringToHoudiniEngineActorBakeOption(*NewChoice.Get());
+
+								for(auto& NextHC : InHCs)
+								{
+									if(!IsValidWeakPointer(NextHC))
+										continue;
+
+									if(NextHC->GetActorBakeOption() == NewOption)
+										continue;
+
+									NextHC->SetActorBakeOption(NewOption);
+									NextHC->MarkPackageDirty();
+								}
+
+								if(MainHC.IsValid())
+									FHoudiniEngineUtils::UpdateEditorProperties(true);
+							})
+						[
+							SNew(STextBlock)
+								.Text_Lambda([MainHC]()
+									{
+										if(!IsValidWeakPointer(MainHC))
+											return FText();
+
+										return FText::FromString(
+											FHoudiniEngineEditor::GetStringfromActorBakeOption(MainHC->GetActorBakeOption()));
+									})
+								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+						]
+				]
 		];
-
-
-	BakeFolderRow.WholeRowWidget.Widget = BakeFolderRowHorizontalBox;
 }
 
 void
-FHoudiniEngineDetails::AddBakeControlBar(
-	IDetailCategoryBuilder& HoudiniEngineCategoryBuilder, 
+FHoudiniEngineDetails::AddBakeButtons(
+	IDetailGroup& Group,
 	const TWeakObjectPtr<UHoudiniCookable>& MainHC, 
 	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
 	EHoudiniDetailsFlags DetailsFlags)
 {
-	// Button Row
-	FDetailWidgetRow& ButtonRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::FromString("Bake"));
-
 	TSharedRef<SHorizontalBox> ButtonRowHorizontalBox = SNew(SHorizontalBox);
 
 	auto OnBakeButtonClickedLambda = [InHCs, MainHC]()
 	{
+		if (!IsValidWeakPointer(MainHC))
+			return FReply::Handled();
+
 		FHoudiniBakeSettings BakeSettings;
 		EHoudiniEngineBakeOption BakeOption;
 		bool bRemoveOutputAfterBake;
@@ -1208,13 +1332,63 @@ FHoudiniEngineDetails::AddBakeControlBar(
 		return FReply::Handled();
 	};
 
-	// Bake Button
-	if (DetailsFlags.bBakeButton)
-	{
-		TSharedPtr<SButton> BakeButton;
-		TSharedPtr<SHorizontalBox> BakeButtonHorizontalBox;
+	auto OnDeleteBakeButtonClickedLambda = [InHCs]()
+		{
+			for(auto& HC : InHCs)
+			{
+				if (HC.IsValid())
+					FHoudiniEngineBakeUtils::DeleteBakedOutputs(HC.Get());
+			}
+			return FReply::Handled();
+		};
 
-		ButtonRowHorizontalBox->AddSlot()
+	auto OnUnlinkBakeButtonClickedLambda = [InHCs, MainHC]()
+		{
+			for(auto& HC : InHCs)
+			{
+				if(HC.IsValid())
+					FHoudiniEngineBakeUtils::UnlinkBakedOutputs(HC.Get());
+			}
+			return FReply::Handled();
+		};
+
+	// Bake Buttons
+
+	TSharedPtr<SButton> BakeButton;
+	TSharedPtr<SHorizontalBox> BakeButtonInteriorBox = SNew(SHorizontalBox);
+
+	TSharedPtr<FSlateDynamicImageBrush> BakeIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIBakeIconBrush();
+	if(BakeIconBrush.IsValid())
+	{
+		TSharedPtr<SImage> BakeImage;
+		BakeButtonInteriorBox->AddSlot()
+			.MaxWidth(16.0f)
+			[
+				SNew(SBox)
+					.WidthOverride(16.0f)
+					.HeightOverride(16.0f)
+					[
+						SAssignNew(BakeImage, SImage)
+					]
+			];
+
+		BakeImage->SetImage(
+			TAttribute<const FSlateBrush*>::Create(
+				TAttribute<const FSlateBrush*>::FGetter::CreateLambda([BakeIconBrush]() {
+					return BakeIconBrush.Get();
+					})));
+	}
+
+	BakeButtonInteriorBox->AddSlot()
+		.Padding(5.0, 0.0, 0.0, 0.0)
+		.VAlign(VAlign_Center)
+		.AutoWidth()
+		[
+			SNew(STextBlock)
+				.Text(FText::FromString("Bake"))
+		];
+
+	ButtonRowHorizontalBox->AddSlot()
 		.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
 		[
 			SNew(SBox)
@@ -1228,204 +1402,151 @@ FHoudiniEngineDetails::AddBakeControlBar(
 						.OnClicked_Lambda(OnBakeButtonClickedLambda)
 						.Content()
 						[
-							SAssignNew(BakeButtonHorizontalBox, SHorizontalBox)
+							BakeButtonInteriorBox.ToSharedRef()
 						]
 				]
 		];
 
-		TSharedPtr<FSlateDynamicImageBrush> BakeIconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIBakeIconBrush();
-		if(BakeIconBrush.IsValid())
+	switch(MainHC->GetHoudiniEngineBakeOption())
+	{
+		case EHoudiniEngineBakeOption::ToActor:
 		{
-			TSharedPtr<SImage> BakeImage;
-			BakeButtonHorizontalBox->AddSlot()
-			.MaxWidth(16.0f)
-			[
-				SNew(SBox)
-					.WidthOverride(16.0f)
-					.HeightOverride(16.0f)
-					[
-						SAssignNew(BakeImage, SImage)
-					]
-			];
-
-			BakeImage->SetImage(
-				TAttribute<const FSlateBrush*>::Create(
-					TAttribute<const FSlateBrush*>::FGetter::CreateLambda([BakeIconBrush]() {
-						return BakeIconBrush.Get();
-						})));
+			if(MainHC->GetReplacePreviousBake())
+			{
+				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeWithReplaceToActorToolTip",
+					"Bake this Houdini Asset Actor and its components to native unreal actors and components, replacing the previous baked result."));
+			}
+			else
+			{
+				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToActorToolTip",
+					"Bake this Houdini Asset Actor and its components to native unreal actors and components."));
+			}
 		}
+		break;
 
-		BakeButtonHorizontalBox->AddSlot()
-		.Padding(5.0, 0.0, 0.0, 0.0)
-		.VAlign(VAlign_Center)
-		.AutoWidth()
-		[
-			SNew(STextBlock)
-				.Text(FText::FromString("Bake"))
-		];
-
-		switch(MainHC->GetHoudiniEngineBakeOption())
+		case EHoudiniEngineBakeOption::ToBlueprint:
 		{
-			case EHoudiniEngineBakeOption::ToActor:
-			{
-				if(MainHC->GetReplacePreviousBake())
-				{
-					BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeWithReplaceToActorToolTip",
-						"Bake this Houdini Asset Actor and its components to native unreal actors and components, replacing the previous baked result."));
-				}
-				else
-				{
-					BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToActorToolTip",
-						"Bake this Houdini Asset Actor and its components to native unreal actors and components."));
-				}
-			}
-			break;
-
-			case EHoudiniEngineBakeOption::ToBlueprint:
-			{
-				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToBlueprintToolTip",
-					"Bake this Houdini Asset Actor to a blueprint."));
-			}
-			break;
-
-			case EHoudiniEngineBakeOption::ToAsset:
-			{
-				BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToAssetToolTip",
-					"Bake this Houdini Asset to native Unreal assets in the content browser."));
-			}
-			break;
+			BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToBlueprintToolTip",
+				"Bake this Houdini Asset Actor to a blueprint."));
 		}
+		break;
+
+		case EHoudiniEngineBakeOption::ToAsset:
+		{
+			BakeButton->SetToolTipText(LOCTEXT("HoudiniEngineBakeButtonBakeToAssetToolTip",
+				"Bake this Houdini Asset to native Unreal assets in the content browser."));
+		}
+		break;
 	}
 
-	// Bake Type ComboBox
-	TSharedPtr<SComboBox<TSharedPtr<FString>>> TypeComboBox;
-	TArray<TSharedPtr<FString>>* BakeOptionSources = FHoudiniEngineEditor::Get().GetHoudiniEngineBakeTypeOptionsLabels();
-	TSharedPtr<FString> IntialSelec = MakeShareable(new FString(FHoudiniEngineEditor::Get().GetStringFromHoudiniEngineBakeOption(MainHC->GetHoudiniEngineBakeOption())));
-	ButtonRowHorizontalBox->AddSlot()
-	/*.AutoWidth()*/
-	.Padding(3.0, 0.0, 4.0f, 0.0f)
-	.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-	[
-		SNew(SBox)
-		.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-		[
-			SAssignNew(TypeComboBox, SComboBox<TSharedPtr<FString>>)
-			.OptionsSource(BakeOptionSources)
-			.InitiallySelectedItem(IntialSelec)
-			.OnGenerateWidget_Lambda(
-				[](TSharedPtr< FString > InItem)
-				{
-					FText ChoiceEntryText = FText::FromString(*InItem);
-					return SNew(STextBlock)
-						.Text(ChoiceEntryText)
-						.ToolTipText(ChoiceEntryText)
-						.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
-				})
-			.OnSelectionChanged_Lambda(
-				[MainHC, InHCs](TSharedPtr<FString> NewChoice, ESelectInfo::Type SelectType)
-				{
-					if(!NewChoice.IsValid())
-						return;
+	{
+		// BakeButtonHBox contains the image and the text.
 
-					const EHoudiniEngineBakeOption NewOption =
-						FHoudiniEngineEditor::Get().StringToHoudiniEngineBakeOption(*NewChoice.Get());
+		TSharedRef<SHorizontalBox> DeleteBakeButtonHBox = SNew(SHorizontalBox);
 
-					for(auto& NextHC : InHCs)
-					{
-						if(!IsValidWeakPointer(NextHC))
-							continue;
+		TSharedPtr<FSlateDynamicImageBrush> IconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIDeleteBakeIconBrush();
 
-						NextHC->SetHoudiniEngineBakeOption(NewOption);
-						NextHC->MarkPackageDirty();
-					}
+		if(IconBrush.IsValid())
+		{
+			TSharedPtr<SImage> BakeImage;
+			DeleteBakeButtonHBox->AddSlot()
+				.MaxWidth(16.0f)
+				[
+					SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SAssignNew(BakeImage, SImage)
+						]
+				];
 
-					if(MainHC.IsValid())
-						FHoudiniEngineUtils::UpdateEditorProperties(true);
-				})
+			BakeImage->SetImage(TAttribute<const FSlateBrush*>::Create(TAttribute<const FSlateBrush*>::FGetter::CreateLambda([IconBrush]() { return IconBrush.Get(); })));
+		}
+
+		DeleteBakeButtonHBox->AddSlot()
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			.VAlign(VAlign_Center)
+			.AutoWidth()
 			[
 				SNew(STextBlock)
-				.Text_Lambda([MainHC]()
-				{
-					if(!IsValidWeakPointer(MainHC))
-						return FText();
+					.Text(FText::FromString("Delete Bake"))
+			];
 
-					return FText::FromString(
-						FHoudiniEngineEditor::Get().GetStringFromHoudiniEngineBakeOption(MainHC->GetHoudiniEngineBakeOption()));
-				})
-				.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-			]
-		]
-	];
+		ButtonRowHorizontalBox->AddSlot()
+			.MaxWidth(150.0f)
+			[
+				SNew(SBox)
+					.WidthOverride(75.0f)
+					[
+						SNew(SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.ToolTipText(LOCTEXT("HoudiniAssetPFGDetailsDeleteBakeButton", "Delete assets and actors from the previous Bake."))
+							.Visibility(EVisibility::Visible)
+							.OnClicked_Lambda(OnDeleteBakeButtonClickedLambda)
+							[
+								DeleteBakeButtonHBox
+							]
+					]
+			];
+	}
 
-	TArray<TSharedPtr<FString>>* ActorBakeOptionSources = FHoudiniEngineEditor::Get().GetHoudiniEngineBakeActorOptionsLabels();
-	ButtonRowHorizontalBox->AddSlot()
-	/*.AutoWidth()*/
-	.Padding(3.0, 0.0, 4.0f, 0.0f)
-	//.MaxWidth(103.f)
-	.MaxWidth(HOUDINI_ENGINE_UI_BUTTON_WIDTH * 1.5f)
-	[
-		SNew(SBox)
-		//.WidthOverride(103.f)
-		.WidthOverride(HOUDINI_ENGINE_UI_BUTTON_WIDTH)
-		[
-			SAssignNew(TypeComboBox, SComboBox<TSharedPtr<FString>>)
-			.OptionsSource(ActorBakeOptionSources)
-			.InitiallySelectedItem(IntialSelec)
-			.IsEnabled_Lambda([MainHC]()
-				{
-					// Only enabled when in "Bake To Actor" mode
-					return (MainHC->GetHoudiniEngineBakeOption() == EHoudiniEngineBakeOption::ToActor);
-				})
-			.OnGenerateWidget_Lambda(
-				[](TSharedPtr< FString > InItem)
-				{
-					FText ChoiceEntryText = FText::FromString(*InItem);
-					return SNew(STextBlock)
-						.Text(ChoiceEntryText)
-						.ToolTipText(ChoiceEntryText)
-						.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")));
-				})
-			.OnSelectionChanged_Lambda(
-				[MainHC, InHCs](TSharedPtr< FString > NewChoice, ESelectInfo::Type SelectType)
-				{
-					if(!NewChoice.IsValid())
-						return;
+	{
+		// BakeButtonHBox contains the image and the text.
 
-					const EHoudiniEngineActorBakeOption NewOption =
-						FHoudiniEngineEditor::Get().StringToHoudiniEngineActorBakeOption(*NewChoice.Get());
+		TSharedRef<SHorizontalBox> UnlinkBakeButtonHBox = SNew(SHorizontalBox);
 
-					for(auto& NextHC : InHCs)
-					{
-						if(!IsValidWeakPointer(NextHC))
-							continue;
+		TSharedPtr<FSlateDynamicImageBrush> IconBrush = FHoudiniEngineEditor::Get().GetHoudiniEngineUIUnlinkBakeIconBrush();
 
-						if(NextHC->GetActorBakeOption() == NewOption)
-							continue;
+		if(IconBrush.IsValid())
+		{
+			TSharedPtr<SImage> BakeImage;
+			UnlinkBakeButtonHBox->AddSlot()
+				.MaxWidth(16.0f)
+				[
+					SNew(SBox)
+						.WidthOverride(16.0f)
+						.HeightOverride(16.0f)
+						[
+							SAssignNew(BakeImage, SImage)
+						]
+				];
 
-						NextHC->SetActorBakeOption(NewOption);
-						NextHC->MarkPackageDirty();
-					}
+			BakeImage->SetImage(TAttribute<const FSlateBrush*>::Create(TAttribute<const FSlateBrush*>::FGetter::CreateLambda([IconBrush]() { return IconBrush.Get(); })));
+		}
 
-					if(MainHC.IsValid())
-						FHoudiniEngineUtils::UpdateEditorProperties(true);
-				})
+		UnlinkBakeButtonHBox->AddSlot()
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			.Padding(5.0, 0.0, 0.0, 0.0)
+			.VAlign(VAlign_Center)
+			.AutoWidth()
 			[
 				SNew(STextBlock)
-				.Text_Lambda([MainHC]()
-				{
-					if(!IsValidWeakPointer(MainHC))
-						return FText();
+					.Text(FText::FromString("Unlink Bake"))
+			];
 
-					return FText::FromString(
-						FHoudiniEngineEditor::GetStringfromActorBakeOption(MainHC->GetActorBakeOption()));
-				})
-				.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-			]
-		]
-	];
+		ButtonRowHorizontalBox->AddSlot()
+			.MaxWidth(150.0f)
+			[
+				SNew(SBox)
+					.WidthOverride(75.0f)
+					[
+						SNew(SButton)
+							.VAlign(VAlign_Center)
+							.HAlign(HAlign_Center)
+							.ToolTipText(LOCTEXT("HoudiniAssetPFGDetailsDeleteBakeButton", "Unlinks assets and actors from the previous Bake."))
+							.Visibility(EVisibility::Visible)
+							.OnClicked_Lambda(OnUnlinkBakeButtonClickedLambda)
+							[
+								UnlinkBakeButtonHBox
+							]
+					]
+			];
+	}
 
+	FDetailWidgetRow& ButtonRow = Group.AddWidgetRow();
 	ButtonRow.WholeRowWidget.Widget = ButtonRowHorizontalBox;
-
 }
 
 
@@ -1446,57 +1567,646 @@ FHoudiniEngineDetails::CreateBakeWidgets(
 	if (!MainHC->IsBakingSupported() && !DetailsFlags.bDisplayOnOutputLess)
 		return;
 
-	FHoudiniEngineDetails::AddHeaderRowForCookable(HoudiniEngineCategoryBuilder, MainHC, HOUDINI_ENGINE_UI_SECTION_BAKE);
-
-	if (!MainHC->bBakeMenuExpanded)
-		return;
+	IDetailGroup& BakeGroup = HoudiniEngineCategoryBuilder.AddGroup(
+		FName(TEXT(HOUDINI_ENGINE_UI_SECTION_BAKE_HEADER_TEXT)),
+		FText::FromString(TEXT(HOUDINI_ENGINE_UI_SECTION_BAKE_HEADER_TEXT)), false, false);
 
 	// Button Row
-	AddBakeControlBar(HoudiniEngineCategoryBuilder, MainHC, InHCs, DetailsFlags);
+	if (DetailsFlags.bBakeButton)
+		AddBakeButtons(BakeGroup, MainHC, InHCs, DetailsFlags);
 
-	TSharedRef<SHorizontalBox> AdditionalBakeSettingsRowHorizontalBox = SNew(SHorizontalBox);
 
-	TSharedPtr<SVerticalBox> LeftColumnVerticalBox;
-	TSharedPtr<SVerticalBox> RightColumnVerticalBox;
+	FString GroupLabel = TEXT("Bake Output Options");
+	IDetailGroup& OptionsGroup = BakeGroup.AddGroup(FName(*GroupLabel), FText::FromString(GroupLabel), false);
+	OptionsGroup.ToggleExpansion(false);
 
-	AdditionalBakeSettingsRowHorizontalBox->AddSlot()
-	.Padding(30.0f, 5.0f, 0.0f, 0.0f)
-	.MaxWidth(200.f)
-	[
-		SNew(SBox)
-		.WidthOverride(200.f)
-		[
-			SAssignNew(LeftColumnVerticalBox, SVerticalBox)
-		]
-	];
 
-	AdditionalBakeSettingsRowHorizontalBox->AddSlot()
-	.Padding(20.0f, 5.0f, 0.0f, 0.0f)
-	.MaxWidth(200.f)
-	[
-		SNew(SBox)
-		[
-			SAssignNew(RightColumnVerticalBox, SVerticalBox)
-		]
-	];
+	AddBakeOutputTypes(OptionsGroup, MainHC, InHCs, DetailsFlags);
+
+	AddBakeFolderSelector(OptionsGroup, MainHC, InHCs);
 
 	if(DetailsFlags.bRemoveHDAOutputAfterBake)
-		AddRemovedHDAOutputAfterBakeCheckBox(MainHC, InHCs, LeftColumnVerticalBox);
+		AddRemovedHDAOutputAfterBakeCheckBox(OptionsGroup, MainHC, InHCs);
 
-	AddRenterBakedActorsCheckbox(MainHC, InHCs, LeftColumnVerticalBox);
+	AddRenterBakedActorsCheckbox(OptionsGroup, MainHC, InHCs);
 
 	if (DetailsFlags.bAutoBake)
-		AddAutoBakeCheckbox(MainHC, InHCs, RightColumnVerticalBox);
+		AddAutoBakeCheckbox(OptionsGroup, MainHC, InHCs);
 
 	if (DetailsFlags.bReplacePreviousBake)
-		AddReplaceCheckbox(MainHC, InHCs, RightColumnVerticalBox);
+		AddReplaceCheckbox(OptionsGroup, MainHC, InHCs);
 
-	// Clear Output After Baking Row
-	FDetailWidgetRow& ClearOutputAfterBakingRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::FromString("Bake Options"));
-	ClearOutputAfterBakingRow.WholeRowWidget.Widget = AdditionalBakeSettingsRowHorizontalBox;
-
-	AddBakeFolderSelector(HoudiniEngineCategoryBuilder, MainHC, InHCs);
 }
+
+// ASSET OPTIONS
+void FHoudiniEngineDetails::CreateCookTriggerWidgets(
+	IDetailGroup& ParentGroup,
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+	const EHoudiniDetailsFlags& DetailsFlags)
+{
+	if(InHCs.Num() <= 0)
+		return;
+
+	const TWeakObjectPtr<UHoudiniCookable>& MainHC = InHCs[0];
+	if(!IsValidWeakPointer(MainHC))
+		return;
+
+	IDetailGroup& Group = ParentGroup.AddGroup(FName(TEXT("Cook Triggers")), FText::FromString(TEXT("Cook Triggers")), false);
+
+	auto IsCheckedParameterChangedLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetCookOnParameterChange() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateParameterChangedLambda = [InHCs](ECheckBoxState NewState)
+		{
+			bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetCookOnParameterChange() == bChecked)
+					continue;
+
+				NextHC->SetCookOnParameterChange(bChecked);
+				NextHC->MarkPackageDirty();
+			}
+		};
+
+	auto IsCheckedInputChangedLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetCookOnInputChange() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateInputChangedLambda = [InHCs](ECheckBoxState NewState)
+		{
+			bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetCookOnInputChange() == bChecked)
+					continue;
+
+				NextHC->SetCookOnInputChange(bChecked);
+				NextHC->MarkPackageDirty();
+			}
+		};
+
+	auto IsCheckedTransformChangeLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetCookOnTransformChange() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedTransformChangeLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetCookOnTransformChange() == bChecked)
+					continue;
+
+				NextHC->SetCookOnTransformChange(bChecked);
+				NextHC->MarkPackageDirty();
+				NextHC->MarkAsNeedCook();
+			}
+		};
+
+	auto IsCheckedAssetInputCookLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetCookOnCookableInputCook() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedAssetInputCookLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetCookOnCookableInputCook() == bChecked)
+					continue;
+
+				NextHC->SetCookOnCookableInputCook(bChecked);
+				NextHC->MarkPackageDirty();
+			}
+		};
+
+	if(DetailsFlags.bCookTriggers)
+	{
+		if(MainHC->IsParameterSupported())
+		{
+			auto TooltipText = LOCTEXT("HoudiniEngineParameterChangeTooltip", "If enabled, modifying a parameter on this Houdini Asset will automatically trigger a cook of the HDA in Houdini.");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEngineParameterChangeCheckBoxLabel", "On Parameter Change"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(LOCTEXT("HoudiniEngineParameterChangeTooltip", "If enabled, modifying a parameter on this Houdini Asset will automatically trigger a cook of the HDA in Houdini."));
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateParameterChangedLambda)
+				.IsChecked_Lambda(IsCheckedParameterChangedLambda)
+				.ToolTipText(TooltipText);
+		}
+
+		if(MainHC->IsInputSupported())
+		{
+			auto TooltipText = LOCTEXT("HoudiniEngineInputChangeTooltip", "If enabled, any change on an input of this Houdini Asset will automatically trigger a cook of the HDA in Houdini.");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEngineInputChangeCheckBoxLabel", "On Input Change"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(TooltipText);
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateInputChangedLambda)
+				.IsChecked_Lambda(IsCheckedInputChangedLambda)
+				.ToolTipText(TooltipText);
+		}
+
+		if(MainHC->IsComponentSupported())
+		{
+			auto TooltipText = LOCTEXT("HoudiniEngineTransformChangeTooltip", "If enabled, changing the Houdini Asset Actor's transform in Unreal will also update its HDA's node transform in Houdini, and trigger a recook of the HDA with the updated transform.");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEngineTransformChangeCheckBoxLabel", "On Transform Change"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(TooltipText);
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateChangedTransformChangeLambda)
+				.IsChecked_Lambda(IsCheckedTransformChangeLambda)
+				.ToolTipText(TooltipText);
+		}
+
+		if(MainHC->IsInputSupported())
+		{
+			auto TooltipText = LOCTEXT("HoudiniEngineAssetInputCookTooltip", "When enabled, this asset will automatically re-cook after one its Houdini asset input has finished cooking.");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEngineAssetInputCheckBoxLabel", "On HDA Input Cook"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(TooltipText);
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateChangedAssetInputCookLambda)
+				.IsChecked_Lambda(IsCheckedAssetInputCookLambda)
+				.ToolTipText(TooltipText);
+		}
+	}
+
+}
+
+void 
+FHoudiniEngineDetails::CreateOutputWidgets(
+	IDetailGroup& ParentGroup,
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+	const EHoudiniDetailsFlags& DetailsFlags)
+{
+	if(InHCs.Num() <= 0)
+		return;
+
+	const TWeakObjectPtr<UHoudiniCookable>& MainHC = InHCs[0];
+	if(!IsValidWeakPointer(MainHC))
+		return;
+
+	IDetailGroup& Group = ParentGroup.AddGroup(
+		FName(TEXT("Cook Output Options")),
+		FText::FromString(TEXT("Cook Output Options")), false);
+
+	auto IsCheckedDoNotGenerateOutputsLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->IsOutputless() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedDoNotGenerateOutputsLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->IsOutputless() == bChecked)
+					continue;
+
+				NextHC->SetOutputless(bChecked);
+				NextHC->MarkPackageDirty();
+				NextHC->MarkAsNeedCook();
+			}
+		};
+
+	auto IsCheckedOutputTemplatedGeosLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetOutputTemplateGeos() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedOutputTemplatedGeosLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetOutputTemplateGeos() == bChecked)
+					continue;
+
+				NextHC->SetOutputTemplateGeos(bChecked);
+				NextHC->MarkPackageDirty();
+				NextHC->MarkAsNeedCook();
+			}
+		};
+
+	auto IsCheckedUseOutputNodesLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetUseOutputNodes() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedUseOutputNodesLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetUseOutputNodes() == bChecked)
+					continue;
+
+				NextHC->SetUseOutputNodes(bChecked);
+				NextHC->MarkPackageDirty();
+				NextHC->MarkAsNeedCook();
+			}
+		};
+
+	if(DetailsFlags.bCookOutputOptions)
+	{
+
+		if(DetailsFlags.bTemporaryCookFolderRow)
+		{
+			//----------------------------------------------------------------
+			// Temp Cook Folder Row
+			//----------------------------------------------------------------
+
+			auto OnCookFolderTextCommittedLambda = [InHCs, MainHC](const FText& Val, ETextCommit::Type TextCommitType)
+				{
+					SetFolderPath(Val, false, MainHC, InHCs);
+				};
+
+			auto OnCookFolderBrowseButtonClickedLambda = [InHCs, MainHC]()
+				{
+					if (!IsValidWeakPointer(MainHC))
+						return FReply::Handled();
+
+					TSharedRef<SSelectFolderPathDialog> Dialog =
+						SNew(SSelectFolderPathDialog)
+						.InitialPath(FText::FromString(MainHC->GetTemporaryCookFolderOrDefault()))
+						.TitleText(LOCTEXT("CookFolderDialogTitle", "Select Temporary Cook Folder"));
+
+					if(Dialog->ShowModal() != EAppReturnType::Cancel)
+					{
+						SetFolderPath(Dialog->GetFolderPath(), false, MainHC, InHCs);
+					}
+
+					return FReply::Handled();
+				};
+
+			auto OnCookFolderResetButtonClickedLambda = [InHCs, MainHC]()
+				{
+					FText EmptyText;
+					SetFolderPath(EmptyText, false, MainHC, InHCs);
+
+					return FReply::Handled();
+				};
+
+			FDetailWidgetRow& TempCookFolderRow = Group.AddWidgetRow();
+
+			TSharedRef<SHorizontalBox> TempCookFolderRowHorizontalBox = SNew(SHorizontalBox);
+
+			TempCookFolderRowHorizontalBox->AddSlot()
+				[
+					SNew(SBox)
+						[
+							SNew(SEditableTextBox)
+								.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
+								.ToolTipText_Lambda([MainHC]()
+								{
+										if (!IsValidWeakPointer(MainHC))
+											return FText();
+
+										FFormatNamedArguments Args;
+										Args.Add(TEXT("Folder"), FText::FromString(MainHC->GetTemporaryCookFolderOrDefault()));
+
+										FText Tip = FText::Format(LOCTEXT(
+											"HoudiniEngineTemporaryCookFolderTooltip",
+											"Folder used to store the temporary files (Static Meshes, Materials, Textures..) that are "
+											"generated by Houdini Assets when they cook. If this value is blank, the default from the plugin "
+											"settings is used. Currently {Folder}"), Args);
+										return Tip;
+								})
+								.HintText(LOCTEXT("HoudiniEngineTempCookFolderHintText", "Input to set temporary cook folder"))
+								.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+								.Text_Lambda([MainHC]()
+									{
+										if(!IsValidWeakPointer(MainHC))
+											return FText();
+										return FText::FromString(MainHC->GetTemporaryCookFolderOrDefault());
+									})
+								.OnTextCommitted_Lambda(OnCookFolderTextCommittedLambda)
+						]
+				];
+
+			TempCookFolderRowHorizontalBox->AddSlot()
+				.Padding(5.0, 0.0, 0.0, 0.0)
+				.VAlign(VAlign_Center)
+				.AutoWidth()
+				[
+					SNew(SButton)
+						.VAlign(VAlign_Center)
+						.HAlign(HAlign_Center)
+						.ButtonStyle(FAppStyle::Get(), "NoBorder")
+						.IsEnabled(true)
+						.ToolTipText(LOCTEXT("CookFolderBrowseButtonToolTip", "Browse to select temporary cook folder"))
+						.OnClicked_Lambda(OnCookFolderBrowseButtonClickedLambda)
+						[
+							SNew(SImage)
+								.Image(FAppStyle::GetBrush("Icons.BrowseContent"))
+						]
+				];
+
+			TempCookFolderRowHorizontalBox->AddSlot()
+				.AutoWidth()
+				.Padding(5.0, 0.0, 0.0, 0.0)
+				.VAlign(VAlign_Center)
+				[
+					SNew(SButton)
+						.VAlign(VAlign_Center)
+						.HAlign(HAlign_Center)
+						.ButtonStyle(FAppStyle::Get(), "NoBorder")
+						.IsEnabled(true)
+						.ToolTipText(LOCTEXT("CookFolderResetButtonToolTip", "Reset the cook folder to default setting"))
+						.OnClicked_Lambda(OnCookFolderResetButtonClickedLambda)
+						[
+							SNew(SImage)
+								.Image(FAppStyle::GetBrush("PropertyWindow.DiffersFromDefault"))
+						]
+				];
+
+			TempCookFolderRow.ValueWidget.Widget = TempCookFolderRowHorizontalBox;
+
+			TempCookFolderRow.NameWidget.Widget = SNew(STextBlock)
+				.Text(LOCTEXT("HoudiniEngineTemporaryCookFolderLabel", "Temporary Cook Folder"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(LOCTEXT(
+					"HoudiniEngineTemporaryCookFolderTooltip",
+					"Default folder used to store the temporary files (Static Meshes, Materials, Textures..) that are "
+					"generated by Houdini Assets when they cook. If this value is blank, the default from the plugin "
+					"settings is used."));
+
+		}
+
+		if(DetailsFlags.bDoNotGenerateOutputs)
+		{
+			auto TooltipText = LOCTEXT("HoudiniEnginOutputlessTooltip", "If enabled, this Houdini Asset will cook normally but will not generate any output in Unreal. This is especially usefull when chaining multiple assets together via Asset Inputs.");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEngineDoNotGenerateOutputsCheckBoxLabel", "Do Not Generate Outputs"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(TooltipText);
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateChangedDoNotGenerateOutputsLambda)
+				.IsChecked_Lambda(IsCheckedDoNotGenerateOutputsLambda)
+				.ToolTipText(TooltipText);
+		}
+
+		{
+			auto TooltipText = LOCTEXT("HoudiniEnginUseOutputNodesTooltip", "If enabled, Output nodes found in this Houdini asset will be used alongside the Display node to create outputs.");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEnginUseOutputNodesCheckBoxLabel", "Use Output Nodes"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(TooltipText);
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateChangedUseOutputNodesLambda)
+				.IsChecked_Lambda(IsCheckedUseOutputNodesLambda)
+				.ToolTipText(TooltipText);
+		}
+
+		{
+			auto TooltipText = LOCTEXT("HoudiniEnginOutputTemplatesCheckBoxLabel", "Use Templated Geos");
+
+			FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+			Row.NameWidget.Widget = SNew(STextBlock)
+				.MinDesiredWidth(160.f)
+				.Text(LOCTEXT("HoudiniEnginOutputTemplatesCheckBoxLabel", "Use Templated Geos"))
+				.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+				.ToolTipText(TooltipText);
+
+			Row.ValueWidget.Widget = SNew(SCheckBox)
+				.OnCheckStateChanged_Lambda(OnCheckStateChangedOutputTemplatedGeosLambda)
+				.IsChecked_Lambda(IsCheckedOutputTemplatedGeosLambda)
+				.ToolTipText(TooltipText);
+
+		}
+	}
+}
+
+
+void
+FHoudiniEngineDetails::CreateMiscOptionsWidgets(
+	IDetailGroup& ParentGroup,
+	const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs,
+	const EHoudiniDetailsFlags& DetailsFlags)
+{
+	if(InHCs.Num() <= 0)
+		return;
+
+	const TWeakObjectPtr<UHoudiniCookable>& MainHC = InHCs[0];
+	if(!IsValidWeakPointer(MainHC))
+		return;
+
+	IDetailGroup& Group = ParentGroup.AddGroup(FName(TEXT("Cook Options")), FText::FromString(TEXT("Cook Options")), false);
+
+	auto IsCheckedPushTransformToHoudiniLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetUploadTransformsToHoudiniEngine() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedPushTransformToHoudiniLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetUploadTransformsToHoudiniEngine() == bChecked)
+					continue;
+
+				NextHC->SetUploadTransformsToHoudiniEngine(bChecked);
+				NextHC->MarkPackageDirty();
+				NextHC->MarkAsNeedCook();
+			}
+		};
+
+	auto IsCheckedUseTempLandscapesLayersToHoudiniLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetLandscapeUseTempLayers() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedUseTempLandscapeLayersLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetLandscapeUseTempLayers() == bChecked)
+					continue;
+
+				NextHC->SetLandscapeUseTempLayers(bChecked);
+				NextHC->MarkPackageDirty();
+			}
+		};
+
+	auto IsCheckedEnableCurveEditingLambda = [MainHC]()
+		{
+			if(!IsValidWeakPointer(MainHC))
+				return ECheckBoxState::Unchecked;
+
+			return MainHC->GetEnableCurveEditing() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+		};
+
+	auto OnCheckStateChangedEnableCurveEditingLambda = [InHCs](ECheckBoxState NewState)
+		{
+			const bool bChecked = (NewState == ECheckBoxState::Checked);
+			for(auto& NextHC : InHCs)
+			{
+				if(!IsValidWeakPointer(NextHC))
+					continue;
+
+				if(NextHC->GetEnableCurveEditing() == bChecked)
+					continue;
+
+				NextHC->SetEnableCurveEditing(bChecked);
+				NextHC->MarkPackageDirty();
+			}
+		};
+
+	if(MainHC->IsComponentSupported() && DetailsFlags.bPushTransformToHoudini)
+	{
+		auto TooltipText = LOCTEXT("HoudiniEngineAssetInputCookTooltip", "When enabled, this asset will automatically re-cook after one its Houdini asset input has finished cooking.");
+
+		FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+		Row.NameWidget.Widget = SNew(STextBlock)
+			.MinDesiredWidth(160.f)
+			.Text(LOCTEXT("HoudiniEnginePushTransformToHoudiniCheckBoxLabel", "Push Transform to Houdini"))
+			.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+			.ToolTipText(TooltipText);
+
+		Row.ValueWidget.Widget = SNew(SCheckBox)
+			.OnCheckStateChanged_Lambda(OnCheckStateChangedPushTransformToHoudiniLambda)
+			.IsChecked_Lambda(IsCheckedPushTransformToHoudiniLambda)
+			.ToolTipText(TooltipText);
+	}
+
+	if(MainHC->IsComponentSupported())
+	{
+		auto TooltipText = LOCTEXT("HoudiniEngineTempLandscapeLayersTooltip", "Cooking use temporary landscape layers.");
+
+		FDetailWidgetRow& Row = Group.AddWidgetRow();
+
+		Row.NameWidget.Widget = SNew(STextBlock)
+			.MinDesiredWidth(160.f)
+			.Text(LOCTEXT("HoudiniEngineTempLandscapeCheckBoxLabel", "Temp Landscape Layers"))
+			.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+			.ToolTipText(TooltipText);
+
+		Row.ValueWidget.Widget = SNew(SCheckBox)
+			.OnCheckStateChanged_Lambda(OnCheckStateChangedUseTempLandscapeLayersLambda)
+			.IsChecked_Lambda(IsCheckedUseTempLandscapesLayersToHoudiniLambda)
+			.ToolTipText(TooltipText);
+	}
+
+
+	// Curve Editing
+	if(MainHC->IsOutputSupported())
+	{
+		auto TooltipText = LOCTEXT("HoudiniEngineEnableEditableCurvesTooltip",
+			"Enables a legacy/deprecated workflow that uses editable curve::1.0 nodes to create curve inputs.");
+
+		FDetailWidgetRow& Row = Group.AddWidgetRow();
+		Row.NameWidget.Widget = SNew(STextBlock)
+			.MinDesiredWidth(160.f)
+			.Text(LOCTEXT("HoudiniEngineEnableEditableCurvesLabel", "Enable Editable Curves"))
+			.Font(_GetEditorStyle().GetFontStyle(HOUDINI_DETAILS_FONT))
+			.ToolTipText(TooltipText);
+
+		Row.ValueWidget.Widget = SNew(SCheckBox)
+			.OnCheckStateChanged_Lambda(OnCheckStateChangedEnableCurveEditingLambda)
+			.IsChecked_Lambda(IsCheckedEnableCurveEditingLambda)
+			.ToolTipText(TooltipText);
+
+	}
+}
+
 
 void 
 FHoudiniEngineDetails::CreateAssetOptionsWidgets(
@@ -1511,10 +2221,9 @@ FHoudiniEngineDetails::CreateAssetOptionsWidgets(
 	if (!IsValidWeakPointer(MainHC))
 		return;
 
-	// Header Row
-	FHoudiniEngineDetails::AddHeaderRowForCookable(HoudiniEngineCategoryBuilder, MainHC, HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS);
-	if (!MainHC->bAssetOptionMenuExpanded)
-		return;
+	IDetailGroup& Group = HoudiniEngineCategoryBuilder.AddGroup(
+		FName(TEXT(HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS_HEADER_TEXT)),
+		FText::FromString(TEXT(HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS_HEADER_TEXT)), false);
 
 	auto IsCheckedParameterChangedLambda = [MainHC]()
 	{
@@ -1762,7 +2471,7 @@ FHoudiniEngineDetails::CreateAssetOptionsWidgets(
 	};
 
 	// Checkboxes row
-	FDetailWidgetRow & CheckBoxesRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::FromString("Asset Cook Options"));
+	FDetailWidgetRow& CheckBoxesRow = Group.AddWidgetRow();
 	TSharedPtr<SVerticalBox> FirstLeftColumnVerticalBox;
 	TSharedPtr<SVerticalBox> FirstRightColumnVerticalBox;
 	TSharedPtr<SVerticalBox> SecondLeftColumnVerticalBox;
@@ -2123,6 +2832,7 @@ FHoudiniEngineDetails::CreateAssetOptionsWidgets(
 	{
 		TooltipText = LOCTEXT("HoudiniEngineEnableEditableCurvesTooltip",
 			"Enables a legacy/deprecated workflow that uses editable curve::1.0 nodes to create curve inputs.");
+
 		MiscVerticalBox->AddSlot()
 		.AutoHeight()
 		[
@@ -2161,10 +2871,9 @@ FHoudiniEngineDetails::CreateHelpAndDebugWidgets(
 	if (!IsValidWeakPointer(MainHC))
 		return;
 
-	// Header Row
-	FHoudiniEngineDetails::AddHeaderRowForCookable(HoudiniEngineCategoryBuilder, MainHC, HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG);
-	if (!MainHC->bHelpAndDebugMenuExpanded)
-		return;
+	IDetailGroup& OptionsGroup = HoudiniEngineCategoryBuilder.AddGroup(
+		FName(TEXT(HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG_HEADER_TEXT)), 
+		FText::FromString(HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG_HEADER_TEXT), false, false);
 
 	HAPI_NodeId MainNodeId = MainHC->GetNodeId();
 	TArray<HAPI_NodeId> InNodeIds;
@@ -2172,9 +2881,9 @@ FHoudiniEngineDetails::CreateHelpAndDebugWidgets(
 	for (int32 Idx = 0; Idx < InHCs.Num(); Idx++)
 		InNodeIds[Idx] = InHCs[Idx].Get() ? InHCs[Idx].Get()->GetNodeId() : -1;
 
-	auto OnFetchCookLogButtonClickedLambda = [InNodeIds]()
+	auto OnFetchCookLogButtonClickedLambda = [InHCs]()
 	{
-		return ShowCookLog(InNodeIds);
+		return ShowCookLog(InHCs);
 	};
 
 	auto OnHelpButtonClickedLambda = [MainNodeId]()
@@ -2183,7 +2892,7 @@ FHoudiniEngineDetails::CreateHelpAndDebugWidgets(
 	};
 
 	// Button Row
-	FDetailWidgetRow & ButtonRow = HoudiniEngineCategoryBuilder.AddCustomRow(FText::FromString("Help Cook Logs"));
+	FDetailWidgetRow& ButtonRow = OptionsGroup.AddWidgetRow();
 	TSharedRef<SHorizontalBox> ButtonRowHorizontalBox = SNew(SHorizontalBox);
 	TSharedPtr<SHorizontalBox> CookLogButtonHorizontalBox = SNew(SHorizontalBox);
 
@@ -2870,10 +3579,10 @@ FHoudiniEngineDetails::OnGetHoudiniAssetMenuContent(TArray<UHoudiniAssetComponen
 */
 
 FReply
-FHoudiniEngineDetails::ShowCookLog(const TArray<HAPI_NodeId>& InNodeIds)
+FHoudiniEngineDetails::ShowCookLog(const TArray<TWeakObjectPtr<UHoudiniCookable>>& InHCs)
 {
 	TSharedPtr< SWindow > ParentWindow;
-	const FString CookLog = FHoudiniEngineUtils::GetCookLog(InNodeIds);
+	const FString CookLog = FHoudiniEngineUtils::GetCookLog(InHCs);
 
 	// Check if the main frame is loaded. When using the old main frame it may not be.
 	if (FModuleManager::Get().IsModuleLoaded("MainFrame"))
@@ -2953,124 +3662,6 @@ FHoudiniEngineDetails::ShowAssetHelp(HAPI_NodeId InNodeId)
 	}
 
 	return FReply::Handled();
-}
-
-void
-FHoudiniEngineDetails::AddHeaderRowForCookable(
-	IDetailCategoryBuilder& HoudiniEngineCategoryBuilder,
-	const TWeakObjectPtr<UHoudiniCookable>& HoudiniCookable,
-	int32 MenuSection)
-{
-	if (!IsValidWeakPointer(HoudiniCookable))
-		return;
-
-	FOnClicked OnExpanderClick = FOnClicked::CreateLambda([HoudiniCookable, MenuSection, &HoudiniEngineCategoryBuilder]()
-	{
-		if (!IsValidWeakPointer(HoudiniCookable))
-			return FReply::Handled();
-
-		switch (MenuSection)
-		{
-		case HOUDINI_ENGINE_UI_SECTION_GENERATE:
-			HoudiniCookable->bGenerateMenuExpanded = !HoudiniCookable->bGenerateMenuExpanded;
-			break;
-
-		case HOUDINI_ENGINE_UI_SECTION_PARAMETER_RESET:
-			// Note, just use Generate flag, since its a simplified version of Generate.
-			HoudiniCookable->bGenerateMenuExpanded = !HoudiniCookable->bGenerateMenuExpanded;
-			break;
-
-		case HOUDINI_ENGINE_UI_SECTION_BAKE:
-			HoudiniCookable->bBakeMenuExpanded = !HoudiniCookable->bBakeMenuExpanded;
-			break;
-
-		case HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS:
-			HoudiniCookable->bAssetOptionMenuExpanded = !HoudiniCookable->bAssetOptionMenuExpanded;
-			break;
-
-		case HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG:
-			HoudiniCookable->bHelpAndDebugMenuExpanded = !HoudiniCookable->bHelpAndDebugMenuExpanded;
-			break;
-		default:
-			break;
-		}
-
-		FHoudiniEngineUtils::UpdateEditorProperties(true);
-
-		// TODO: This is a quick fix for 130742. However, its not a complete solution since clicking the expansion does not
-		// always update all details panels correctly. The correct solution here is to move all the above expansion bools, like
-		// bAssetOptionMenuExpanded, out of the HAC into per- IDetailLayoutBuilder values. ie. store them per Details panel,
-		// not per-component. https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Slate/DetailsCustomization/
-
-		HoudiniEngineCategoryBuilder.GetParentLayout().ForceRefreshDetails();
-
-		return FReply::Handled();
-	});
-
-	TFunction<FText(void)> GetText = [MenuSection]()
-	{
-		switch (MenuSection)
-		{
-		case HOUDINI_ENGINE_UI_SECTION_GENERATE:
-			return FText::FromString(HOUDINI_ENGINE_UI_SECTION_GENERATE_HEADER_TEXT);
-
-		case HOUDINI_ENGINE_UI_SECTION_BAKE:
-			return FText::FromString(HOUDINI_ENGINE_UI_SECTION_BAKE_HEADER_TEXT);
-
-		case HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS:
-			return FText::FromString(HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS_HEADER_TEXT);
-
-		case HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG:
-			return FText::FromString(HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG_HEADER_TEXT);
-
-		case HOUDINI_ENGINE_UI_SECTION_PARAMETER_RESET:
-			return FText::FromString(HOUDINI_ENGINE_UI_SECTION_PARAMETER_RESET_TEXT);
-
-		default:
-			break;
-		}
-		return FText::FromString("");
-	};
-
-	TFunction<const FSlateBrush* (SButton* InExpanderArrow)> GetExpanderBrush = [HoudiniCookable, MenuSection](SButton* InExpanderArrow)
-	{
-		FName ResourceName;
-		bool bMenuExpanded = false;
-
-		if (IsValidWeakPointer(HoudiniCookable))
-		{
-			switch (MenuSection)
-			{
-			case HOUDINI_ENGINE_UI_SECTION_GENERATE:
-				bMenuExpanded = HoudiniCookable->bGenerateMenuExpanded;
-				break;
-
-			case HOUDINI_ENGINE_UI_SECTION_BAKE:
-				bMenuExpanded = HoudiniCookable->bBakeMenuExpanded;
-				break;
-
-			case HOUDINI_ENGINE_UI_SECTION_ASSET_OPTIONS:
-				bMenuExpanded = HoudiniCookable->bAssetOptionMenuExpanded;
-				break;
-
-			case HOUDINI_ENGINE_UI_SECTION_HELP_AND_DEBUG:
-				bMenuExpanded = HoudiniCookable->bHelpAndDebugMenuExpanded;
-			}
-		}
-
-		if (bMenuExpanded)
-		{
-			ResourceName = InExpanderArrow->IsHovered() ? "TreeArrow_Expanded_Hovered" : "TreeArrow_Expanded";
-		}
-		else
-		{
-			ResourceName = InExpanderArrow->IsHovered() ? "TreeArrow_Collapsed_Hovered" : "TreeArrow_Collapsed";
-		}
-
-		return _GetEditorStyle().GetBrush(ResourceName);
-	};
-
-	return AddHeaderRow(HoudiniEngineCategoryBuilder, OnExpanderClick, GetText, GetExpanderBrush);
 }
 
 void
@@ -3160,25 +3751,30 @@ FHoudiniEngineDetails::AddHeaderRow(
 
 	TSharedPtr<SImage> ExpanderImage;
 	TSharedPtr<SButton> ExpanderArrow;
-	HeaderHorizontalBox->AddSlot().VAlign(VAlign_Center).HAlign(HAlign_Left).AutoWidth()
-	[
-		SAssignNew(ExpanderArrow, SButton)
-		.ButtonStyle(_GetEditorStyle(), "NoBorder")
-		.ClickMethod(EButtonClickMethod::MouseDown)
-		.Visibility(EVisibility::Visible)
-		.OnClicked(InOnExpanderClick)
+	HeaderHorizontalBox->AddSlot()
+		.VAlign(VAlign_Center)
+		.HAlign(HAlign_Left).AutoWidth()
 		[
-			SAssignNew(ExpanderImage, SImage)
-			.ColorAndOpacity(FSlateColor::UseForeground())
-		]
-	];
+			SAssignNew(ExpanderArrow, SButton)
+			.ButtonStyle(_GetEditorStyle(), "NoBorder")
+			.ClickMethod(EButtonClickMethod::MouseDown)
+			.Visibility(EVisibility::Visible)
+			.OnClicked(InOnExpanderClick)
+			[
+				SAssignNew(ExpanderImage, SImage)
+					.ColorAndOpacity(FSlateColor::UseForeground())
+			]
+		];
 
-	HeaderHorizontalBox->AddSlot().Padding(1.0f).VAlign(VAlign_Center).AutoWidth()
-	[
-		SNew(STextBlock)
-		.Text_Lambda([InGetText](){return InGetText(); })
-		.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-	];
+	HeaderHorizontalBox->AddSlot()
+		.Padding(1.0f)
+		.VAlign(VAlign_Center)
+		.AutoWidth()
+		[
+			SNew(STextBlock)
+				.Text_Lambda([InGetText](){return InGetText(); })
+				.Font(_GetEditorStyle().GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+		];
 
 	ExpanderImage->SetImage(
 		TAttribute<const FSlateBrush*>::Create(
@@ -3257,8 +3853,39 @@ FHoudiniEngineDetails::AddEducationLicenseRow(IDetailCategoryBuilder& InCategory
 
 
 void
-FHoudiniEngineDetails::AddSessionStatusRow(IDetailCategoryBuilder& InCategory)
+FHoudiniEngineDetails::AddSessionStatusRow(IDetailCategoryBuilder& InCategory, const TArray<TWeakObjectPtr<UHoudiniCookable>>& InCookables)
 {
+	auto OnClickedStatus = [InCookables]()
+		{
+			const FModifierKeysState ModifierKeys = FSlateApplication::Get().GetModifierKeys();
+			const bool bIsControlDown = ModifierKeys.IsControlDown();
+
+			if(!bIsControlDown)
+			{
+				UHoudiniCookable* Cookable = nullptr;
+				if(!InCookables.IsEmpty() && InCookables[0].IsValid())
+				{
+					Cookable = InCookables[0].Get();
+				}
+
+				return ShowCookLog(InCookables);
+
+			}
+			else
+			{
+				FName OutputLogTabName = FName("OutputLog");
+
+				TSharedPtr<FTabManager> TabManager = FGlobalTabmanager::Get();
+				if(TabManager.IsValid())
+				{
+					// Try to invoke (open if closed, focus if open)
+					TabManager->TryInvokeTab(OutputLogTabName);
+				}
+			}
+
+			return FReply::Handled();
+		};
+
 	FDetailWidgetRow& SessionStatusRow = InCategory.AddCustomRow(FText::FromString("Session Status"))
 		.WholeRowContent()
 		[
@@ -3269,21 +3896,39 @@ FHoudiniEngineDetails::AddSessionStatusRow(IDetailCategoryBuilder& InCategory)
 				.VAlign(VAlign_Center)
 				.HAlign(HAlign_Center)
 				[
-					SNew(STextBlock)
-						.Text_Lambda([]()
-							{
-								FString StatusString;
-								FLinearColor StatusColor;
-								GetSessionStatusAndColor(StatusString, StatusColor);
-								return FText::FromString(StatusString);
-							})
-						.ColorAndOpacity_Lambda([]()
-							{
-								FString StatusString;
-								FLinearColor StatusColor;
-								GetSessionStatusAndColor(StatusString, StatusColor);
-								return FSlateColor(StatusColor);
-							})
+					SNew(SButton)
+					.ButtonStyle(FAppStyle::Get(), "NoBorder")
+					.OnClicked_Lambda(OnClickedStatus)
+						[
+							SNew(STextBlock)
+								.Justification(ETextJustify::Center)
+								.Text_Lambda([InCookables]()
+									{
+										UHoudiniCookable* Cookable = nullptr;
+										if(!InCookables.IsEmpty() && InCookables[0].IsValid())
+										{
+											Cookable = InCookables[0].Get();
+										}
+
+										FString StatusString;
+										FLinearColor StatusColor;
+										FHoudiniEngineStatusManager::Get()->GetSessionStatusAndColor(Cookable, StatusString, StatusColor);
+										return FText::FromString(StatusString);
+									})
+								.ColorAndOpacity_Lambda([InCookables]()
+									{
+										UHoudiniCookable* Cookable = nullptr;
+										if(!InCookables.IsEmpty() && InCookables[0].IsValid())
+										{
+											Cookable = InCookables[0].Get();
+										}
+
+										FString StatusString;
+										FLinearColor StatusColor;
+										FHoudiniEngineStatusManager::Get()->GetSessionStatusAndColor(Cookable, StatusString, StatusColor);
+										return FSlateColor(StatusColor);
+									})
+						]
 				]
 		];
 }
@@ -3390,6 +4035,9 @@ FHoudiniEngineDetails::CreateNodeSyncWidgets(
 
 	auto OnFetchFolderBrowseButtonClickedLambda = [InCookables, MainHNSC, UpdateNodePath]()
 	{
+		if (!IsValidWeakPointer(MainHNSC))
+			return FReply::Handled();
+
 		UHoudiniEditorNodeSyncSubsystem* HoudiniEditorNodeSyncSubsystem = GEditor->GetEditorSubsystem<UHoudiniEditorNodeSyncSubsystem>();
 		if (!HoudiniEditorNodeSyncSubsystem)
 			return FReply::Handled();
@@ -3443,6 +4091,9 @@ FHoudiniEngineDetails::CreateNodeSyncWidgets(
 		.MinDesiredWidth(HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH)
 		.ToolTipText_Lambda([MainHNSC, FetchPathTooltipString]()
 		{
+			if (!IsValidWeakPointer(MainHNSC))
+				return FText::FromString(FetchPathTooltipString);
+
 			FString TooltipString = FetchPathTooltipString;
 
 			UHoudiniEditorNodeSyncSubsystem* HoudiniEditorNodeSyncSubsystem = GEditor->GetEditorSubsystem<UHoudiniEditorNodeSyncSubsystem>();
@@ -3565,15 +4216,24 @@ FHoudiniEngineDetails::CreateNodeSyncWidgets(
 		.Justification(ETextJustify::Left)
 		.Text_Lambda([MainHNSC]()
 		{
+			if (!IsValidWeakPointer(MainHNSC))
+				return FText();
+
 			return FText::FromString(MainHNSC->FetchMessage);
 		})
 		.ColorAndOpacity_Lambda([MainHNSC]()
 		{
+			if (!IsValidWeakPointer(MainHNSC))
+				return FSlateColor(FLinearColor::Transparent);
+
 			FLinearColor StatusColor = UHoudiniEditorNodeSyncSubsystem::GetStatusColor(MainHNSC->FetchStatus);
 			return FSlateColor(StatusColor);
 		})
 		.ToolTipText_Lambda([MainHNSC]()
 		{
+			if (!IsValidWeakPointer(MainHNSC))
+				return FText();
+
 			return FText::FromString(MainHNSC->FetchMessage);
 		})
 	];

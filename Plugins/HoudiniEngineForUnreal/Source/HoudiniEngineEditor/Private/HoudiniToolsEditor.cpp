@@ -1525,6 +1525,8 @@ FHoudiniToolsEditor::GetHoudiniToolDescriptionFromJSON(const FString& JsonFilePa
 			OutType = EHoudiniToolType::HTOOLTYPE_OPERATOR_MULTI;
 		else if (ToolType.Equals(TEXT("BATCH"), ESearchCase::IgnoreCase))
 			OutType = EHoudiniToolType::HTOOLTYPE_OPERATOR_BATCH;
+		else if (ToolType.Equals(TEXT("HDAEDITOR"), ESearchCase::IgnoreCase))
+			OutType = EHoudiniToolType::HTOOLTYPE_HDA_EDITOR;
 	}
 
 	// Read the tooltip
@@ -2318,6 +2320,8 @@ bool FHoudiniToolsEditor::WriteJSONFromHoudiniAsset(const UHoudiniAsset* Houdini
 		ToolTypeString = TEXT("OPERATOR_MULTI");
 	else if ( ToolType == EHoudiniToolType::HTOOLTYPE_OPERATOR_BATCH)
 		ToolTypeString = TEXT("BATCH");
+	else if (ToolType == EHoudiniToolType::HTOOLTYPE_HDA_EDITOR)
+		ToolTypeString = TEXT("HDAEDITOR");
 
 	JSONObject->SetStringField(TEXT("toolType"), ToolTypeString);
 
@@ -2448,6 +2452,11 @@ bool FHoudiniToolsEditor::ToolTypeToString(const EHoudiniToolType ToolType, FStr
 		case EHoudiniToolType::HTOOLTYPE_OPERATOR_BATCH:
 		{
 			OutString = TEXT("BATCH");
+			return true;
+		}
+		case EHoudiniToolType::HTOOLTYPE_HDA_EDITOR:
+		{
+			OutString = TEXT("HDAEDITOR");
 			return true;
 		}
 	default:
@@ -2762,6 +2771,7 @@ FHoudiniToolsEditor::CopySettingsToPreset(
 	const bool bApplyBakeOptions,
 	const bool bApplyMeshGenSettings,
 	const bool bApplyProxyMeshGenSettings,
+	const bool bApplyImageData,
 	UHoudiniPreset* Preset)
 {
 	// Populate Bake options
@@ -2797,6 +2807,18 @@ FHoudiniToolsEditor::CopySettingsToPreset(
 	Preset->ProxyMeshAutoRefineTimeoutSecondsOverride = HC->GetProxyMeshAutoRefineTimeoutSeconds();
 	Preset->bEnableProxyStaticMeshRefinementOnPreSaveWorldOverride = HC->IsProxyStaticMeshRefinementOnPreSaveWorldEnabled();
 	Preset->bEnableProxyStaticMeshRefinementOnPreBeginPIEOverride = HC->IsProxyStaticMeshRefinementOnPreBeginPIEEnabled();
+
+	// Image Data
+	Preset->bApplyImageData = bApplyImageData;
+	if (HC->GetImageData())
+	{
+		Preset->bOverrideDefaultResolution = HC->GetImageData()->bOverrideDefaultResolution;
+		Preset->ResolutionOverride = HC->GetImageData()->ResolutionOverride;
+		Preset->bOverridePixelScale = HC->GetImageData()->bOverridePixelScale;
+		Preset->PixelScale = HC->GetImageData()->PixelScale;
+		Preset->bGenerateMaterial = HC->GetImageData()->bGenerateMaterial;
+		Preset->MaterialToInstance = HC->GetImageData()->MaterialToInstance;
+	}	
 }
 
 
@@ -2949,6 +2971,19 @@ FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(
 		HC->SetBakeFolderPath(Preset->BakeFolder);
 	}
 
+	if (Preset->bApplyImageData)
+	{
+		if (HC->GetImageData())
+		{
+			HC->GetImageData()->bOverrideDefaultResolution = Preset->bOverrideDefaultResolution;
+			HC->GetImageData()->ResolutionOverride = Preset->ResolutionOverride;
+			HC->GetImageData()->bOverridePixelScale = Preset->bOverridePixelScale;
+			HC->GetImageData()->PixelScale = Preset->PixelScale;
+			HC->GetImageData()->bGenerateMaterial = Preset->bGenerateMaterial;
+			HC->GetImageData()->MaterialToInstance = Preset->MaterialToInstance;
+		}
+	}
+
 	// When recooking/rebuilding the HDA, force a full update of all params
 	const bool bForceFullUpdate = HC->HasRebuildBeenRequested() || HC->HasRecookBeenRequested() || HC->IsParameterDefinitionUpdateNeeded();
 	const bool bCacheRampParms = !HC->HasBeenLoaded() && !HC->HasBeenDuplicated();
@@ -2957,12 +2992,9 @@ FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(
 	bool bNeedToUpdateEditorProperties = false;
 
 	// Update the parameters
-	FHoudiniParameterTranslator::UpdateParameters(
-		HC->GetNodeId(),
+	FHoudiniParameterTranslator::UpdateParametersFromHoudini(
 		HC,
-		HC->GetParameters(),
-		HC->GetHoudiniAsset(),
-		HC->GetHapiAssetName(),
+		true, // Values
 		bForceFullUpdate,
 		bCacheRampParms,
 		bNeedToUpdateEditorProperties);
@@ -3005,12 +3037,9 @@ FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(
 			break;
 
 		FHoudiniParameterTranslator::UploadChangedParameters(HC->GetParameters(), HC->GetNodeId());
-		FHoudiniParameterTranslator::UpdateParameters(
-			HC->GetNodeId(),
+		FHoudiniParameterTranslator::UpdateParametersFromHoudini(
 			HC,
-			HC->GetParameters(),
-			HC->GetHoudiniAsset(),
-			HC->GetHapiAssetName(),
+			true, // Update values
 			bForceFullUpdate,
 			bCacheRampParms,
 			bNeedToUpdateEditorProperties);
@@ -3020,12 +3049,9 @@ FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(
 	if (Preset->MultiParmParameters.Num() > 0)
 	{
 		FHoudiniParameterTranslator::UploadChangedParameters(HC->GetParameters(), HC->GetNodeId());
-		FHoudiniParameterTranslator::UpdateParameters(
-			HC->GetNodeId(),
+		FHoudiniParameterTranslator::UpdateParametersFromHoudini(
 			HC,
-			HC->GetParameters(),
-			HC->GetHoudiniAsset(),
-			HC->GetHapiAssetName(),
+			true, // Update Values
 			bForceFullUpdate,
 			bCacheRampParms,
 			bNeedToUpdateEditorProperties);
@@ -3202,6 +3228,20 @@ FHoudiniToolsEditor::ApplyPresetToHoudiniCookable(
 		HC->SetProxyMeshAutoRefineTimeoutSecondsOverride(Preset->ProxyMeshAutoRefineTimeoutSecondsOverride);
 		HC->SetEnableProxyStaticMeshRefinementOnPreSaveWorldOverride(Preset->bEnableProxyStaticMeshRefinementOnPreSaveWorldOverride);
 		HC->SetEnableProxyStaticMeshRefinementOnPreBeginPIEOverride(Preset->bEnableProxyStaticMeshRefinementOnPreBeginPIEOverride);
+	}
+
+	if (Preset->bApplyImageData)
+	{
+		// Populate Image Data settings
+		if (HC->GetImageData())
+		{
+			HC->GetImageData()->bOverrideDefaultResolution = Preset->bOverrideDefaultResolution;
+			HC->GetImageData()->ResolutionOverride = Preset->ResolutionOverride;
+			HC->GetImageData()->bOverridePixelScale = Preset->bOverridePixelScale;
+			HC->GetImageData()->PixelScale = Preset->PixelScale;
+			HC->GetImageData()->bGenerateMaterial = Preset->bGenerateMaterial;
+			HC->GetImageData()->MaterialToInstance = Preset->MaterialToInstance;
+		}
 	}
 
 	// TODO COOKABLE

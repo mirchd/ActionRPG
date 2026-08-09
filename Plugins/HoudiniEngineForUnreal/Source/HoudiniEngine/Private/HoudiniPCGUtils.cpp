@@ -42,7 +42,6 @@
 HOUDINI_PCG_DEFINE_LOG_CATEGORY();
 
 FString FHoudiniPCGUtils::ParameterInputPinName = FString(TEXT("Parameters"));
-FName FHoudiniPCGUtils::HDAInputObjectName = FName(FString(TEXT("object")));
 FCriticalSection FHoudiniPCGUtils::CriticalSection;
 EHoudiniPCGSessionStatus FHoudiniPCGUtils::SessionStatus;
 
@@ -66,9 +65,9 @@ FHoudiniPCGUtils::GetPCGOutputData(const FHoudiniBakedOutput* BakedOutput)
 
 		FHoudiniPCGObjectOutput& PCGOutputObject = Outputs.Emplace_GetRef();
 		PCGOutputObject.OutputObjectIndex = ObjectIndex;
-		PCGOutputObject.ActorPath = BakedOutputObject.Actor;
-		PCGOutputObject.ComponentPath = BakedOutputObject.BakedComponent;
-		PCGOutputObject.ObjectPath = BakedOutputObject.BakedObject;
+		PCGOutputObject.ActorPath = BakedOutputObject.ActorPath;
+		PCGOutputObject.ComponentPath = BakedOutputObject.BakedComponentPath;
+		PCGOutputObject.ObjectPath = BakedOutputObject.BakedObjectPath;
 
 		if (PCGOutputObject.ActorPath.IsValid())
 		{
@@ -226,138 +225,111 @@ FHoudiniPCGUtils::HasPCGOutputs(const FHoudiniBakedOutput* HoudiniOutput)
 	return false;
 }
 
-
-EHoudiniPCGInputType
-FHoudiniPCGUtils::GetInputType(const UPCGData* PCGData)
-{
-	if(PCGData->IsA<UPCGPointData>())
-		return EHoudiniPCGInputType::PCGData;
-	else if(PCGData->IsA<UPCGParamData>())
-	{
-		const UPCGMetadata* Metadata = PCGData->ConstMetadata();
-
-		const FPCGMetadataAttribute<FSoftObjectPath>* ObjectAttrs = static_cast<const FPCGMetadataAttribute<FSoftObjectPath>*>(Metadata->GetConstAttribute(HDAInputObjectName));
-		if(ObjectAttrs)
-			return EHoudiniPCGInputType::UnrealObjects;
-		else
-			return EHoudiniPCGInputType::PCGData;
-	}
-	else
-	{
-		return EHoudiniPCGInputType::None;
-	}
-}
-
 TArray<FString>
-FHoudiniPCGUtils::GetValueAsString(const TArray<FString> & Defaults, const FHoudiniPCGAttributes& Attributes, int Index)
+FHoudiniPCGUtils::GetValueAsString(const FHoudiniPCGAttributes& Attributes, int Index)
 {
 	// Always return at least one result.
-	TArray<FString> Result = Defaults;
-	if(Result.IsEmpty())
-		Result.SetNum(1);
+	TArray<FString> Result;
 
 	if(Attributes.Strings)
 	{
-		Result[0] = Attributes.Strings->GetValueFromItemKey(Index);
+
+		Result.Add(Attributes.Strings->GetValueFromItemKey(Index));
 	}
 	else if(Attributes.Names)
 	{
-		Result[0] = Attributes.Names->GetValueFromItemKey(Index).ToString();
+		Result.Add(Attributes.Names->GetValueFromItemKey(Index).ToString());
 	}
 	else if(Attributes.SoftObjectPaths)
 	{
-		Result[0] = Attributes.SoftObjectPaths->GetValueFromItemKey(Index).ToString();
+		Result.Add(Attributes.SoftObjectPaths->GetValueFromItemKey(Index).ToString());
 	}
 	else if(Attributes.SoftClassPaths)
 	{
-		Result[0] = Attributes.SoftClassPaths->GetValueFromItemKey(Index).ToString();
+		Result.Add(Attributes.SoftClassPaths->GetValueFromItemKey(Index).ToString());
 	}
 	else if (Attributes.Floats)
 	{
-		Result[0] = FString::SanitizeFloat(Attributes.Floats->GetValueFromItemKey(Index));
+		Result.Add(FString::SanitizeFloat(Attributes.Floats->GetValueFromItemKey(Index)));
 	}
 	else if (Attributes.Int32s)
 	{
-		Result[0] = FString::FromInt(Attributes.Int32s->GetValueFromItemKey(Index));
+		Result.Add(FString::FromInt(Attributes.Int32s->GetValueFromItemKey(Index)));
 	}
 	else if(Attributes.Int64s)
 	{
-		Result[0] = FString::FromInt(static_cast<int>(Attributes.Int64s->GetValueFromItemKey(Index)));
+		Result.Add(FString::FromInt(static_cast<int>(Attributes.Int64s->GetValueFromItemKey(Index))));
 	}
 	else if(Attributes.Bools)
 	{
-		Result[0] = Attributes.Bools->GetValueFromItemKey(Index) ? FString(TEXT("1")) : FString(TEXT("0"));
+		Result.Add(Attributes.Bools->GetValueFromItemKey(Index) ? FString(TEXT("1")) : FString(TEXT("0")));
 	}
 	return Result;
 }
 
 TArray<int>
-FHoudiniPCGUtils::GetValueAsInt(const TArray<int> & Defaults, const FHoudiniPCGAttributes& Attributes, int Index)
+FHoudiniPCGUtils::GetValueAsInt(const FHoudiniPCGAttributes& Attributes, int Index)
 {
 	// Always return at least one result.
-	TArray<int> Result = Defaults;
-	if(Result.IsEmpty())
-		Result.SetNum(1);
+	TArray<int> Result;
 
 	if(Attributes.Strings)
 	{
 		FString StringValue = Attributes.Strings->GetValueFromItemKey(Index);
-		Result[0] = FCString::Atoi(*StringValue);
+		Result.Add(FCString::Atoi(*StringValue));
 	}
 	else if(Attributes.Floats)
 	{
 		float FloatValue = Attributes.Floats->GetValueFromItemKey(Index);
-		Result[0] = static_cast<int>(FloatValue);
+		Result.Add(static_cast<int>(FloatValue));
 	}
 	else if(Attributes.Doubles)
 	{
-		Result[0] = static_cast<int>(Attributes.Doubles->GetValueFromItemKey(Index));
+		Result.Add(static_cast<int>(Attributes.Doubles->GetValueFromItemKey(Index)));
 	}
 	else if(Attributes.Int32s)
 	{
-		Result[0] = Attributes.Int32s->GetValueFromItemKey(Index);
+		Result.Add(Attributes.Int32s->GetValueFromItemKey(Index));
 	}
 	else if(Attributes.Int64s)
 	{
-		Result[0] = static_cast<int32>(Attributes.Int64s->GetValueFromItemKey(Index));
+		Result.Add(static_cast<int32>(Attributes.Int64s->GetValueFromItemKey(Index)));
 	}
 	return Result;
 }
 
 TArray<float>
-FHoudiniPCGUtils::GetValueAsFloat(const TArray<float>& DefaultValues, const FHoudiniPCGAttributes& Attributes, int RowIndex)
+FHoudiniPCGUtils::GetValueAsFloat(const FHoudiniPCGAttributes& Attributes, int RowIndex)
 {
 	// Always return at least one result.
-	TArray<float> Result = DefaultValues;
-	if(Result.IsEmpty())
-		Result.SetNum(1);
+	TArray<float> Result;
 
 	if(Attributes.Strings)
 	{
 		FString StringValue = Attributes.Strings->GetValueFromItemKey(RowIndex);
-		Result[0] = FCString::Atof(*StringValue);
+		Result.Add(FCString::Atof(*StringValue));
 	}
 	else if(Attributes.Floats)
 	{
-		Result[0] = Attributes.Floats->GetValueFromItemKey(RowIndex);
+		Result.Add(Attributes.Floats->GetValueFromItemKey(RowIndex));
 	}
 	else if(Attributes.Doubles)
 	{
-		Result[0] = static_cast<float>(Attributes.Doubles->GetValueFromItemKey(RowIndex));
+		Result.Add(static_cast<float>(Attributes.Doubles->GetValueFromItemKey(RowIndex)));
 	}
 	else if(Attributes.Int32s)
 	{
 		int IntValue = Attributes.Int32s->GetValueFromItemKey(RowIndex);
-		Result[0] = static_cast<float>(IntValue);
+		Result.Add(static_cast<float>(IntValue));
 	}
 	else if(Attributes.Int64s)
 	{
 		int Int64Value = Attributes.Int64s->GetValueFromItemKey(RowIndex);
-		Result[0] = static_cast<float>(Int64Value);
+		Result.Add(static_cast<float>(Int64Value));
 	}
 	else if(Attributes.Bools)
 	{
-		Result[0] = Attributes.Bools->GetValueFromItemKey(RowIndex) ? 1.0f : 0.0f;
+		Result.Add(Attributes.Bools->GetValueFromItemKey(RowIndex) ? 1.0f : 0.0f);
 	}
 	else if(Attributes.Vector2ds)
 	{
@@ -444,7 +416,7 @@ FHoudiniPCGUtils::GetHDAInputName(int Index)
 }
 
 FVector3d
-FHoudiniPCGUtils::HoudiniToUnrealPosition(float HoudiniVector[3])
+FHoudiniPCGUtils::HoudiniToUnrealScaled(float HoudiniVector[3])
 {
 	FVector3d Position;
 	Position.X = HoudiniVector[0] * 100.0;
@@ -454,7 +426,7 @@ FHoudiniPCGUtils::HoudiniToUnrealPosition(float HoudiniVector[3])
 }
 
 FVector3d
-FHoudiniPCGUtils::HoudiniToUnrealVector(float HoudiniVector[3])
+FHoudiniPCGUtils::HoudiniToUnrealUnscaled(float HoudiniVector[3])
 {
 	FVector3d Position;
 	Position.X = HoudiniVector[0];
@@ -595,3 +567,4 @@ UPCGComponent* FHoudiniPCGUtils::GetSourceComponent(FPCGContext* Context)
 #endif
 
 }
+

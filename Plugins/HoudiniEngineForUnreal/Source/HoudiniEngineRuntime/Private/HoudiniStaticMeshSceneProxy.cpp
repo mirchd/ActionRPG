@@ -333,7 +333,7 @@ void FHoudiniStaticMeshSceneProxy::GetDynamicMeshElements(const TArray<const FSc
 				true,
 				bHasPrecomputedVolumetricLightmap, 
 				DrawsVelocity(), 
-				bOutputVelocity);
+				bOutputVelocity);			
 #endif
 
 			if (BufferSet->TriangleIndexBuffer.Indices.Num() > 0)

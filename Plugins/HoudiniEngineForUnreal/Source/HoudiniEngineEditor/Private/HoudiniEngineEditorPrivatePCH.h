@@ -41,6 +41,7 @@
 #endif
 
 // Details panel desired sizes.
+#define HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_MIN_WIDTH          70
 #define HAPI_UNREAL_DESIRED_ROW_VALUE_WIDGET_WIDTH              270
 #define HAPI_UNREAL_DESIRED_ROW_FULL_WIDGET_WIDTH               310
 #define HAPI_UNREAL_DESIRED_SETTINGS_ROW_VALUE_WIDGET_WIDTH     350
@@ -67,8 +68,9 @@
 #define HOUDINI_ENGINE_EDITOR_CATEGORY_OUTPUTS					"HoudiniOutputs";
 #define HOUDINI_ENGINE_EDITOR_CATEGORY_NODESYNC					"HoudiniNodeSync";
 #define HOUDINI_ENGINE_EDITOR_CATEGORY_HDA						"HoudiniAsset";
-//#define HOUDINI_ENGINE_EDITOR_CATEGORY_PROXY				    "HoudiniProxyMeshGeneration";
-#define HOUDINI_ENGINE_EDITOR_CATEGORY_MESHGEN          		"HoudiniMeshGeneration";
+//#define HOUDINI_ENGINE_EDITOR_CATEGORY_PROXY					"HoudiniProxyMeshGeneration";
+#define HOUDINI_ENGINE_EDITOR_CATEGORY_MESHGEN					"HoudiniMeshGeneration";
+#define HOUDINI_ENGINE_EDITOR_CATEGORY_IMAGE					"HoudiniImage";
 
 //
 // Parameter UI constants

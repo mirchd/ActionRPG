@@ -56,6 +56,19 @@ enum class HOUDINIENGINE_API EHoudiniBGEOCommandletStatus : uint8
 	Crashed
 };
 
+// ---------------------------------------------------------
+// Commandlet Logging
+// ---------------------------------------------------------
+
+#if defined(HOUDINI_ENGINE_LOGGING) 
+DECLARE_LOG_CATEGORY_EXTERN(LogHoudiniEngineCommandlet, Log, All);
+#define HOUDINI_COMMANDLET_DEFINE_LOG_CATEGORY() 			DEFINE_LOG_CATEGORY(LogHoudiniEngineCommandlet);
+#define HOUDINI_COMMANDLET_MESSAGE( HOUDINI_LOG_TEXT, ... )		HOUDINI_DEBUG_EXPAND_UE_LOG( Commandlet, Log, HOUDINI_LOG_TEXT, ##__VA_ARGS__ ) 
+#else 
+#define HOUDINI_COMMANDLET_DEFINE_LOG_CATEGORY() 
+#define HOUDINI_COMMANDLET_MESSAGE( HOUDINI_LOG_TEXT, ... ) 
+#endif
+
 struct HOUDINIENGINE_API FHoudiniPDGManager
 {
 
@@ -98,23 +111,31 @@ public:
 	// Dirty the specified TOP node and clear its work item results.
 	static void DirtyTOPNode(UTOPNode* InTOPNode);
 
-	// // Dirty all the tasks/work items of the specified TOP node. Does not
-	// // clear its work item results.
-	// static void DirtyAllTasksOfTOPNode(FTOPNode& InTOPNode);
-
 	// Dirty the TOP network and clear all work item results.
-	static void DirtyAll(UTOPNetwork* InTOPNet);
+	static bool DirtyAll(UTOPNetwork* InTOPNet);
 
 	// Cook the output TOP node of the currently selected TOP network.
-	static bool CookOutput(UTOPNetwork* InTOPNet);
+	static bool CookOutput(UHoudiniCookable* HC, UTOPNetwork* InTOPNet);
 
 	// Pause the PDG cook of the currently selected TOP network
 	static void PauseCook(UTOPNetwork* InTOPNet);
 
+	// Rsume the PDG cook of the currently selected TOP network
+	static void ResumeCook(UTOPNetwork* InTOPNet);
+
 	// Cancel the PDG cook of the currently selected TOP network
 	static void CancelCook(UTOPNetwork* InTOPNet);
 
-	static void NotifyAssetCooked(UHoudiniPDGAssetLink* InAssetLink, const bool& bSuccess);
+	// Pause the PDG cook of the TOP Node
+	static void PauseCook(UTOPNode* InTOPNet);
+
+	// Rsume the PDG cook of the TOP Node
+	static void ResumeCook(UTOPNode* InTOPNet);
+
+	// Cancel the PDG cook of the currently selected TOP network
+	static void CancelCook(UTOPNode* InTOPNet);
+
+	static void NotifyAssetCooked(UHoudiniCookable* InHC, const bool& bSuccess);
 
 	// Update all registered PDG Asset links
 	void Update();
@@ -137,7 +158,7 @@ public:
 
 	// Ensure that FTOPWorkResult exists, and create its FTOPWorkResultObjects for a given TOP node and work item id,
 	// and optionally (via bInLoadResultObjects) create its FTOPWorkResultObjects.
-	// Geometry is not directly loaded by this function, the FTOPWorkResultObjects' states will be set to ToLoad and
+	// Geometry is not directly loaded by this function, the FTOPWorkResultObjects' states will be set to ToImport and
 	// the ProcessWorkItemResults function will take care of loading the geo.
 	// Results must be tagged with 'file', and must have a file path, otherwise will not included.
 	bool CreateOrRelinkWorkItemResult(UTOPNode* InTOPNode, const HAPI_PDG_GraphContextId& InContextID, HAPI_PDG_WorkItemId InWorkItemID, bool bInLoadResultObjects=false);
@@ -172,12 +193,14 @@ private:
 
 	void ProcessWorkItemResults();
 
+	void FixupTOPNodes();
+
 	void ProcessPDGEvent(const HAPI_PDG_GraphContextId& InContextID, HAPI_PDG_EventInfo& EventInfo);
 
 	static void ResetPDGEventInfo(HAPI_PDG_EventInfo& InEventInfo);
 
 	// Returns the PDGAssetLink and FTOPNode associated with this TOP node ID
-	bool GetTOPAssetLinkNetworkAndNode(const HAPI_NodeId& InNodeID, UHoudiniPDGAssetLink*& OutAssetLink, UTOPNetwork*& OutTOPNetwork, UTOPNode*& OutTOPNode);
+	bool GetTOPAssetLinkNetworkAndNode(const HAPI_NodeId& InNodeID, UHoudiniCookable*& OutCookable, UTOPNetwork*& OutTOPNetwork, UTOPNode*& OutTOPNode);
 
 	void SetTOPNodePDGState(UHoudiniPDGAssetLink* InPDGAssetLink, UTOPNode* InTOPNode, const EPDGNodeState& InPDGState);
 
@@ -188,6 +211,8 @@ private:
 	void NotifyTOPNodeRemovedWorkItem(UHoudiniPDGAssetLink* InPDGAssetLink, UTOPNode* InTOPNode, const int32& InWorkItemID);
 
 	void NotifyTOPNodeCookedWorkItem(UHoudiniPDGAssetLink* InPDGAssetLink, UTOPNode* InTOPNode, const int32& InWorkItemID);
+
+	void NotifyTOPNodeLoadedWorkItem(UHoudiniPDGAssetLink* InPDGAssetLink, UTOPNode* InTOPNode, const int32& InWorkItemID);
 
 	void NotifyTOPNodeErrorWorkItem(UHoudiniPDGAssetLink* InPDGAssetLink, UTOPNode* InTOPNode, const int32& InWorkItemID);
 
@@ -203,11 +228,8 @@ private:
 
 	TArray<HAPI_StringHandle> PDGContextNames;
 	TArray<HAPI_PDG_GraphContextId> PDGContextIDs;
-	TArray<HAPI_PDG_EventInfo> PDGEventInfos;
 
 	TArray<TWeakObjectPtr<UHoudiniPDGAssetLink>> PDGAssetLinks;
-
-	int32 MaxNumberOfPDGEvents = 20;
 
 	TSharedPtr<FMessageEndpoint, ESPMode::ThreadSafe> BGEOCommandletEndpoint;
 	FMessageAddress BGEOCommandletAddress;
@@ -216,4 +238,7 @@ private:
 	uint32 BGEOCommandletProcessId;
 	// Keep track of the BGEO commandlet status
 	EHoudiniBGEOCommandletStatus BGEOCommandletStatus;
+	void* BGEOReadPipe = nullptr;
+	void* BGEOWritePipe = nullptr;
+
 };

@@ -132,8 +132,8 @@ bool
 FHoudiniTextureTranslator::HapiExtractImage(
 	const HAPI_NodeId InMaterialNodeId,
 	const char* InPlaneType,
-	const HAPI_ImageDataFormat InImageDataFormat,
 	const HAPI_ImagePacking InImagePacking,
+	const float InGamma,
 	TArray<char>& OutImageBuffer)
 {
 	// See if we have the images planes we want
@@ -160,11 +160,11 @@ FHoudiniTextureTranslator::HapiExtractImage(
 		else if (InPlaneTypeString.Equals("C A"))
 		{
 			if (ImagePlanesStringArray[n].Equals("C"))
-			{				
+			{
 				bCFound = true;
 				// If only color is found, still allow image extraction
 				bFound = true;
-			}				
+			}
 			else if (ImagePlanesStringArray[n].Equals("A"))
 			{
 				bAFound = true;
@@ -184,9 +184,22 @@ FHoudiniTextureTranslator::HapiExtractImage(
 		FHoudiniEngine::Get().GetSession(),
 		InMaterialNodeId, &ImageInfo), false);
 
-	ImageInfo.dataFormat = InImageDataFormat;
+	// Only INT8/16 & FLOAT16/32 are supported
+	if (ImageInfo.dataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT8
+		&& ImageInfo.dataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT16
+		&& ImageInfo.dataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT16
+		&& ImageInfo.dataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT32)
+	{
+		// fallback to default INT8 for unsupported image format
+		ImageInfo.dataFormat = HAPI_IMAGE_DATA_INT8;
+	}
+
+	// For HDR (Int16/Float16/32 images) - UE wants us to use linear colors - so no gamma 2.2
+	bool bIsHDR = (ImageInfo.dataFormat != HAPI_IMAGE_DATA_INT8);
+
 	ImageInfo.interleaved = true;
 	ImageInfo.packing = InImagePacking;
+	ImageInfo.gamma = bIsHDR ? 1.0f : InGamma;
 
 	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetImageInfo(
 		FHoudiniEngine::Get().GetSession(),
@@ -236,21 +249,21 @@ FHoudiniTextureTranslator::CreatePackageForTexture(
 		MyPackageParams.ObjectName = TextureInfoDescriptor;
 	}
 
-	// If we have a part name (output name) be sure to it
-	if(!InPackageParams.SplitStr.IsEmpty())
-		MyPackageParams.ObjectName += InPackageParams.SplitStr;
+	// If we have a part name (output name) be sure to add it
+	// ... but only if it's different from the texture type!
+	if(!InPackageParams.SplitStr.IsEmpty() && !InPackageParams.SplitStr.Equals(InTextureType))
+		MyPackageParams.ObjectName += TEXT("_") + InPackageParams.SplitStr;
 
 	return MyPackageParams.CreatePackageForObject(OutTextureName);
 }
 
 bool
 FHoudiniTextureTranslator::CreateTexture(
-	// HAPI extraction parameters
 	const HAPI_NodeId InMaterialNodeId,
 	const char* InPlaneType,
 	HAPI_ImageDataFormat InImageDataFormat,
 	HAPI_ImagePacking InImagePacking,
-	// Texture creation parameters
+	float InGamma,
 	UTexture2D*& OutTexture,
 	const FString& InNodePath,
 	const FString& InTextureType,
@@ -259,16 +272,44 @@ FHoudiniTextureTranslator::CreateTexture(
 	const TextureGroup InLODGroup,
 	TArray<UPackage*>& OutPackages)
 {
+	HAPI_ImageInfo ImageInfo;
+	FHoudiniApi::ImageInfo_Init(&ImageInfo);
+	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetImageInfo(
+		FHoudiniEngine::Get().GetSession(),
+		InMaterialNodeId, &ImageInfo), false);
+
+	// Only INT8/16 & FLOAT16/32 are supported
+	if (InImageDataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT8
+		&& InImageDataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT16
+		&& InImageDataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT16
+		&& InImageDataFormat != HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT32)
+	{
+		// Unsupported data format - default to RGBA8
+		ImageInfo.dataFormat = HAPI_IMAGE_DATA_INT8;
+	}
+	else
+	{
+		ImageInfo.dataFormat = InImageDataFormat;
+	}
+
+	ImageInfo.interleaved = true;
+	ImageInfo.packing = InImagePacking;
+	ImageInfo.gamma = InGamma;
+
+	// Update the image info before extracting the image
+	HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::SetImageInfo(
+		FHoudiniEngine::Get().GetSession(),
+		InMaterialNodeId, &ImageInfo), false);
+
 	bool bTextureCreated = false;
 	TArray<char> ImageBuffer;
 	if (FHoudiniTextureTranslator::HapiExtractImage(
-		InMaterialNodeId, InPlaneType, InImageDataFormat, InImagePacking, ImageBuffer))
+		InMaterialNodeId, InPlaneType, InImagePacking, InGamma, ImageBuffer))
 	{
 		UPackage* TexturePackage = nullptr;
 		if (IsValid(OutTexture))
 			TexturePackage = Cast<UPackage>(OutTexture->GetOuter());
 
-		HAPI_ImageInfo ImageInfo;
 		FHoudiniApi::ImageInfo_Init(&ImageInfo);
 		HAPI_Result Result = FHoudiniApi::GetImageInfo(
 			FHoudiniEngine::Get().GetSession(),
@@ -371,8 +412,53 @@ FHoudiniTextureTranslator::CreateUnrealTexture(
 		FHoudiniEngineUtils::AddHoudiniMetaInformationToPackage(
 			Package, Texture, HAPI_UNREAL_PACKAGE_META_NODE_PATH, *NodePath);
 
-	// Initialize texture source.
-	Texture->Source.Init(ImageInfo.xRes, ImageInfo.yRes, 1, 1, TSF_BGRA8);
+	// Initialize texture source and params from the data format
+	bool bDeferComp = true;
+	bool bSRGB = TextureParameters.bSRGB;
+	ETextureSourceFormat SrcFormat = TSF_BGRA8;
+	TextureCompressionSettings CompSetting = TextureParameters.CompressionSettings;
+	switch (ImageInfo.dataFormat)
+	{
+		case HAPI_IMAGE_DATA_INT16:
+		{
+			SrcFormat = TSF_RGBA16;
+			CompSetting = TextureParameters.CompressionSettings;
+			bDeferComp = false;
+			bSRGB = TextureParameters.bSRGB;
+		}
+		break;
+
+		case HAPI_IMAGE_DATA_FLOAT16:
+		{
+			SrcFormat = TSF_RGBA16F;
+			CompSetting = TC_HDR_Compressed;
+			bDeferComp = false;
+			bSRGB = false;
+		}
+		break;
+			
+		case HAPI_IMAGE_DATA_FLOAT32:
+		{
+			SrcFormat = TSF_RGBA32F;
+			CompSetting = TC_HDR_F32;
+			bDeferComp = false;
+		}
+		break;
+
+		case HAPI_IMAGE_DATA_INT32:
+			// unsupported by UE
+		case HAPI_IMAGE_DATA_INT8:
+		default:
+		{
+			bDeferComp = false;
+			SrcFormat = TSF_BGRA8;
+			CompSetting = TextureParameters.CompressionSettings;
+			bSRGB = TextureParameters.bSRGB;
+		}
+		break;
+	}
+
+	Texture->Source.Init(ImageInfo.xRes, ImageInfo.yRes, 1, 1, SrcFormat);
 
 	// Lock the texture.
 	uint8* MipData = Texture->Source.LockMip(0);
@@ -446,27 +532,119 @@ FHoudiniTextureTranslator::CreateUnrealTexture(
 			break;
 	}
 
+	// RGB8
 	bool bHasAlphaValue = false;
-	for (uint32 y = 0; y < SrcHeight; y++)
+	if (SrcFormat == TSF_BGRA8)
 	{
-		DestPtr = &MipData[(SrcHeight - 1 - y) * SrcWidth * sizeof(FColor)];
-
-		for (uint32 x = 0; x < SrcWidth; x++)
+		for (uint32 y = 0; y < SrcHeight; y++)
 		{
-			uint32 DataOffset = y * SrcWidth * PackOffset + x * PackOffset;
+			DestPtr = &MipData[(SrcHeight - 1 - y) * SrcWidth * sizeof(FColor)];
 
-			*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetB); // B
-			*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetG); // G
-			*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetR); // R
-
-			if (TextureParameters.bUseAlpha && PackOffset == 4)
+			for (uint32 x = 0; x < SrcWidth; x++)
 			{
-				*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetA); // A
-				if (*(uint8*)(SrcData + DataOffset + OffsetA) != 0xFF)
-					bHasAlphaValue = true;
+				uint32 DataOffset = y * SrcWidth * PackOffset + x * PackOffset;
+
+				*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetB); // B
+				*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetG); // G
+				*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetR); // R
+
+				if (TextureParameters.bUseAlpha && PackOffset == 4)
+				{
+					*DestPtr++ = *(uint8*)(SrcData + DataOffset + OffsetA); // A
+					if (*(uint8*)(SrcData + DataOffset + OffsetA) != 0xFF)
+						bHasAlphaValue = true;
+				}
+				else
+					*DestPtr++ = 0xFF;
 			}
-			else
-				*DestPtr++ = 0xFF;
+		}
+	}
+	// Not supported by COPZ resolver?
+	else if (SrcFormat == TSF_RGBA16)
+	{
+		uint16* DestPtr16 = nullptr;
+		const uint16* SrcData16 = (const uint16*)SrcData;
+
+		//const int32 BytesPerPixel = sizeof(uint16) * 4;
+		for (uint32 y = 0; y < SrcHeight; y++)
+		{
+			DestPtr16 = (uint16*)&MipData[(SrcHeight - 1 - y) * SrcWidth * sizeof(uint16) * 4];
+
+			for (uint32 x = 0; x < SrcWidth; x++)
+			{
+				uint32 DataOffset = y * SrcWidth * PackOffset + x * PackOffset;
+
+				*DestPtr16++ = *(uint16*)(SrcData16 + DataOffset + OffsetR); // R
+				*DestPtr16++ = *(uint16*)(SrcData16 + DataOffset + OffsetG); // G
+				*DestPtr16++ = *(uint16*)(SrcData16 + DataOffset + OffsetB); // B
+
+				if (TextureParameters.bUseAlpha && PackOffset == 4)
+				{
+					*DestPtr16++ = *(uint16*)(SrcData16 + DataOffset + OffsetA); // A
+					if (*(uint16*)(SrcData16 + DataOffset + OffsetA) != 0xFFFF)
+						bHasAlphaValue = true;
+				}
+				else
+					*DestPtr16++ = 0xFFFF;
+			}
+		}
+	}
+	else if (SrcFormat == TSF_RGBA16F)
+	{
+		FFloat16* DestPtr16f = nullptr;
+		const FFloat16* SrcData16f = (const FFloat16*)SrcData;
+
+		//const FFloat16 BytesPerPixel = sizeof(FFloat16) * 4;
+		for (uint32 y = 0; y < SrcHeight; y++)
+		{
+			DestPtr16f = (FFloat16*)&MipData[(SrcHeight - 1 - y) * SrcWidth * sizeof(FFloat16) * 4];
+
+			for (uint32 x = 0; x < SrcWidth; x++)
+			{
+				uint32 DataOffset = y * SrcWidth * PackOffset + x * PackOffset;
+
+				*DestPtr16f++ = *(FFloat16*)(SrcData16f + DataOffset + OffsetR); // R
+				*DestPtr16f++ = *(FFloat16*)(SrcData16f + DataOffset + OffsetG); // G
+				*DestPtr16f++ = *(FFloat16*)(SrcData16f + DataOffset + OffsetB); // B
+
+				if (TextureParameters.bUseAlpha && PackOffset == 4)
+				{
+					*DestPtr16f++ = *(FFloat16*)(SrcData16f + DataOffset + OffsetA); // A
+					if (*(FFloat16*)(SrcData16f + DataOffset + OffsetA) != 1.0f)
+						bHasAlphaValue = true;
+				}
+				else
+					*DestPtr16f++ = 1.0f;
+			}
+		}
+	}	
+	else if (SrcFormat == TSF_RGBA32F)
+	{
+		float* DestPtr32f = nullptr;
+		const float* SrcData32f = (const float*)SrcData;
+
+		//const float BytesPerPixel = sizeof(float) * 4;
+		for (uint32 y = 0; y < SrcHeight; y++)
+		{
+			DestPtr32f = (float*)&MipData[(SrcHeight - 1 - y) * SrcWidth * sizeof(float) * 4];
+
+			for (uint32 x = 0; x < SrcWidth; x++)
+			{
+				uint32 DataOffset = y * SrcWidth * PackOffset + x * PackOffset;
+
+				*DestPtr32f++ = *(float*)(SrcData32f + DataOffset + OffsetR); // R
+				*DestPtr32f++ = *(float*)(SrcData32f + DataOffset + OffsetG); // G
+				*DestPtr32f++ = *(float*)(SrcData32f + DataOffset + OffsetB); // B
+
+				if (TextureParameters.bUseAlpha && PackOffset == 4)
+				{
+					*DestPtr32f++ = *(float*)(SrcData32f + DataOffset + OffsetA); // A
+					if (*(float*)(SrcData32f + DataOffset + OffsetA) != 1.0f)
+						bHasAlphaValue = true;
+				}
+				else
+					*DestPtr32f++ = 1.0f;
+			}
 		}
 	}
 
@@ -474,10 +652,10 @@ FHoudiniTextureTranslator::CreateUnrealTexture(
 	Texture->Source.UnlockMip(0);
 
 	// Texture creation parameters.
-	Texture->SRGB = TextureParameters.bSRGB;
-	Texture->CompressionSettings = TextureParameters.CompressionSettings;
+	Texture->SRGB = bSRGB ? 1 : 0;
+	Texture->CompressionSettings = CompSetting;
 	Texture->CompressionNoAlpha = !bHasAlphaValue;
-	Texture->DeferCompression = TextureParameters.bDeferCompression;
+	Texture->DeferCompression = bDeferComp;
 
 	// Set the Source Guid/Hash if specified.
 	/*
@@ -486,6 +664,7 @@ FHoudiniTextureTranslator::CreateUnrealTexture(
 		Texture->Source.SetId(TextureParameters.SourceGuidHash, true);
 	}
 	*/
+	Texture->UpdateResource();
 
 	Texture->PostEditChange();
 
@@ -495,7 +674,8 @@ FHoudiniTextureTranslator::CreateUnrealTexture(
 bool
 FHoudiniTextureTranslator::ProcessCopOutput(
 	UHoudiniOutput* InOutput,
-	const FHoudiniPackageParams& InPackageParams)
+	const FHoudiniPackageParams& InPackageParams,
+	EHoudiniEngineImageDataFormat ImageDataFormat)
 {
 	if (!InOutput)
 		return false;
@@ -513,12 +693,15 @@ FHoudiniTextureTranslator::ProcessCopOutput(
 	if (GeoPartObjects.Num() <= 0)
 		return false;
 
+	// TODO: Handle multiple geo/parts here?
 	for (auto& HGPO : GeoPartObjects)
 	{
 		HAPI_NodeId CopNodeId = HGPO.GeoId;
 
+		// Render the COP Output to an image
+		// This will reset Image infos
 		HAPI_Result Result;
-		HOUDINI_CHECK_ERROR_GET(&Result,FHoudiniApi::RenderCOPOutputToImage(
+		HOUDINI_CHECK_ERROR_GET(&Result, FHoudiniApi::RenderCOPOutputToImage(
 			FHoudiniEngine::Get().GetSession(),
 			CopNodeId,
 			TCHAR_TO_ANSI(*HGPO.PartName)));
@@ -526,12 +709,74 @@ FHoudiniTextureTranslator::ProcessCopOutput(
 		if (HAPI_RESULT_SUCCESS != Result)
 			continue;
 
-		FCreateTexture2DParameters CreateTexture2DParameters;
-		CreateTexture2DParameters.SourceGuidHash = FGuid();
-		CreateTexture2DParameters.bUseAlpha = true;
-		CreateTexture2DParameters.CompressionSettings = TC_Default;
-		CreateTexture2DParameters.bDeferCompression = true;
-		CreateTexture2DParameters.bSRGB = true;
+		// Infer what that texture is using its name:
+		// ie, an output named "normal" implies a normal map etc..
+		EHoudiniTextureType TextureType = FHoudiniTextureTranslator::GetTextureTypeFromName(HGPO.PartName);
+		FCreateTexture2DParameters CreateTexture2DParameters
+			= FHoudiniTextureTranslator::GetTextureParametersFromType(TextureType);
+
+		HAPI_ImageInfo ImageInfo;
+		FHoudiniApi::ImageInfo_Init(&ImageInfo);
+		HOUDINI_CHECK_ERROR_RETURN(FHoudiniApi::GetImageInfo(
+			FHoudiniEngine::Get().GetSession(),
+			CopNodeId, &ImageInfo), false);
+
+		// see if the user wants hdr (float) texture from its name
+		bool bIsHDR = FHoudiniTextureTranslator::IsHDRFromName(HGPO.PartName);
+
+		// see if the COP network is set to use 16 bits
+		bool bIs16bit = FHoudiniTextureTranslator::Is16BitCOP(CopNodeId);
+
+		float Gamma = 1.0;
+		if (TextureType == EHoudiniTextureType::Diffuse
+			|| TextureType == EHoudiniTextureType::Emissive)
+		{
+			Gamma = 2.2f;
+		}
+
+		// Data format can be overriden via the details panels
+		switch (ImageDataFormat)
+		{
+			case EHoudiniEngineImageDataFormat::Int8:
+				bIsHDR = false;
+				ImageInfo.dataFormat = HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT8;
+				break;
+
+			case EHoudiniEngineImageDataFormat::Int16:
+				bIsHDR = true;
+				Gamma = 1.0; // unreal can only accept 16bit color in linear space
+				ImageInfo.dataFormat = HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT16;
+				break;
+
+			case EHoudiniEngineImageDataFormat::Float16:
+				bIsHDR = true;
+				ImageInfo.dataFormat = HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT16;
+				break;
+
+			case EHoudiniEngineImageDataFormat::Float32:
+				bIsHDR = true;
+				ImageInfo.dataFormat = HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT32;
+				break;
+
+			case EHoudiniEngineImageDataFormat::Auto:
+				if (bIsHDR)
+				{
+					ImageInfo.dataFormat = bIs16bit ? HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT16 : HAPI_ImageDataFormat::HAPI_IMAGE_DATA_FLOAT32;
+				}
+				else
+				{
+					ImageInfo.dataFormat = HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT8;
+				}
+				break;
+
+			default:
+				ImageInfo.dataFormat = HAPI_ImageDataFormat::HAPI_IMAGE_DATA_INT8;
+				break;
+		}
+
+		ImageInfo.interleaved = true;
+		ImageInfo.packing = HAPI_IMAGE_PACKING_RGBA;
+		ImageInfo.gamma = bIsHDR ? 1.0 : Gamma;
 
 		// Create custom package param for this output
 		FHoudiniPackageParams MyPackageParams = InPackageParams;
@@ -544,11 +789,12 @@ FHoudiniTextureTranslator::ProcessCopOutput(
 		FHoudiniTextureTranslator::CreateTexture(
 			CopNodeId,
 			HAPI_UNREAL_MATERIAL_TEXTURE_COLOR_ALPHA,
-			HAPI_IMAGE_DATA_INT8,
+			ImageInfo.dataFormat,
 			HAPI_IMAGE_PACKING_RGBA,
+			Gamma,
 			Texture,
-			"",
-			"",
+			HGPO.NodePath, 
+			FHoudiniTextureTranslator::GetTextureTypeString(TextureType),
 			MyPackageParams,
 			CreateTexture2DParameters,
 			TEXTUREGROUP_World,
@@ -655,4 +901,316 @@ FHoudiniTextureTranslator::CreateDefaultCopMaterialForTexture(
 	}
 
 	return NewMaterialInstance;
+}
+
+bool
+FHoudiniTextureTranslator::Is16BitCOP(const HAPI_NodeId& InNodeId)
+{
+	// Start by seeing if the HDA is a COP HDA
+	HAPI_NodeInfo NodeInfo;
+	if (HAPI_RESULT_SUCCESS != FHoudiniApi::GetNodeInfo(
+		FHoudiniEngine::Get().GetSession(), InNodeId, &NodeInfo))
+		return false;
+
+	if(HAPI_NODETYPE_COP != NodeInfo.type)
+		return false;
+
+	HAPI_NodeInfo ParentNodeInfo;
+	if (HAPI_RESULT_SUCCESS != FHoudiniApi::GetNodeInfo(
+		FHoudiniEngine::Get().GetSession(), NodeInfo.parentId, &ParentNodeInfo))
+		return false;
+
+	// TODO: Handle subnet - keep climbing hierarchy until we reach a COP net?
+
+	// see if the parent COP network is set to override the precision
+	int precisionOverride = 0;
+	if (HAPI_RESULT_SUCCESS != FHoudiniApi::GetParmIntValue(
+		FHoudiniEngine::Get().GetSession(),
+		NodeInfo.parentId, "setprecision", 0, &precisionOverride))
+		return false;
+
+	if (precisionOverride == 0)
+		return false;
+
+	// see if the COP network is set to use 16 bits
+	int precisionValue = 1;
+	if (HAPI_RESULT_SUCCESS != FHoudiniApi::GetParmIntValue(
+		FHoudiniEngine::Get().GetSession(),
+		NodeInfo.parentId, "precision", 0, &precisionValue))
+		return false;
+
+	return (precisionValue == 0);
+}
+
+bool
+FHoudiniTextureTranslator::IsHDRFromName(const FString& Name)
+{
+	if (Name.Contains("hdr"))
+		return true;
+	
+	return false;
+}
+
+
+EHoudiniTextureType
+FHoudiniTextureTranslator::GetTextureTypeFromName(const FString& Name)
+{
+	// Default to a color/diffuse texture
+	EHoudiniTextureType Type = EHoudiniTextureType::Diffuse;
+	if (Name.Contains("normal"))
+		Type = EHoudiniTextureType::Normal;
+	else if (Name.Contains("specular"))
+		Type = EHoudiniTextureType::Specular;
+	else if (Name.Contains("roughness"))
+		Type = EHoudiniTextureType::Roughness;
+	else if (Name.Contains("emissive"))
+		Type = EHoudiniTextureType::Emissive;
+	else if (Name.Contains("opacity") 
+		|| Name.Contains("alpha"))
+		Type = EHoudiniTextureType::Opacity;
+	else if (Name.Contains("occlusion")
+		|| Name.Contains("ao"))
+		Type = EHoudiniTextureType::Occlusion;
+	else if (Name.Contains("displacement")
+		|| Name.Contains("height"))
+		Type = EHoudiniTextureType::Displacement;
+	else if (Name.Contains("metal"))
+		Type = EHoudiniTextureType::Metallic;
+	else if (Name.Contains("rma") || Name.Contains("compact"))
+		Type = EHoudiniTextureType::RMA;
+
+	return Type;
+}
+
+
+FString
+FHoudiniTextureTranslator::GetTextureTypeString(const EHoudiniTextureType& InType)
+{
+	FString TypeString = FString();
+	switch (InType)
+	{		
+		case EHoudiniTextureType::Diffuse:
+			TypeString = TEXT("diffuse");
+			break;
+		case EHoudiniTextureType::Metallic:
+			TypeString = TEXT("metallic"); 
+			break;
+		case EHoudiniTextureType::Specular:
+			TypeString = TEXT("specular"); 
+			break;
+		case EHoudiniTextureType::Roughness:
+			TypeString = TEXT("roughness"); 
+			break;
+		case EHoudiniTextureType::Emissive:
+			TypeString = TEXT("emissive"); 
+			break;
+		case EHoudiniTextureType::Opacity:
+			TypeString = TEXT("opacity"); 
+			break;
+		case EHoudiniTextureType::Normal:
+			TypeString = TEXT("normal"); 
+			break;
+		case EHoudiniTextureType::Occlusion:
+			TypeString = TEXT("occlusion"); 
+			break;
+		case EHoudiniTextureType::Displacement:
+			TypeString = TEXT("displacement"); 
+			break;
+		case EHoudiniTextureType::RMA:
+			TypeString = TEXT("RMA");
+			break;
+
+		case EHoudiniTextureType::Invalid:
+			break;
+	}
+
+	return TypeString;
+}
+
+
+FCreateTexture2DParameters
+FHoudiniTextureTranslator::GetTextureParametersFromType(const EHoudiniTextureType& InType)
+{
+	FCreateTexture2DParameters TextureParams;
+	TextureParams.SourceGuidHash = FGuid();
+	TextureParams.bUseAlpha = false;
+	TextureParams.bDeferCompression = true;
+	TextureParams.bVirtualTexture = false;
+	//TextureParams.MipGenSettings = TMGS_FromTextureGroup;
+	//TextureParams.TextureGroup = TEXTUREGROUP_MAX;
+
+	// Compression
+	switch (InType)
+	{
+		// NORMAL
+		case EHoudiniTextureType::Normal:
+			TextureParams.CompressionSettings = TC_Normalmap;
+			break;
+
+		// GREYSCALE
+		case EHoudiniTextureType::Metallic:
+		case EHoudiniTextureType::Specular:
+		case EHoudiniTextureType::Roughness:
+		case EHoudiniTextureType::Opacity:
+		case EHoudiniTextureType::Occlusion:
+		case EHoudiniTextureType::Displacement:
+			TextureParams.CompressionSettings = TC_Grayscale;
+			break;
+
+		// COMPACT
+		case EHoudiniTextureType::RMA:
+			TextureParams.CompressionSettings = TC_Masks;
+			break;
+
+		// DEFAULT
+		case EHoudiniTextureType::Diffuse:
+		case EHoudiniTextureType::Emissive:
+		default:
+			TextureParams.CompressionSettings = TC_Default;
+			break;
+	}
+	
+	// SRGB
+	// Only for color channels: diffuse, emissive
+	switch (InType)
+	{
+		// SRGB OFF
+		case EHoudiniTextureType::Normal:
+		case EHoudiniTextureType::Metallic:
+		case EHoudiniTextureType::Specular:
+		case EHoudiniTextureType::Roughness:
+		case EHoudiniTextureType::Opacity:
+		case EHoudiniTextureType::Occlusion:
+		case EHoudiniTextureType::Displacement:
+		case EHoudiniTextureType::RMA:
+			TextureParams.bSRGB = false;
+			break;
+
+		// SRGB ON
+		case EHoudiniTextureType::Diffuse:
+		case EHoudiniTextureType::Emissive:
+		default:
+			TextureParams.bSRGB = true;
+			break;
+	}
+
+	return TextureParams;
+}
+
+UMaterialInstanceConstant*
+FHoudiniTextureTranslator::CreateCopOutputMaterialInstance(
+	UMaterialInterface* InSourceMaterial,
+	const FHoudiniPackageParams& InPackageParams)
+{
+	// Try to find the material we want to create an instance of, or use the default one if non is provided
+	UMaterialInterface* SourceMaterial = InSourceMaterial ? InSourceMaterial
+	: Cast<UMaterialInterface>(FHoudiniEngine::Get().GetHoudiniDefaultCOPOutputMaterial());
+
+	if (!SourceMaterial)
+		return nullptr;
+
+	// Create/Retrieve the package for the MI
+	FString MaterialInstanceName;
+	FString MaterialInstanceNamePrefix = UPackageTools::SanitizePackageName(
+		SourceMaterial->GetName()
+		+ TEXT("_instance_")
+		+ InPackageParams.ComponentGUID.ToString());
+
+	// See if we can find an existing package for that instance
+	UPackage* MaterialInstancePackage = FHoudiniMaterialTranslator::CreatePackageForMaterial(
+		-1, MaterialInstanceNamePrefix, InPackageParams, MaterialInstanceName);
+
+	// Couldn't create a package for that Material Instance
+	if (!MaterialInstancePackage)
+		return nullptr;
+
+	bool bNewMaterialCreated = false;
+	UMaterialInstanceConstant* NewMaterialInstance = LoadObject<UMaterialInstanceConstant>(
+		MaterialInstancePackage, *MaterialInstanceName, nullptr, LOAD_None, nullptr);
+
+	if (!NewMaterialInstance)
+	{
+		// Factory to create materials.
+		UMaterialInstanceConstantFactoryNew* MaterialInstanceFactory = NewObject<UMaterialInstanceConstantFactoryNew>();
+		if (!MaterialInstanceFactory)
+			return nullptr;
+
+		// Create the new material instance
+		MaterialInstanceFactory->AddToRoot();
+		MaterialInstanceFactory->InitialParent = SourceMaterial;
+		NewMaterialInstance = (UMaterialInstanceConstant*)MaterialInstanceFactory->FactoryCreateNew(
+			UMaterialInstanceConstant::StaticClass(),
+			MaterialInstancePackage,
+			FName(*MaterialInstanceName),
+			RF_Public | RF_Standalone,
+			NULL,
+			GWarn);
+
+		if (NewMaterialInstance)
+			bNewMaterialCreated = true;
+
+		MaterialInstanceFactory->RemoveFromRoot();
+	}
+
+	if (!NewMaterialInstance)
+		return nullptr;
+
+	// Update context for generated materials (will trigger when the object goes out of scope).
+	FMaterialUpdateContext MaterialUpdateContext;
+
+	if (bNewMaterialCreated)
+	{
+		// Add meta information to this package.
+		FHoudiniEngineUtils::AddHoudiniMetaInformationToPackage(
+			MaterialInstancePackage, NewMaterialInstance, HAPI_UNREAL_PACKAGE_META_GENERATED_OBJECT, TEXT("true"));
+		FHoudiniEngineUtils::AddHoudiniMetaInformationToPackage(
+			MaterialInstancePackage, NewMaterialInstance, HAPI_UNREAL_PACKAGE_META_GENERATED_NAME, *MaterialInstanceName);
+		// Notify registry that we have created a new material.
+		FAssetRegistryModule::AssetCreated(NewMaterialInstance);
+
+		// Dirty the material
+		NewMaterialInstance->MarkPackageDirty();
+	}
+
+	return NewMaterialInstance;
+}
+
+bool
+FHoudiniTextureTranslator::UpdateTexureParamOnCopOutputMaterialInstance(
+	UMaterialInstanceConstant* InSourceMaterial,
+	UTexture2D* InTexture,
+	const FString& InParamName)
+{
+	if(!InSourceMaterial || !InTexture)
+		return false;
+
+	// Update context for generated materials (will trigger when the object goes out of scope).
+	//FMaterialUpdateContext MaterialUpdateContext;
+
+	// Apply material instance parameters
+	FName MatParamName = FName(InParamName);
+	//MaterialInstance->GetParameterInfo(GlobalParameter, MatParamName, nullptr);
+
+	InSourceMaterial->SetTextureParameterValueEditorOnly(MatParamName, InTexture);
+
+	return true;
+}
+
+bool
+FHoudiniTextureTranslator::UpdateBooleanParamOnCopOutputMaterialInstance(
+	UMaterialInstanceConstant* InSourceMaterial,
+	const bool InValue,
+	const FString& InParamName)
+{
+	if (!InSourceMaterial)
+		return false;
+
+	// Update context for generated materials (will trigger when the object goes out of scope).
+	//FMaterialUpdateContext MaterialUpdateContext;
+
+	// Apply material instance parameters
+	FName MatParamName = FName(InParamName);
+	InSourceMaterial->SetStaticSwitchParameterValueEditorOnly(MatParamName, InValue);
+
+	return true;
 }

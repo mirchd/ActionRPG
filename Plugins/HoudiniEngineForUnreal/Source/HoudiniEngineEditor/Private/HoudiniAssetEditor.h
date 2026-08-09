@@ -119,7 +119,11 @@ public:
 
 	
 	// Init the editor
-	void InitHoudiniAssetEditor(const EToolkitMode::Type Mode, const TSharedPtr<class IToolkitHost>& InitToolkitHost, class UHoudiniAsset* InitHDA);
+	void InitHoudiniAssetEditor(
+		const EToolkitMode::Type Mode,
+		const TSharedPtr<class IToolkitHost>& InitToolkitHost, 
+		class UHoudiniAsset* InitHDA,
+		class UHoudiniPreset* InitPreset);
 
 	// On Editor Close
 	virtual void OnClose() override;
@@ -165,6 +169,10 @@ protected:
 	void UpdateOutputList();
 	void UpdateTextureOutputOnPreviewMesh();
 
+	// Use Generated Material toggle
+	TSharedRef<SWidget> MakeUseGeneratedMaterialWidget();
+	void UpdateMaterialOnPreviewMesh();
+
 	void OnPostOutputProcess(UHoudiniCookable* _HC, bool  bSuccess);
 
 	//virtual void CreateEditorModeManager() override;
@@ -207,7 +215,13 @@ protected:
 	bool bShowBlueChannel;
 	bool bShowAlphaChannel;
 
+	// Indicates we want to visualise the generated COP Material
+	bool bUseGeneratedCOPMaterial;
+
 	int32 SelectedTextureOutput;
 	int32 NumTextureOutputs;
 	TArray<TSharedPtr<FString>> OutputList;
+
+	UMaterialInterface* DefaultCOPMaterial;
+	UMaterialInterface* GeneratedCOPMaterial;
 };

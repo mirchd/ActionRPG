@@ -30,13 +30,32 @@
 #include "HAPI/HAPI_Common.h"
 #include "Engine/TextureDefines.h"
 #include "Engine/EngineTypes.h"
+#include "HoudiniEngineRuntimeCommon.h"
 
 class UPackage;
 class UTexture2D;
 class UHoudiniOutput;
+class UMaterialInstanceConstant;
 
 struct FHoudiniPackageParams;
 struct FCreateTexture2DParameters;
+
+UENUM()
+enum class EHoudiniTextureType : uint8
+{
+	Invalid = 0,
+
+	Diffuse = 1,
+	Metallic = 2,
+	Specular = 3,
+	Roughness = 4,
+	Emissive = 5,
+	Opacity = 6,
+	Normal = 7,	
+	Occlusion = 8,
+	Displacement = 9,
+	RMA = 10
+};
 
 struct HOUDINIENGINE_API FHoudiniTextureTranslator
 {
@@ -66,8 +85,8 @@ public:
 	static bool HapiExtractImage(
 		const HAPI_NodeId InMaterialNodeId,
 		const char* InPlaneType,
-		const HAPI_ImageDataFormat InImageDataFormat,
 		const HAPI_ImagePacking InImagePacking,
+		const float InGamma,
 		TArray<char>& OutImageBuffer);
 
 	static UPackage* CreatePackageForTexture(
@@ -79,12 +98,11 @@ public:
 	// Create a texture from a HAPI material.
 	// Returns true if the texture is successfully created, false otherwise.
 	static bool CreateTexture(
-		// HAPI extraction parameters
 		const HAPI_NodeId InMaterialNodeId,
 		const char* InPlaneType,
 		HAPI_ImageDataFormat InImageDataFormat,
 		HAPI_ImagePacking InImagePacking,
-		// Texture creation parameters
+		float InGamma,
 		UTexture2D*& OutTexture,
 		const FString& InNodePath,
 		const FString& InTextureType,
@@ -106,9 +124,34 @@ public:
 
 	static bool ProcessCopOutput(
 		UHoudiniOutput* InOutput,
-		const FHoudiniPackageParams& InPackageParams);
+		const FHoudiniPackageParams& InPackageParams,
+		EHoudiniEngineImageDataFormat ImageDataFormat);
 
 	static UMaterialInterface* CreateDefaultCopMaterialForTexture(
 		UTexture2D* InTexture,
 		const FHoudiniPackageParams& InPackageParams);
+
+	static UMaterialInstanceConstant* CreateCopOutputMaterialInstance(
+		UMaterialInterface* InSourceMaterial,
+		const FHoudiniPackageParams& InPackageParams);
+
+	static bool UpdateTexureParamOnCopOutputMaterialInstance(
+		UMaterialInstanceConstant* InSourceMaterial,
+		UTexture2D* InTexture,
+		const FString& InParamName);
+
+	static bool UpdateBooleanParamOnCopOutputMaterialInstance(
+		UMaterialInstanceConstant* InSourceMaterial,
+		const bool InValue,
+		const FString& InParamName);
+
+	static EHoudiniTextureType GetTextureTypeFromName(const FString& InName);
+
+	static FCreateTexture2DParameters GetTextureParametersFromType(const EHoudiniTextureType& InType);
+
+	static FString GetTextureTypeString(const EHoudiniTextureType& InType);
+
+	static bool IsHDRFromName(const FString& Name);
+
+	static bool Is16BitCOP(const HAPI_NodeId& InNodeId);
 };

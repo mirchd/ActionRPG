@@ -89,23 +89,32 @@ public:
 		return Status == EHoudiniBGEOCommandletStatus::Connected;
 	}
 
+	EHoudiniBGEOCommandletStatus GEtPDGCommandletStatus()
+	{
+		return PDGManager.UpdateAndGetBGEOCommandletStatus();
+	}
+
 	EHoudiniBGEOCommandletStatus GetPDGCommandletStatus() { return PDGManager.UpdateAndGetBGEOCommandletStatus(); }
 
 	// Automatically try to start the First HE session if needed
 	void AutoStartFirstSessionIfNeeded();
-	
+
+	void UploadedParametersAndInputs(UHoudiniCookable* InHC);
+
+	bool StartInstantiation(UHoudiniCookable* HC);
+
 protected:
 
 	// Updates a given task's status
 	// Returns true if the given task's status was properly found
-	bool UpdateTaskStatus(
+	static bool UpdateTaskStatus(
 		FGuid& OutTaskGUID,
 		FHoudiniEngineTaskInfo& OutTaskInfo,
 		bool bNotifications = true);
 
 	// Start a task to instantiate the given HoudiniAsset
 	// Return true if the task was successfully created
-	bool StartTaskAssetInstantiation(
+	static bool StartTaskAssetInstantiation(
 		UHoudiniAsset* HoudiniAsset,
 		const FString& DisplayName,
 		const FString& NodeLabelPrefix,
@@ -114,8 +123,11 @@ protected:
 
 	// Updates progress of the instantiation task
 	// Returns true if a state change should be made
-	bool UpdateInstantiating(
+	static bool UpdateInstantiatingFromTask(
 		UHoudiniCookable* HC, EHoudiniAssetState& NewState, bool bDoNotifications);
+
+public:
+	bool UpdateInstantiating(UHoudiniCookable* HC);
 
 	// Start a task to instantiate the Houdini Asset with the given node Id
 	// Returns true if the task was successfully created
@@ -135,6 +147,8 @@ protected:
 		EHoudiniAssetState& OutNewState,
 		bool bDoNotifications,
 		bool& OutSuccess);
+
+	bool UpdateCancelling(UHoudiniCookable* HC);
 
 	// Called to update template components. 
 	//bool PreCookTemplate(UHoudiniAssetComponent* HAC);
@@ -176,6 +190,7 @@ protected:
 	// Enable auto-save if we no longer have an object preventing autosaving
 	void EnableEditorAutoSave(const UObject* InObject);
 
+	void InitializePDG(UHoudiniCookable* HC);
 private:
 
 	// Ticker handle, used for processing HAC.

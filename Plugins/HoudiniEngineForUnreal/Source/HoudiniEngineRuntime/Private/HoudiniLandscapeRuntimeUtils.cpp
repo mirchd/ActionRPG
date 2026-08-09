@@ -268,6 +268,7 @@ FHoudiniLandscapeRuntimeUtils::DestroyLandscapeSplinesSegment(
 	#endif
 #endif
 
+
 	const bool bIsSplinesComponentValid = IsValid(SplinesComponent);
 
 	if (bInDestroyUnusedControlPoints)

@@ -45,7 +45,7 @@ class UPCGGraphInterface;
 enum class EPCGCookableState
 {
 	None,				// Create, but nothing happening.
-	Loaded,				// Loaded, but not loaded into Houdini.
+	Loaded,				// Imported, but not loaded into Houdini.
 	WaitingForSession,	// Waiting for Houdini Session to be created.
 	Initializing,		// Cookable is being loaded into Houdini for the first time.
 	Initialized,		// Cookable has been loaded into Houdini. Parameters/Inputs can be accessed.
@@ -95,9 +95,9 @@ public:
 
 	// UpdateParametersAndInputs() pulls the inputs and parameters from the context and cooks the Houdini Cookable.
 	// Returns true if succeeded, fals if failed. bParamsChanged && bInputsChanged are updated.
-	bool UpdateParametersAndInputs(FPCGContext* Context);
+	bool ApplyPCGDataOnNodeInputs(FPCGContext* Context);
 
-	void StartCook();
+	bool StartCook();
 	bool NeedsCook() const;
 
 	void CopyParametersAndInputs(const UHoudiniPCGCookable * Other);
@@ -123,7 +123,11 @@ public:
 	TObjectPtr<UHoudiniCookable> Cookable;
 
 	UPROPERTY()
-	TObjectPtr<UHoudiniPDGBakeOutput> PDGBakedOutput;
+	TObjectPtr<UHoudiniPDGBakeOutput> PDGBakedOutput_DEPRECATED;
+
+	// Previously baked outputs
+	UPROPERTY()
+	TArray<FHoudiniBakedOutput> BakedOutputs;
 
 	EPCGCookableState State = EPCGCookableState::None;
 	bool bIsCookingPDG = false;
@@ -163,15 +167,17 @@ private:
 
 	static void CopyPCGOutputDataToPinData(FPCGContext* Context, const FName& OutputPinName, const FString& TagName, const UHoudiniPCGOutputData* PCGOutput);
 
-	bool ApplyInputsToCookable(const FPCGContext* InContext);
+	bool ApplyInputsPCGDataToCookable(const FPCGContext* InContext);
 
-	bool ApplyParametersToCookable(const FPCGContext* Context);
+	bool ApplyParameterPCGDataToCookable(const FPCGContext* Context);
 
-	bool ApplyParametersToCookable(const UPCGData* Data);
+	bool ApplyParameterPCGDataToCookable(const UPCGData* Data);
 
 	void OnCookingComplete(bool bSuccess);
 
 	void OnCookingCompleteInternal(bool bSuccess);
+
+	void OnStateChange(EHoudiniAssetState OldState, EHoudiniAssetState NewState);
 
 	void InvalidateCookable();
 
@@ -181,18 +187,9 @@ private:
 
 	static UHoudiniPCGDataObject* GetPCGDataObjects(const FPCGTaggedData& TaggedData);
 
-	TArray<FString> GetUnrealObjectPaths(const FPCGContext* Context, const UPCGMetadata* Metadata);
+	TArray<FString> GetUnrealObjectPaths(const FString& InputName, const FPCGContext* Context, const UPCGMetadata* Metadata);
 
 	static bool ApplyInputAsPCGData(UHoudiniInput* HoudiniInput, const TArray<UHoudiniPCGDataCollection*> & PCGCollections);
 
-	static void DeleteBakedActor(const FString& ActorPath);
-	static void DeleteBakedComponent(const FString& ActorPath);
-	static void DeleteBakedObject(const FString& ObjectPath);
-	static void DeletePackage(UPackage* Package);
-	static void DeleteLandscapeLayer(const FString & LandscapePath, TArray<FString>& LandscapeLayers);
-	static void DeleteFoliage(UWorld* World, UFoliageType* FoliageType, const TArray<FVector>& FoliageInstancePositions);
-	void DeleteBakedOutputObject(UWorld* World, FHoudiniBakedOutputObject& BakedOutputObject);
 };
-
-
 

@@ -164,8 +164,8 @@ void UHoudiniGeoImportCommandlet::TickDiscoveredFiles()
 			FHoudiniPackageParams PackageParams;
 			PopulatePackageParams(FileData.FileName, PackageParams);
 			TArray<TObjectPtr<UHoudiniOutput>> Outputs;
-			int32 Error = ImportBGEO(FileData.FileName, PackageParams, Outputs);
-			if (Error == 0)
+			TTuple<bool, FString> Result  = ImportBGEO(FileData.FileName, PackageParams, Outputs);
+			if (Result.Key == true)
 			{
 				FileData.bImported = true;
 				HOUDINI_LOG_DISPLAY(TEXT("Importing %s... Done"), *FileData.FileName);
@@ -173,7 +173,7 @@ void UHoudiniGeoImportCommandlet::TickDiscoveredFiles()
 			else
 			{
 				FileData.bImported = false;
-				HOUDINI_LOG_DISPLAY(TEXT("Importing %s... Failed (%d)"), *FileData.FileName, Error);
+				HOUDINI_LOG_DISPLAY(TEXT("Importing %s... Failed (%s)"), *FileData.FileName, *Result.Value);
 			}
 		}
 	}
@@ -316,11 +316,11 @@ UHoudiniGeoImportCommandlet::HandleImportBGEOMessage(
 	FMeshBuildSettings MeshBuildSettings;
 	InMessage.MeshBuildSettings.PopulateMeshBuildSettings(MeshBuildSettings);
 
-	if (ImportBGEO(InMessage.FilePath, PackageParams, Outputs, &StaticMeshGenerationProperties, &MeshBuildSettings, &OutputObjectAttributes, &InstancedOutputPartData) == 0)
+	TTuple<bool,FString> Result = ImportBGEO(InMessage.FilePath, PackageParams, Outputs, &StaticMeshGenerationProperties, &MeshBuildSettings, &OutputObjectAttributes, &InstancedOutputPartData);
+	if (Result.Key == true)
 	{
 		FHoudiniPDGImportBGEOResultMessage* Reply = new FHoudiniPDGImportBGEOResultMessage();
-		(*Reply) = InMessage;
-		// Reply->PopulateFromPackageParams(PackageParams);
+		Reply->SetMessage(InMessage);
 		Reply->ImportResult = EHoudiniPDGImportBGEOResult::HPIBR_Success;
 
 		const int32 NumOutputs = Outputs.Num();
@@ -334,7 +334,7 @@ UHoudiniGeoImportCommandlet::HandleImportBGEOMessage(
 			UHoudiniOutput* Output = Outputs[Index];
 			for (const FHoudiniGeoPartObject& HGPO : Output->GetHoudiniGeoPartObjects())
 			{
-				HOUDINI_LOG_WARNING(TEXT("HGPO %d %d %d"), HGPO.ObjectId, HGPO.GeoId, HGPO.PartId);
+				HOUDINI_LOG_MESSAGE(TEXT("HGPO %d %d %d"), HGPO.ObjectId, HGPO.GeoId, HGPO.PartId);
 				MessageOutput.HoudiniGeoPartObjects.Add(HGPO);
 
 				// Get instancer data if this is an instancer output
@@ -359,7 +359,7 @@ UHoudiniGeoImportCommandlet::HandleImportBGEOMessage(
 			}
 			for (const auto& Entry : Output->GetOutputObjects())
 			{
-				HOUDINI_LOG_WARNING(TEXT("Identifier %d %d %d"), Entry.Key.ObjectId, Entry.Key.GeoId, Entry.Key.PartId);
+				HOUDINI_LOG_MESSAGE(TEXT("Identifier %d %d %d"), Entry.Key.ObjectId, Entry.Key.GeoId, Entry.Key.PartId);
 
 				MessageOutput.OutputObjects.AddDefaulted();
 				FHoudiniPDGImportNodeOutputObject& MessageOutputObject = MessageOutput.OutputObjects.Last();
@@ -380,7 +380,9 @@ UHoudiniGeoImportCommandlet::HandleImportBGEOMessage(
 	{
 		HOUDINI_LOG_WARNING(TEXT("BGEO import failed."));
 		FHoudiniPDGImportBGEOResultMessage* Reply = new FHoudiniPDGImportBGEOResultMessage();
+		Reply->SetMessage(InMessage);
 		Reply->ImportResult = EHoudiniPDGImportBGEOResult::HPIBR_Failed;
+		Reply->Errors.Add(Result.Value);
 		PDGEndpoint->Send(Reply, InContext->GetSender());
 	}
 
@@ -444,7 +446,7 @@ bool UHoudiniGeoImportCommandlet::StartHoudiniEngineSession()
 	return true;
 }
 
-int32 UHoudiniGeoImportCommandlet::ImportBGEO(
+TTuple<bool, FString> UHoudiniGeoImportCommandlet::ImportBGEO(
 	const FString &InFilename, 
 	const FHoudiniPackageParams &InPackageParams,
 	TArray<TObjectPtr<UHoudiniOutput>>& OutOutputs,
@@ -455,7 +457,7 @@ int32 UHoudiniGeoImportCommandlet::ImportBGEO(
 {
 	if (!IsHoudiniEngineSessionRunning() && !StartHoudiniEngineSession())
 	{
-		return 2;
+		return TTuple<bool,FString>(false, TEXT("Failed to connect to Houdini Session."));
 	}
 
 	FHoudiniPackageParams PackageParams = InPackageParams;
@@ -467,13 +469,13 @@ int32 UHoudiniGeoImportCommandlet::ImportBGEO(
 	// 2. Update the file paths
 	HOUDINI_LOG_DISPLAY(TEXT("SetFilePath %s"), *InFilename);
 	if (!GeoImporter->SetFilePath(InFilename))
-		return 1;
+		return TTuple<bool, FString>(false, FString::Printf(TEXT("Failed to set File Path %s."),*InFilename));
 
 	// 3. Load the BGEO file in HAPI
 	HAPI_NodeId NodeId;
 	HOUDINI_LOG_DISPLAY(TEXT("LoadBGEOFileInHAPI"));
 	if (!GeoImporter->LoadBGEOFileInHAPI(NodeId))
-		return 1;
+		return TTuple<bool, FString>(false, TEXT("Failed to load BGEO file."));
 
 	// Look for a bake folder override in the BGEO file
 	if (PackageParams.PackageMode == EPackageMode::Bake)
@@ -508,7 +510,7 @@ int32 UHoudiniGeoImportCommandlet::ImportBGEO(
 		}
 	}
 
-	auto CleanUpAndExit = [&OutOutputs, GeoImporter, NodeId](int32 InExitCode)
+	auto CleanUpAndExit = [&OutOutputs, GeoImporter, NodeId](TTuple<bool,FString> ExitCode)
 	{
 		GeoImporter->GetOutputObjects().Empty();
 		for (UHoudiniOutput* Output : OutOutputs)
@@ -520,22 +522,18 @@ int32 UHoudiniGeoImportCommandlet::ImportBGEO(
 		if (NodeId >= 0)
 			GeoImporter->DeleteCreatedNode(NodeId);
 		
-		return InExitCode;
+		return ExitCode;
 	};
 
 	// 4. Get the output from the file node
 	HOUDINI_LOG_DISPLAY(TEXT("BuildOutputsForNode %d"), NodeId);
 	if (!GeoImporter->BuildOutputsForNode(NodeId, OldOutputs, OutOutputs, true))
-		return CleanUpAndExit(1);
+		return CleanUpAndExit(TTuple<bool,FString>(false,TEXT("Failed to build outputs for nodes.")));
 
-	// Create uniquely named packages, commandlet runs in conjunction
-	// with a main editor instance, so we cannot modify existing files
+	// Create uniquely named packages, commandlet runs in conjunction89
 	PackageParams.ReplaceMode = EPackageReplaceMode::CreateNewAssets;
 
-	// FString PackageName;
-	// UPackage* Outer = PackageParams.CreatePackageForObject(PackageName);
-	UObject* Outer = this;
-	
+
 	// 5. Create the static meshes in the outputs
 	const FHoudiniStaticMeshGenerationProperties& StaticMeshGenerationProperties =
 		InStaticMeshGenerationProperties?
@@ -546,8 +544,9 @@ int32 UHoudiniGeoImportCommandlet::ImportBGEO(
 		InMeshBuildSettings ? *InMeshBuildSettings : FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings();
 	
 	HOUDINI_LOG_DISPLAY(TEXT("Creating Objects from Outputs"));
-	if (!GeoImporter->CreateObjectsFromOutputs(OutOutputs, PackageParams, StaticMeshGenerationProperties, MeshBuildSettings, OutInstancedOutputPartData))
-		return CleanUpAndExit(1);
+	TTuple<bool, FString> Result = GeoImporter->CreateObjectsFromOutputs(OutOutputs, PackageParams, StaticMeshGenerationProperties, MeshBuildSettings, OutInstancedOutputPartData);
+	if(!Result.Key)
+		return Result;
 
 	if (OutGenericAttributes)
 	{
@@ -631,7 +630,7 @@ int32 UHoudiniGeoImportCommandlet::ImportBGEO(
 	PackagesToSave.Empty();
 	OutputObjects.Empty();
 
-	return 0;
+	return TTuple<bool,FString>(true,TEXT(""));
 }
 
 void UHoudiniGeoImportCommandlet::HandleDirectoryChanged(const TArray<FFileChangeData>& InFileChangeDatas)
@@ -777,7 +776,7 @@ int32 UHoudiniGeoImportCommandlet::Main(const FString& InParams)
 		PopulatePackageParams(Filename, PackageParams);
 
 		TArray<TObjectPtr<UHoudiniOutput>> Outputs;
-		const int32 Result = ImportBGEO(Tokens[0], PackageParams, Outputs);
+		auto Result = ImportBGEO(Tokens[0], PackageParams, Outputs);
 
 		for (UHoudiniOutput* Output : Outputs)
 		{
@@ -785,7 +784,7 @@ int32 UHoudiniGeoImportCommandlet::Main(const FString& InParams)
 		}
 		Outputs.Empty();
 
-		return Result;
+		return Result.Key ? 0 : 1;
 	}
 
 	return 0;

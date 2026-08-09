@@ -87,15 +87,18 @@ void UHoudiniPCGSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& De
 								{
 									if (Settings.IsValid())
 									{
-										Settings.Get()->ResetFromHDA();
+										Settings.Get()->RebuildFromHDA();
 									}
 									return FReply::Handled();
 								})
-							.ToolTipText(FText::FromString("Resets the node from the HDA, resetting parameters, inputs and outputs."))
+							.ToolTipText(FText::FromString(
+								"Rebuilds the PCG Node from the HDA; inputs and parameters will be updated from the current definition.\n"
+								"If editing the HDA in Session Sync, it is highly recommended to Save the asset from Houdini, otherwise PCG "
+								"instances that use this graph may use the old definition."))
 							[
 								SNew(STextBlock)
 									.Font(IDetailLayoutBuilder::GetDetailFont())
-									.Text(LOCTEXT("UHoudiniPCGSettingsCustomizationRebuildHDA", "Reset From HDA"))
+									.Text(LOCTEXT("UHoudiniPCGSettingsCustomizationRebuildHDA", "Rebuild From HDA"))
 							]
 					]
 			];
@@ -118,7 +121,8 @@ void UHoudiniPCGSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& De
 		Flags.bBakeButton = false;
 		Flags.bDisplayOnOutputLess = true;
 		Flags.bAssetOptions = false;
-		Flags.bGenerateBar = false;
+		Flags.bCookButtons = false;
+		Flags.bCookTriggers = false;
 		Flags.bReplacePreviousBake = false;
 
 		CookableDetails->CreateHoudiniEngineDetails(DetailBuilder, Cookables, FString(), Flags);

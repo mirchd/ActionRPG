@@ -510,21 +510,22 @@ public:
 		UMaterialExpression* PreviousBakeMaterialExpression,
 		const FHoudiniPackageParams& PackageParams,
 		FHoudiniBakedObjectData& BakedObjectData);
-
+	
 	static void ReplaceDuplicatedMaterialInstanceTextureSample(
 		FTextureParameterValue& InTextureParameterValue,
 		FTextureParameterValue InPreviousBakeTextureParameterValue,
 		const FHoudiniPackageParams& PackageParams,
 		FHoudiniBakedObjectData& BakedObjectData);
 
-	static bool BakeTexture(
+	static bool BakeTexturesAndMaterials(
 		UHoudiniCookable* InCookable,
 		int32 InOutputIndex,
 		const TArray<UHoudiniOutput*>& InAllOutputs,
 		FHoudiniEngineBakeState& InBakeState,
 		const FDirectoryPath& InBakeFolder,
 		const FHoudiniBakeSettings& BakeSettings,
-		FHoudiniBakedObjectData& BakedObjectData);
+		FHoudiniBakedObjectData& BakedObjectData,
+		TMap<UTexture2D*, UTexture2D*>& InTempToBakeTextureMap);
 
 	static UTexture2D* BakeTextureToPackage(
 		UTexture2D* InOriginalTexture,
@@ -537,6 +538,11 @@ public:
 		const FString & SubTextureName,
 		const FHoudiniPackageParams& PackageParams,
 		FHoudiniBakedObjectData& BakedObjectData);
+
+	static UMaterialInterface* BakeMaterialToPackage(
+		UMaterialInterface* InOriginalMaterial,
+		const FHoudiniPackageParams& InPackageParams,
+		UMaterialInterface* InPreviousBakeMaterial);
 
 	// Bake a cookable based on the bInReplace and BakeOption arguments.
 	// Returns true if the underlying bake function (for example, BakeHoudiniActorToActors, returns true (or a valid UObject*))
@@ -1278,5 +1284,19 @@ public:
 
 	static UUserDefinedStruct * DuplicateUserDefinedStruct(
 		UUserDefinedStruct* OldStruct, UPackage* Pacakge, FString& PackageName);
+
+	static void UnlinkBakedOutputs(UHoudiniCookable* HC);
+	static void UnlinkBakedPDGOutputs(UHoudiniPDGAssetLink* AssetLink);
+
+	static void DeleteBakedOutputs(UHoudiniCookable * HC);
+	static void DeleteBakedPDGOutputs(UHoudiniPDGAssetLink* AssetLink);
+
+	static void DeleteBakedActor(const FSoftObjectPath& ActorPath);
+	static void DeleteBakedComponent(const FSoftObjectPath& Path);
+	static void DeleteBakedObject(const FSoftObjectPath& ObjectPath);
+	static void DeletePackage(UPackage* Package);
+	static void DeleteLandscapeLayer(const FSoftObjectPath& LandscapePath, TArray<FString>& LandscapeLayers);
+	static void DeleteFoliage(UWorld* World, UFoliageType* FoliageType, const TArray<FVector>& FoliageInstancePositions);
+	static void DeleteBakedOutputObject(UWorld* World, FHoudiniBakedOutputObject& BakedOutputObject);
 
 };

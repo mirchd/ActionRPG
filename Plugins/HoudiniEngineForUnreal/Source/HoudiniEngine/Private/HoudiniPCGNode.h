@@ -70,6 +70,10 @@ public:
 	virtual bool CanCullTaskIfUnwired() const { return false; }
 	virtual void BeginDestroy() override;
 
+#if (ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 7)
+	virtual FPCGDataTypeIdentifier GetCurrentPinTypesID(const UPCGPin* InPin) const override;
+#endif
+
 #if WITH_EDITOR
 	//~Begin UPCGSettings interface
 	virtual FName GetDefaultNodeName() const override { return FName(TEXT("HoudiniDigitalAsset")); }
@@ -86,7 +90,8 @@ public:
 	virtual TArray<FPCGPinProperties> OutputPinProperties() const override;
 	virtual TArray<FPCGPinProperties> InputPinProperties() const override;
 
-	void ResetFromHDA();
+	void RebuildFromHDA();
+	void UpdateInputLabelsFromCookable(UPCGNode* Node, const TArray<TObjectPtr<UPCGPin>>& InputPins);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = HoudiniPCG)
 	TObjectPtr<UHoudiniAsset> HoudiniAsset;
@@ -112,8 +117,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = HoudiniPCG)
 	bool bAutomaticallyDeleteTempAssets = true;
 
-	UPROPERTY(EditAnywhere, Category = HoudiniPCG)
+	UPROPERTY(EditAnywhere, Category = HoudiniPCG, 
+		meta = (DisplayName = "Use PCG Cache",
+		ToolTip = "If enabled, this node will use PCG's built in cache. Using the PCG cache means PCG will only trigger the node's execution when an input changes, which will be problematic when using external HDA inputs. Disabling the cache will cause the node to regenerate more frequently, but ensures up-to-date results."))
 	bool bUsePCGCache = true;
+
+	UPROPERTY(EditAnywhere, Category = HoudiniPCG, 
+		meta = (DisplayName = "Force PCG Outputs", 
+		ToolTip = "Forces outputs to be treated as if unreal_pcg_param attribute were specified."))
+
+	bool bForcePCGOutputs = false;
+
+	UPROPERTY(EditAnywhere, Category = HoudiniPCG,
+		meta = (DisplayName = "Apply PCG Transform",
+			ToolTip = "Applies the PCG Component's transform to the PCG point and spline data outputs."))
+	bool bApplyTransform = false;
 
 	UPROPERTY()
 	int64 IterationCount = 0; // dummy value to keep track of changes.
@@ -122,6 +140,9 @@ public:
 
 	UPROPERTY(Instanced)
 	TObjectPtr<UHoudiniPCGCookable> ParameterCookable;
+
+	UPROPERTY()
+	int PinLayoutVersion = 0;
 
 protected:
 #if WITH_EDITOR
@@ -139,6 +160,8 @@ protected:
 	void SetupCookable();
 	void ForceRefreshUI();
 	void SetNodeLabelPrefix();
+
+	FString GetHDAInputName(int Index) const;
 };
 
 enum class EHoudiniPCGContextState
@@ -169,4 +192,7 @@ protected:
 	virtual bool PrepareDataInternal(FPCGContext* InContext) const override;
 	virtual bool ExecuteInternal(FPCGContext* InContext) const override;
 	virtual void AbortInternal(FPCGContext* Context) const;
+
+	UHoudiniPCGManagedResource* GetManagedResource(FPCGContext* Context) const;
+
 };

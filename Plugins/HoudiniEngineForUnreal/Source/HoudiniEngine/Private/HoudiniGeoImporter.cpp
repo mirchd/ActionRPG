@@ -159,7 +159,7 @@ UHoudiniGeoImporter::BuildOutputsForNode(
 	return BuildAllOutputsForNode(InNodeId, this, InOldOutputs, OutNewOutputs, bInAddOutputsToRootSet, bInUseOutputNodes);
 }
 
-bool UHoudiniGeoImporter::CreateObjectsFromOutputs(
+TTuple<bool, FString> UHoudiniGeoImporter::CreateObjectsFromOutputs(
 	TArray<TObjectPtr<UHoudiniOutput>>& InOutputs,
 	FHoudiniPackageParams InPackageParams,
 	const FHoudiniStaticMeshGenerationProperties& InStaticMeshGenerationProperties,
@@ -218,45 +218,66 @@ bool UHoudiniGeoImporter::CreateObjectsFromOutputs(
 		}
 	}
 
-	if (!CreateStaticMeshes(MeshOutputs, InPackageParams, InStaticMeshGenerationProperties, InMeshBuildSettings))
-		return false;
+	TTuple<bool, FString> Result = CreateStaticMeshes(MeshOutputs, InPackageParams, InStaticMeshGenerationProperties, InMeshBuildSettings);
+	if (!Result.Key)
+		return Result;
 
-	if (!CreateCurves(CurveOutputs, InPackageParams))
-		return false;
+	Result = CreateCurves(CurveOutputs, InPackageParams);
+	if (!Result.Key)
+		return Result;
 
-	if (!CreateLandscapes(LandscapeOutputs, InPackageParams))
-		return false;
+	Result = CreateLandscapes(LandscapeOutputs, InPackageParams);
+	if (!Result.Key)
+		return Result;
 
-	if (!CreateLandscapeSplines(LandscapeSplineOutputs, InPackageParams))
-		return false;
+	Result = CreateLandscapeSplines(LandscapeSplineOutputs, InPackageParams);
 
-	if (OutInstancedOutputPartData)
+	if (!Result.Key)
+		return Result;
+
+	if (!InstancerOutputs.IsEmpty())
 	{
-		if (!CreateInstancerOutputPartData(InstancerOutputs, *OutInstancedOutputPartData))
-			return false;
+#if 1
+		// Disabled Commandlet import for now  https://internal.sidefx.com/bugdb/#/view/151036
+		return TTuple<bool, FString>(false, TEXT(""));
+#else
+		if(OutInstancedOutputPartData)
+		{
+			Result = CreateInstancerOutputPartData(InstancerOutputs, *OutInstancedOutputPartData);
+			if(!Result.Key)
+				return Result;
+		}
+		else
+		{
+			Result = CreateInstancers(InOutputs, InstancerOutputs, InPackageParams);
+			if(!Result.Key)
+				return Result;
+		}
+#endif
 	}
-	else
-	{
-		if (!CreateInstancers(InOutputs, InstancerOutputs, InPackageParams))
-			return false;
-	}
 
-	if (!CreateDataTables(DataTableOutputs, InPackageParams))
-		return false;
 
-	if (!CreateSkeletalMeshes(SkeletalOutputs, InPackageParams))
-		return false;
+	Result = CreateDataTables(DataTableOutputs, InPackageParams);
+	if (!Result.Key)
+		return Result;
 
-	if (!CreateAnimSequences(AnimSequenceOutputs, InPackageParams))
-		return false;
+	Result = CreateSkeletalMeshes(SkeletalOutputs, InPackageParams);
+	if (!Result.Key)
+		return Result;
 
-	if (!CreateCopTextures(CopTextureOutputs, InPackageParams))
-		return false;
+	Result = CreateAnimSequences(AnimSequenceOutputs, InPackageParams);
+	if (!Result.Key)
+		return Result;
 
-	return true;
+	Result = CreateCopTextures(CopTextureOutputs, InPackageParams);
+
+	if (!Result.Key)
+		return Result;
+
+	return TTuple<bool, FString>(true, TEXT(""));
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateStaticMeshes(
 	const TArray<UHoudiniOutput*>& InOutputs,
 	FHoudiniPackageParams InPackageParams,
@@ -343,15 +364,15 @@ UHoudiniGeoImporter::CreateStaticMeshes(
 		CurOutput->SetOutputObjects(NewOutputObjects);
 	}
 
-	return true;
+	return TTuple<bool, FString>(true,FString());
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateCurves(const TArray<UHoudiniOutput*>& InOutputs, FHoudiniPackageParams InPackageParams)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
 	FString Notification = TEXT("BGEO Importer: Creating Curves...");
@@ -373,17 +394,17 @@ UHoudiniGeoImporter::CreateCurves(const TArray<UHoudiniOutput*>& InOutputs, FHou
 
 	// Create and init a new Blueprint Actor
 	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), BPPackage, *PackageName, BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass(), FName("HoudiniGeoImporter"));
-	if (!Blueprint)
-		return false;
+	if(!Blueprint)
+		return TTuple<bool, FString>(true, FString(TEXT("Failed to create instancer blueprint")));
 
 	// Create a fake outer component that we'll use as a temporary outer for our curves
-	UWorld* TempWorld = UWorld::CreateWorld(EWorldType::Inactive, false, TEXT("BGEOImporterTemp"), GetTransientPackage(), false);
+	UWorld * TempWorld = UWorld::CreateWorld(EWorldType::Inactive, false, TEXT("BGEOImporterTemp"), GetTransientPackage(), false);
 	const FActorSpawnParameters ActorSpawnParameters;
-	AActor* OuterActor = TempWorld->SpawnActor<AActor>(ActorSpawnParameters);
-	USceneComponent* OuterComponent =
+	AActor * OuterActor = TempWorld->SpawnActor<AActor>(ActorSpawnParameters);
+	USceneComponent * OuterComponent =
 		NewObject<USceneComponent>(OuterActor, USceneComponent::GetDefaultSceneRootVariableName());
 
-	for (UHoudiniOutput* const CurOutput : InOutputs)
+	for(UHoudiniOutput* const CurOutput : InOutputs)
 	{
 		check(CurOutput->GetType() == EHoudiniOutputType::Curve);
 
@@ -392,12 +413,12 @@ UHoudiniGeoImporter::CreateCurves(const TArray<UHoudiniOutput*>& InOutputs, FHou
 
 		// Prepare an ActorComponent array for AddComponentsToBlueprint()
 		TArray<UActorComponent*> OutputComp;
-		for (auto CurOutputPair : CurOutput->GetOutputObjects())
+		for(auto CurOutputPair : CurOutput->GetOutputObjects())
 		{
-			for (auto Component : CurOutputPair.Value.OutputComponents)
+			for(auto Component : CurOutputPair.Value.OutputComponents)
 			{
 				UActorComponent* CurObj = Cast<UActorComponent>(Component);
-				if (!IsValid(CurObj))
+				if(!IsValid(CurObj))
 					continue;
 
 				OutputComp.Add(CurObj);
@@ -405,7 +426,7 @@ UHoudiniGeoImporter::CreateCurves(const TArray<UHoudiniOutput*>& InOutputs, FHou
 		}
 
 		// Transfer all the instancer components to the BP
-		if (OutputComp.Num() > 0)
+		if(OutputComp.Num() > 0)
 		{
 			FKismetEditorUtilities::FAddComponentsToBlueprintParams Params;
 			Params.HarvestMode = FKismetEditorUtilities::EAddComponentToBPHarvestMode::None;
@@ -421,36 +442,38 @@ UHoudiniGeoImporter::CreateCurves(const TArray<UHoudiniOutput*>& InOutputs, FHou
 	// Add it to our output objects
 	OutputObjects.Add(Blueprint);
 
-	return true;
+	return TTuple<bool, FString>(true, FString());
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateLandscapes(const TArray<UHoudiniOutput*>& InOutputs, FHoudiniPackageParams InPackageParams)
 {
-	if (InOutputs.IsEmpty())
+	if(InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
-	HOUDINI_LOG_WARNING(TEXT("Importing a landscape directly from BGEOs is not currently supported."));
-	return false;
+	FString ErrorMessage = TEXT("Importing a landscape is not currently supported.");
+	HOUDINI_LOG_WARNING(TEXT("%s"),*ErrorMessage);
+	return TTuple<bool,FString>(false, ErrorMessage);
 }
 
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateLandscapeSplines(const TArray<UHoudiniOutput*>& InOutputs, FHoudiniPackageParams InPackageParams)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
-	HOUDINI_LOG_WARNING(TEXT("Importing landscape splines directly from BGEOs is not currently supported."));
-	return false;
+	FString ErrorMessage = TEXT("Importing landscape splines is not currently supported.");
+	HOUDINI_LOG_WARNING(TEXT("%s"), *ErrorMessage);
+	return TTuple<bool, FString>(false, ErrorMessage);
 }
 
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateInstancers(
 	TArray<TObjectPtr<UHoudiniOutput>>& InAllOutputs,
 	const TArray<UHoudiniOutput*>& InInstancerOutputs,
@@ -458,7 +481,7 @@ UHoudiniGeoImporter::CreateInstancers(
 {
 	if (InInstancerOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
 	FString Notification = TEXT("BGEO Importer: Creating Instancers...");
@@ -499,7 +522,7 @@ UHoudiniGeoImporter::CreateInstancers(
 
 		if (InAllOutputs.Last()->GetType() != EHoudiniOutputType::GeometryCollection)
 		{
-			return false;
+			return TTuple<bool,FString>(false,TEXT("Failed to create Geometry Collection"));
 		}
 
 		for (auto CurOutputPair : InAllOutputs.Last()->GetOutputObjects())
@@ -511,7 +534,7 @@ UHoudiniGeoImporter::CreateInstancers(
 			OutputObjects.Add(CurObj);
 		}
 
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
 	// Create a Package for the BP
@@ -525,7 +548,7 @@ UHoudiniGeoImporter::CreateInstancers(
 	// Create and init a new Blueprint Actor
 	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), BPPackage, *PackageName, BPTYPE_Normal, UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass(), FName("HoudiniGeoImporter"));
 	if (!Blueprint)
-		return false;
+		return TTuple<bool,FString>(false,TEXT("Failed to create Instancer Blueprint"));
 
 	for (auto& CurOutput : InInstancerOutputs)
 	{
@@ -562,17 +585,17 @@ UHoudiniGeoImporter::CreateInstancers(
 	// Add it to our output objects
 	OutputObjects.Add(Blueprint);
 
-	return true;
+	return TTuple<bool, FString>(true, FString());
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateDataTables(
 	const TArray<UHoudiniOutput*>& InOutputs,
 	FHoudiniPackageParams InPackageParams)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
 	for (UHoudiniOutput* const CurOutput : InOutputs)
@@ -594,7 +617,7 @@ UHoudiniGeoImporter::CreateDataTables(
 
 			if (!FHoudiniDataTableTranslator::BuildDataTable(CurHGPO, CurOutput, PackageParams))
 			{
-				return false;
+				return TTuple<bool, FString>(false, TEXT("Failed to build Data Table"));
 			}
 		}
 
@@ -611,17 +634,17 @@ UHoudiniGeoImporter::CreateDataTables(
 		}
 	}
 
-	return true;
+	return TTuple<bool, FString>(true, FString());
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateSkeletalMeshes(
 	const TArray<UHoudiniOutput*>& InOutputs,
 	FHoudiniPackageParams InPackageParams)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
 	FString Notification = TEXT("BGEO Importer: Creating Skeletal Meshes...");
@@ -641,7 +664,7 @@ UHoudiniGeoImporter::CreateSkeletalMeshes(
 		UObject* const OuterComponent = nullptr;
 		if (!FHoudiniSkeletalMeshTranslator::ProcessSkeletalMeshOutputs(CurOutput, PackageParams, OutputMaterials, OuterComponent))
 		{
-			return false;
+			return TTuple<bool, FString>(false, TEXT("Failed to process skeletal mesh"));
 		}
 
 		// Add all output objects
@@ -669,17 +692,17 @@ UHoudiniGeoImporter::CreateSkeletalMeshes(
 		}
 	}
 
-	return true;
+	return TTuple<bool, FString>(true, FString());
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateAnimSequences(
 	const TArray<UHoudiniOutput*>& InOutputs,
 	FHoudiniPackageParams InPackageParams)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true, FString());
 	}
 
 	FString Notification = TEXT("BGEO Importer: Creating Animation Sequences...");
@@ -700,7 +723,7 @@ UHoudiniGeoImporter::CreateAnimSequences(
 		UObject* const OuterComponent = nullptr;
 		if (!FHoudiniAnimationTranslator::CreateAnimSequenceFromOutput(CurOutput, PackageParams, OuterComponent))
 		{
-			return false;
+			return TTuple<bool, FString>(false, TEXT("Failed to create animation sequence."));
 		}
 
 		// Add all output objects
@@ -716,17 +739,17 @@ UHoudiniGeoImporter::CreateAnimSequences(
 		}
 	}
 
-	return true;
+	return  TTuple<bool, FString>(true, FString());
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateCopTextures(
 	const TArray<UHoudiniOutput*>& InOutputs,
 	FHoudiniPackageParams InPackageParams)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		return TTuple<bool, FString>(true,TEXT(""));
 	}
 
 	TArray<UPackage*> DummyPackages;
@@ -740,24 +763,38 @@ UHoudiniGeoImporter::CreateCopTextures(
 		const TArray<FHoudiniGeoPartObject>& GeoPartObjects = CurOutput->GetHoudiniGeoPartObjects();
 		if (GeoPartObjects.Num() <= 0)
 			continue;
-		HAPI_NodeId CopNode = GeoPartObjects[0].GeoId;
 
-		bool bRenderSuccessful = FHoudiniTextureTranslator::HapiRenderCOPTexture(CopNode);
+		HAPI_NodeId CopNodeId = GeoPartObjects[0].GeoId;
+		EHoudiniTextureType TextureType = FHoudiniTextureTranslator::GetTextureTypeFromName(GeoPartObjects[0].PartName);
+
+		bool bRenderSuccessful = FHoudiniTextureTranslator::HapiRenderCOPTexture(CopNodeId);
 		if (bRenderSuccessful)
 		{
-			FCreateTexture2DParameters CreateTexture2DParameters;
-			CreateTexture2DParameters.SourceGuidHash = FGuid();
-			CreateTexture2DParameters.bUseAlpha = true;
-			CreateTexture2DParameters.CompressionSettings = TC_Default;
-			CreateTexture2DParameters.bDeferCompression = true;
-			CreateTexture2DParameters.bSRGB = true;
+			FCreateTexture2DParameters CreateTexture2DParameters
+				= FHoudiniTextureTranslator::GetTextureParametersFromType(TextureType);
+			float Gamma = 1.0;
+			if (TextureType == EHoudiniTextureType::Diffuse
+				|| TextureType == EHoudiniTextureType::Emissive)
+			{
+				Gamma = 2.2f;
+			}
+
+			// see if the user wants hdr (float) texture from its name
+			bool bIsHDR = FHoudiniTextureTranslator::IsHDRFromName(GeoPartObjects[0].PartName);
+
+			// see if the COP network is set to use 16 bits
+			bool bIs16bit = FHoudiniTextureTranslator::Is16BitCOP(CopNodeId);
+			HAPI_ImageDataFormat ImageDataFormat = HAPI_IMAGE_DATA_INT8;
+			if(bIsHDR)
+				ImageDataFormat = bIs16bit ? HAPI_IMAGE_DATA_FLOAT16 : HAPI_IMAGE_DATA_FLOAT32;
 
 			UTexture2D* Texture = nullptr;
 			FHoudiniTextureTranslator::CreateTexture(
-				CopNode,
+				CopNodeId,
 				HAPI_UNREAL_MATERIAL_TEXTURE_COLOR_ALPHA,
-				HAPI_IMAGE_DATA_INT8,
+				ImageDataFormat,
 				HAPI_IMAGE_PACKING_RGBA,
+				Gamma,
 				Texture,
 				"",
 				"",
@@ -770,17 +807,17 @@ UHoudiniGeoImporter::CreateCopTextures(
 		}
 	}
 
-	return true;
+	return TTuple<bool, FString>(true, TEXT(""));
 }
 
-bool
+TTuple<bool, FString>
 UHoudiniGeoImporter::CreateInstancerOutputPartData(
 	const TArray<UHoudiniOutput*>& InOutputs,
 	TMap<FHoudiniOutputObjectIdentifier, FHoudiniInstancerPartData>& OutInstancedOutputPartData)
 {
 	if (InOutputs.IsEmpty())
 	{
-		return true;
+		TTuple<bool, FString>(true, TEXT(""));
 	}
 
 	for (UHoudiniOutput* const CurOutput : InOutputs)
@@ -802,7 +839,7 @@ UHoudiniGeoImporter::CreateInstancerOutputPartData(
 		}
 	}
 
-	return true;
+	return TTuple<bool, FString>(true, TEXT(""));
 }
 
 bool
@@ -821,43 +858,44 @@ UHoudiniGeoImporter::DeleteCreatedNode(const HAPI_NodeId& InNodeId)
 	return true;
 }
 
-bool 
+TTuple<bool,FString>
 UHoudiniGeoImporter::ImportBGEOFile(
 	const FString& InBGEOFile, UObject* InParent, const FHoudiniPackageParams* InPackageParams,
 	const FHoudiniStaticMeshGenerationProperties* InStaticMeshGenerationProperties,
 	const FMeshBuildSettings* InMeshBuildSettings)
 {
 	if (InBGEOFile.IsEmpty())
-		return false;
+		return TTuple<bool,FString>(false, TEXT("Empty GEO File specified."));
 	
 	// 1. Houdini Engine Session
 	// See if we should/can start the default "first" HE session
 	if (!AutoStartHoudiniEngineSessionIfNeeded())
-		return false;
+		return TTuple<bool, FString>(false, TEXT("Failed to start Houdini session."));
 
 	// 2. Update the file paths
 	if (!SetFilePath(InBGEOFile))
-		return false;
+		return TTuple<bool, FString>(false, FString::Printf(TEXT("Failed to set file: %s"), *InBGEOFile));
 
 	// 3. Load the BGEO file in HAPI
 	HAPI_NodeId NodeId;
 	if (!LoadBGEOFileInHAPI(NodeId))
-		return false;
+		return TTuple<bool, FString>(false, TEXT("Failed to load BGEO file."));
+
 	
 	// 4. Get the output from the file node
 	TArray<TObjectPtr<UHoudiniOutput>> NewOutputs;
 	TArray<TObjectPtr<UHoudiniOutput>> OldOutputs;
 	if (!BuildOutputsForNode(NodeId, OldOutputs, NewOutputs, true))
-		return false;
+		return TTuple<bool, FString>(false, TEXT("Failed to build outputs."));
 
 	// Failure lambda
-	auto CleanUpAndReturn = [&NewOutputs](const bool& bReturnValue)
+	auto CleanUpAndReturn = [&NewOutputs](const TTuple<bool, FString>& ReturnValue)
 	{
 		// Remove the output objects from the root set before returning false
 		for (auto Out : NewOutputs)
 			Out->RemoveFromRoot();
 
-		return bReturnValue;
+		return ReturnValue;
 	};
 
 	// Prepare the package used for creating the mesh, landscape and instancer pacakges
@@ -898,12 +936,13 @@ UHoudiniGeoImporter::ImportBGEOFile(
 	
 	const FMeshBuildSettings& MeshBuildSettings =
 		InMeshBuildSettings ? *InMeshBuildSettings : FHoudiniEngineRuntimeUtils::GetDefaultMeshBuildSettings();
-		
-	if (!CreateObjectsFromOutputs(NewOutputs, PackageParams, StaticMeshGenerationProperties, MeshBuildSettings))
-		return CleanUpAndReturn(false);
+
+	TTuple<bool, FString> Result = CreateObjectsFromOutputs(NewOutputs, PackageParams, StaticMeshGenerationProperties, MeshBuildSettings);
+	if (!Result.Key)
+		return CleanUpAndReturn(TTuple<bool, FString>(false, TEXT("Failed to create objects from outputs.")));
 
 	// Clean up and return true
-	return CleanUpAndReturn(true);
+	return CleanUpAndReturn(TTuple<bool, FString>(true, TEXT("")));
 }
 
 bool
@@ -1162,7 +1201,9 @@ UHoudiniGeoImporter::BuildAllOutputsForNode(
 
 	// TArray<UHoudiniOutput*> OldOutputs;	
 	TMap<HAPI_NodeId, int32> OutputNodeCookCount;
-	if (!FHoudiniOutputTranslator::BuildAllOutputs(InNodeId, InOuter, OutputNodes, OutputNodeCookCount, InOldOutputs, OutNewOutputs, bOutputTemplateGeos, bInUseOutputNodes, bGatherEditableCurves, bCreateSceneComponents))
+	if (!FHoudiniOutputTranslator::BuildAllOutputs(InNodeId, InOuter, 
+		OutputNodes, OutputNodeCookCount, InOldOutputs, OutNewOutputs, 
+		bOutputTemplateGeos, bInUseOutputNodes, bGatherEditableCurves, bCreateSceneComponents, false))
 	{
 		// Couldn't create the package
 		HOUDINI_LOG_ERROR(TEXT("Houdini GEO Importer: Failed to process the File SOP's outputs!"));

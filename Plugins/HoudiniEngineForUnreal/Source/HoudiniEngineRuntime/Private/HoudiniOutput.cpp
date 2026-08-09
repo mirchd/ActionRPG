@@ -31,6 +31,7 @@
 #include "HoudiniEngineRuntimeUtils.h"
 #include "HoudiniLandscapeRuntimeUtils.h"
 #include "HoudiniSplineComponent.h"
+#include "HoudiniStaticMesh.h"
 
 #include "Components/SceneComponent.h"
 #include "Components/MeshComponent.h"
@@ -312,21 +313,21 @@ FHoudiniBakedOutputObjectIdentifier::operator==(const FHoudiniBakedOutputObjectI
 
 
 FHoudiniBakedOutputObject::FHoudiniBakedOutputObject()
-	: Actor()
+	: Actor_DEPRECATED()
 	, ActorBakeName(NAME_None)
-	, BakedObject()
-	, BakedComponent()
-	, BakedSkeleton()
+	, BakedObjectPath()
+	, BakedComponentPath()
+	, BakedSkeletonPath()
 {
 }
 
 
 FHoudiniBakedOutputObject::FHoudiniBakedOutputObject(AActor* InActor, FName InActorBakeName, UObject* InBakeObject, UObject* InBakedComponent)
-	: Actor(FSoftObjectPath(InActor).ToString())
+	: ActorPath(FSoftObjectPath(InActor))
 	, ActorBakeName(InActorBakeName)
-	, BakedObject(FSoftObjectPath(InBakeObject).ToString())
-	, BakedComponent(FSoftObjectPath(InBakedComponent).ToString())
-	, BakedSkeleton()
+	, BakedObjectPath(FSoftObjectPath(InBakeObject))
+	, BakedComponentPath(FSoftObjectPath(InBakedComponent).ToString())
+	, BakedSkeletonPath()
 {
 }
 
@@ -334,8 +335,6 @@ FHoudiniBakedOutputObject::FHoudiniBakedOutputObject(AActor* InActor, FName InAc
 AActor*
 FHoudiniBakedOutputObject::GetActorIfValid(bool bInTryLoad) const
 {
-	const FSoftObjectPath ActorPath(Actor);
-	
 	if (!ActorPath.IsValid())
 		return nullptr;
 	
@@ -352,14 +351,12 @@ FHoudiniBakedOutputObject::GetActorIfValid(bool bInTryLoad) const
 UObject*
 FHoudiniBakedOutputObject::GetBakedObjectIfValid(bool bInTryLoad) const 
 { 
-	const FSoftObjectPath ObjectPath(BakedObject);
-
-	if (!ObjectPath.IsValid())
+	if (!BakedObjectPath.IsValid())
 		return nullptr;
 	
-	UObject* Object = ObjectPath.ResolveObject();
+	UObject* Object = BakedObjectPath.ResolveObject();
 	if (!Object && bInTryLoad)
-		Object = ObjectPath.TryLoad();
+		Object = BakedObjectPath.TryLoad();
 
 	if (!IsValid(Object))
 		return nullptr;
@@ -370,7 +367,7 @@ FHoudiniBakedOutputObject::GetBakedObjectIfValid(bool bInTryLoad) const
 UObject*
 FHoudiniBakedOutputObject::GetBakedComponentIfValid(bool bInTryLoad) const 
 { 
-	const FSoftObjectPath ComponentPath(BakedComponent);
+	const FSoftObjectPath ComponentPath(BakedComponentPath);
 
 	if (!ComponentPath.IsValid())
 		return nullptr;
@@ -388,8 +385,6 @@ FHoudiniBakedOutputObject::GetBakedComponentIfValid(bool bInTryLoad) const
 UBlueprint*
 FHoudiniBakedOutputObject::GetBlueprintIfValid(bool bInTryLoad) const 
 { 
-	const FSoftObjectPath BlueprintPath(Blueprint);
-
 	if (!BlueprintPath.IsValid())
 		return nullptr;
 	
@@ -428,8 +423,6 @@ FHoudiniBakedOutputObject::GetLandscapeLayerInfoIfValid(const FName& InLayerName
 ALandscape*
 FHoudiniBakedOutputObject::GetLandscapeIfValid(bool bInTryLoad) const
 {
-    const FSoftObjectPath LandscapePath(Landscape);
-
     if (!LandscapePath.IsValid())
         return nullptr;
 
@@ -446,7 +439,7 @@ FHoudiniBakedOutputObject::GetLandscapeIfValid(bool bInTryLoad) const
 USkeleton*
 FHoudiniBakedOutputObject::GetBakedSkeletonIfValid(bool bInTryLoad) const
 {
-	const FSoftObjectPath SkeletonPath(BakedSkeleton);
+	const FSoftObjectPath SkeletonPath(BakedSkeletonPath);
 
 	if (!SkeletonPath.IsValid())
 		return nullptr;
@@ -464,7 +457,7 @@ FHoudiniBakedOutputObject::GetBakedSkeletonIfValid(bool bInTryLoad) const
 UPhysicsAsset*
 FHoudiniBakedOutputObject::GetBakedPhysicsAssetIfValid(bool bInTryLoad) const
 {
-	const FSoftObjectPath PhyscsAssetPath(BakedPhysicsAsset);
+	const FSoftObjectPath PhyscsAssetPath(BakedPhysicsAssetPath);
 
 	if (!PhyscsAssetPath.IsValid())
 		return nullptr;
@@ -484,16 +477,14 @@ FHoudiniBakedOutputObject::GetFoliageActorsIfValid(bool bInTryLoad) const
 {
 	TArray<AActor*> ValidActors;
 
-    for (const FString& ActorPathString : FoliageActors)
+    for (const FSoftObjectPath& FoliageActorPath : FoliageActorPaths)
     {
-        FSoftObjectPath ActorPath(ActorPathString);
-
-        if (!ActorPath.IsValid())
+        if (!FoliageActorPath.IsValid())
             continue;
 
-        UObject* ResolvedObject = ActorPath.ResolveObject();
+        UObject* ResolvedObject = FoliageActorPath.ResolveObject();
         if (!ResolvedObject && bInTryLoad)
-            ResolvedObject = ActorPath.TryLoad();
+            ResolvedObject = FoliageActorPath.TryLoad();
 
         if (!IsValid(ResolvedObject))
             continue;
@@ -512,16 +503,16 @@ TArray<AActor*> FHoudiniBakedOutputObject::GetInstancedActorsIfValid(bool bInTry
 {
     TArray<AActor*> ValidActors;
 
-    for (const FString& ActorPathString : InstancedActors)
+    for (const FSoftObjectPath& ActorPathString : InstancedActorPaths)
     {
-        FSoftObjectPath ActorPath(ActorPathString);
+        FSoftObjectPath InstancedActorPath(ActorPathString);
 
-        if (!ActorPath.IsValid())
+        if (!InstancedActorPath.IsValid())
             continue;
 
-        UObject* ResolvedObject = ActorPath.ResolveObject();
+        UObject* ResolvedObject = InstancedActorPath.ResolveObject();
         if (!ResolvedObject && bInTryLoad)
-            ResolvedObject = ActorPath.TryLoad();
+            ResolvedObject = InstancedActorPath.TryLoad();
 
         if (!IsValid(ResolvedObject))
             continue;
@@ -704,7 +695,6 @@ UHoudiniOutput::GetBounds() const
 
 	return BoxBounds;
 }
-
 void
 UHoudiniOutput::Clear()
 {
@@ -730,11 +720,7 @@ UHoudiniOutput::Clear()
 		    USceneComponent* SceneComp = Cast<USceneComponent>(Component);
 		    if (IsValid(SceneComp))
 		    {
-				if(SceneComp->GetOwner())
-					SceneComp->UnregisterComponent();
-
-			    SceneComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);			    
-			    SceneComp->DestroyComponent();
+				FHoudiniOutputObject::DestroyComponent(SceneComp);
 		    }
 
 		    if (Type == EHoudiniOutputType::Landscape && !bLandscapeWorldComposition && !IsGarbageCollecting())
@@ -757,11 +743,7 @@ UHoudiniOutput::Clear()
 		USceneComponent* ProxyComp = Cast<USceneComponent>(CurrentOutputObject.Value.ProxyComponent);
 		if (IsValid(ProxyComp))
 		{
-			if (ProxyComp->GetOwner())
-				ProxyComp->UnregisterComponent();
-
-			ProxyComp->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-			ProxyComp->DestroyComponent();
+			FHoudiniOutputObject::DestroyComponent(ProxyComp);
 		}
 
 		// Destroy Landscape Spline Output Object
@@ -1258,7 +1240,7 @@ void FHoudiniClearedEditLayers::Add(FString& EditLayer, FString& TargetLayer)
 	EditLayers[EditLayer].TargetLayers.Add(TargetLayer);
 };
 
-void DestroyComponent(UObject * Component)
+void FHoudiniOutputObject::DestroyComponent(UObject* Component)
 {
 	if (Component == nullptr || !IsValid(Component))
 		return;
@@ -1270,12 +1252,77 @@ void DestroyComponent(UObject * Component)
 		if (SceneComponent->GetOwner())
 		{
 			SceneComponent->GetOwner()->RemoveOwnedComponent(SceneComponent);
+			SceneComponent->GetOwner()->RemoveInstanceComponent(SceneComponent);
 			SceneComponent->UnregisterComponent();
 		}
 
 		SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
 		SceneComponent->DestroyComponent();
 	}
+}
+
+void FHoudiniOutputObject::DeleteAssetObject(UObject* Object)
+{
+#if WITH_EDITOR
+	if (Object == nullptr || !IsValid(Object))
+		return;
+
+	bool bCanDelete = false;
+	if (Object->IsA<UStaticMesh>()
+		|| Object->IsA<UMaterial>()
+		|| Object->IsA<UHoudiniStaticMesh>())
+	{
+		bCanDelete = true;
+	}
+
+	if (!bCanDelete)
+		return;
+
+	if (UPackage* Package = Object->GetPackage())
+	{
+		TArray<UObject*> ObjectsToDelete;
+		ObjectsToDelete.Add(Package);
+#if (ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION > 7)
+		GetObjectsWithOuter(Package, ObjectsToDelete, EGetObjectsFlags::IncludeNestedObjects);
+#else
+		GetObjectsWithOuter(Package, ObjectsToDelete, true);
+#endif	
+
+		ObjectTools::DeleteObjectsUnchecked(ObjectsToDelete);
+
+		FString PackagePath = Package->GetPathName();
+		FString FilePath = FPackageName::LongPackageNameToFilename(PackagePath, FPackageName::GetAssetPackageExtension());
+		FString DirectoryPath = FPaths::GetPath(FilePath);
+
+		TArray<FString> Files;
+		TArray<FString> SubDirs;
+		IFileManager::Get().FindFiles(Files, *(DirectoryPath / TEXT("*")), true, false);
+		IFileManager::Get().FindFiles(SubDirs, *(DirectoryPath / TEXT("*")), false, true);
+
+		if (Files.IsEmpty() && SubDirs.IsEmpty())
+		{
+			IFileManager::Get().DeleteDirectory(*DirectoryPath, false, true);
+		}
+	}
+#endif
+}
+
+void FHoudiniOutputObject::DestroyOutputObject(UObject* Object)
+{
+	if (Object == nullptr || !IsValid(Object))
+		return;
+
+	// Packaged assets are handled separately; this is for transient/instanced output objects that
+	// otherwise remain as owned subobjects and continue to show up in the editor UI.
+	if (Object->IsAsset() || Object->GetOuter()->IsA<UPackage>())
+		return;
+
+	if (Object->GetOutermost() != GetTransientPackage())
+	{
+		Object->Rename(nullptr, GetTransientPackage(), REN_DoNotDirty | REN_DontCreateRedirectors | REN_NonTransactional);
+	}
+
+	Object->MarkAsGarbage();
 }
 
 void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
@@ -1303,15 +1350,7 @@ void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 
 	for(UObject* Component : ComponentsToDestroy)
 	{
-		USceneComponent* SceneComponent = Cast<USceneComponent>(Component);
-		if (!SceneComponent)
-			continue;
-
-		if(SceneComponent->GetOwner())
-			SceneComponent->UnregisterComponent();
-
-		SceneComponent->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);		
-		SceneComponent->DestroyComponent();
+		DestroyComponent(Component);
 	}
 
 
@@ -1323,49 +1362,10 @@ void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 
 	bool bClearAssets = (ClearFlags & EHoudiniClearFlags::EHoudiniClear_Assets) == EHoudiniClearFlags::EHoudiniClear_Assets;
 
-	if(bClearAssets && IsValid(OutputObject))
+	if (bClearAssets)
 	{
-		TArray<FString> PackagesDeleted;
-
-		bool bCanDelete = false;
-		if(OutputObject->IsA<UStaticMesh>() ||
-			OutputObject->IsA<UMaterial>())
-		{
-			bCanDelete = true;
-		}
-
-		if (bCanDelete)
-		{
-			if(UPackage* Package = OutputObject->GetPackage())
-			{
-				TArray<UObject*> ObjectsToDelete;
-				ObjectsToDelete.Add(Package);
-#if (ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION > 7)
-				GetObjectsWithOuter(Package, ObjectsToDelete, EGetObjectsFlags::IncludeNestedObjects);
-#else
-				GetObjectsWithOuter(Package, ObjectsToDelete, true);
-#endif	
-
-				// Use ObjectTools to delete
-				ObjectTools::DeleteObjectsUnchecked(ObjectsToDelete);
-
-				// Also delete the package file from disk
-				FString PackagePath = Package->GetPathName();
-				FString FilePath = FPackageName::LongPackageNameToFilename(PackagePath, FPackageName::GetAssetPackageExtension());
-
-				FString DirectoryPath = FPaths::GetPath(FilePath);
-
-				TArray<FString> Files;
-				TArray<FString> SubDirs;
-				IFileManager::Get().FindFiles(Files, *(DirectoryPath / TEXT("*")), true, false);
-				IFileManager::Get().FindFiles(SubDirs, *(DirectoryPath / TEXT("*")), false, true);
-
-				if(Files.IsEmpty() && SubDirs.IsEmpty())
-				{
-					IFileManager::Get().DeleteDirectory(*DirectoryPath, false, true);
-				}
-			}
-		}
+		DeleteAssetObject(OutputObject.Get());
+		DeleteAssetObject(ProxyObject.Get());
 	}
 
 	bool bClearLandscapeLayers = (ClearFlags & EHoudiniClearFlags::EHoudiniClear_LandscapeLayers) == EHoudiniClearFlags::EHoudiniClear_LandscapeLayers;
@@ -1438,6 +1438,9 @@ void FHoudiniOutputObject::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 		}		
 #endif
 	}
+
+	DestroyOutputObject(OutputObject.Get());
+	DestroyOutputObject(ProxyObject.Get());
 	OutputObject = nullptr;
 	ProxyObject = nullptr;
 
@@ -1477,3 +1480,89 @@ void UHoudiniOutput::DestroyCookedData(EHoudiniClearFlags ClearFlags)
 	OutputObjects.Empty();
 }
 
+void FHoudiniBakedOutputObject::PostLoad()
+{
+	// We changed FStrings to FSoftObjectPath. The old properties are deprecated, move them to the new property.
+
+	if (!Actor_DEPRECATED.IsEmpty())
+	{
+		ActorPath = Actor_DEPRECATED;
+		Actor_DEPRECATED.Empty();
+	}
+
+	if (!Blueprint_DEPRECATED.IsEmpty())
+	{
+		BlueprintPath = Blueprint_DEPRECATED;
+		Blueprint_DEPRECATED.Empty();
+	}
+
+	if (!BakedObject_DEPRECATED.IsEmpty())
+	{
+		BakedObjectPath = BakedObject_DEPRECATED;
+		BakedObject_DEPRECATED.Empty();
+	}
+
+	if(!BakedComponent_DEPRECATED.IsEmpty())
+	{
+		BakedComponentPath = BakedComponent_DEPRECATED;
+		BakedComponent_DEPRECATED.Empty();
+	}
+
+	if (!InstancedActors_DEPRECATED.IsEmpty())
+	{
+		InstancedActorPaths.Empty();
+		for (FString& Path : InstancedActors_DEPRECATED)
+		{
+			InstancedActorPaths.Add(FSoftObjectPath(Path));
+		}
+		InstancedActors_DEPRECATED.Empty();
+	}
+
+	if(!InstancedComponents_DEPRECATED.IsEmpty())
+	{
+		InstancedComponentPaths.Empty();
+		for(FString& Path : InstancedComponents_DEPRECATED)
+		{
+			InstancedComponentPaths.Add(FSoftObjectPath(Path));
+		}
+		InstancedComponents_DEPRECATED.Empty();
+	}
+
+	if(!FoliageActors_DEPRECATED.IsEmpty())
+	{
+		FoliageActorPaths.Empty();
+		for(FString& Path : FoliageActors_DEPRECATED)
+		{
+			FoliageActorPaths.Add(FSoftObjectPath(Path));
+		}
+		FoliageActors_DEPRECATED.Empty();
+	}
+
+	if(!LevelInstanceActors_DEPRECATED.IsEmpty())
+	{
+		FoliageActorPaths.Empty();
+		for(FString& Path : LevelInstanceActors_DEPRECATED)
+		{
+			LevelInstanceActorPaths.Add(FSoftObjectPath(Path));
+		}
+		LevelInstanceActorPaths.Empty();
+	}
+	
+	if(!Landscape_DEPRECATED.IsEmpty())
+	{
+		LandscapePath = Landscape_DEPRECATED;
+		Landscape_DEPRECATED.Empty();
+	}
+
+	if (!BakedSkeleton_DEPRECATED.IsEmpty())
+	{
+		BakedSkeletonPath = BakedSkeleton_DEPRECATED;
+		BakedSkeleton_DEPRECATED.Empty();
+	}
+
+	if (!BakedPhysicsAsset_DEPRECATED.IsEmpty())
+	{
+		BakedPhysicsAssetPath = BakedPhysicsAsset_DEPRECATED;
+		BakedPhysicsAsset_DEPRECATED.Empty();
+	}
+}

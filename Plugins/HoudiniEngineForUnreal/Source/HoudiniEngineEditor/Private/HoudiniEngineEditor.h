@@ -150,6 +150,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		// Returns a pointer to the bake actor labels
 		TArray<TSharedPtr<FString>>* GetHoudiniEngineBakeActorOptionsLabels() { return &HoudiniEngineBakeActorOptionsLabels; };
 
+		// Returns a pointer to the Image data formats labels
+		TArray<TSharedPtr<FString>>* GetHoudiniEngineImageDataFormatsLabels() { return &HoudiniImageDataFormatOptionsLabels; };
+
 		// Returns a shared Ptr to the Houdini logo
 		TSharedPtr<FSlateDynamicImageBrush> GetHoudiniLogoBrush() const { return HoudiniLogoBrush; };
 		TSharedPtr<FSlateDynamicImageBrush> GetHoudiniEngineLogoBrush() const { return HoudiniEngineLogoBrush; };
@@ -161,6 +164,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		TSharedPtr<FSlateDynamicImageBrush> GetHoudiniEngineUIResetParametersIconBrush() const { return HoudiniEngineUIResetParametersIconBrush; }
 
 		TSharedPtr<FSlateDynamicImageBrush>	GetHoudiniEngineUIBakeIconBrush() const { return HoudiniEngineUIBakeIconBrush; }
+		TSharedPtr<FSlateDynamicImageBrush>	GetHoudiniEngineUIDeleteCookIconBrush() const { return HoudiniEngineUIDeleteCookIconBrush; }
+		TSharedPtr<FSlateDynamicImageBrush>	GetHoudiniEngineUIDeleteBakeIconBrush() const { return HoudiniEngineUIDeleteBakeIconBrush; }
+		TSharedPtr<FSlateDynamicImageBrush>	GetHoudiniEngineUIUnlinkBakeIconBrush() const { return HoudiniEngineUIUnlinkBakeIconBrush; }
 		TSharedPtr<FSlateDynamicImageBrush>	GetHoudiniEngineUICookLogIconBrush() const { return HoudiniEngineUICookLogIconBrush; }
 		TSharedPtr<FSlateDynamicImageBrush> GetHoudiniEngineUIAssetHelpIconBrush() const { return HoudiniEngineUIAssetHelpIconBrush; }
 		TSharedPtr<FSlateDynamicImageBrush>	GetHoudiniEngineUIPDGIconBrush() const { return HoudiniEngineUIPDGIconBrush; }
@@ -186,6 +192,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		// return the string for the actor bake option
 		static FString GetStringfromActorBakeOption(EHoudiniEngineActorBakeOption ActorBakeOption);
 
+		//
+		static FString GetStringFromHoudiniImageDataFormat(EHoudiniEngineImageDataFormat ImageDataFormat);
+
 
 		// Return HoudiniEngineBakeOption from FString
 		static EHoudiniEngineBakeOption StringToHoudiniEngineBakeOption(const FString & InString);
@@ -198,6 +207,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 
 		// Return EHoudiniEngineActorBakeOption from FString
 		static EHoudiniEngineActorBakeOption StringToHoudiniEngineActorBakeOption(const FString& InString);
+
+		//
+		static EHoudiniEngineImageDataFormat StringToImageDataFormat(const FString& InString);
 
 		// Convert EPDGBakePackageReplaceModeOption to EPackageReplaceMode
 		// TODO: perhaps EPackageReplaceMode can be moved to HoudiniEngineRuntime to avoid having both
@@ -351,6 +363,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		// Bake Actor options labels
 		TArray<TSharedPtr<FString>> HoudiniEngineBakeActorOptionsLabels;
 
+		// Image data format options labels
+		TArray<TSharedPtr<FString>> HoudiniImageDataFormatOptionsLabels;
+
 		// List of UI commands used by the various menus
 		TSharedPtr<class FUICommandList> HEngineCommands;
 
@@ -366,6 +381,9 @@ class HOUDINIENGINEEDITOR_API FHoudiniEngineEditor : public IHoudiniEngineEditor
 		TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIResetParametersIconBrush;
 
 		TSharedPtr<FSlateDynamicImageBrush>	HoudiniEngineUIBakeIconBrush;
+		TSharedPtr<FSlateDynamicImageBrush>	HoudiniEngineUIDeleteCookIconBrush;
+		TSharedPtr<FSlateDynamicImageBrush>	HoudiniEngineUIDeleteBakeIconBrush;
+		TSharedPtr<FSlateDynamicImageBrush>	HoudiniEngineUIUnlinkBakeIconBrush;
 		TSharedPtr<FSlateDynamicImageBrush>	HoudiniEngineUICookLogIconBrush;
 		TSharedPtr<FSlateDynamicImageBrush> HoudiniEngineUIAssetHelpIconBrush;
 		TSharedPtr<FSlateDynamicImageBrush>	HoudiniEngineUIPDGIconBrush;

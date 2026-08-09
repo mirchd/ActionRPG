@@ -29,7 +29,7 @@
 #include "HoudiniParameterFloat.h"
 #include "HoudiniParameterColor.h"
 #include "HoudiniParameterChoice.h"
-
+#include "HoudiniParameterUpdater.h"
 #include "UObject/UnrealType.h"
 
 // Generic helpers to avoid logic duplication across ramp parameters
@@ -100,7 +100,7 @@ HoudiniParameterRampStatics::SyncCachedPoints(ParamT* Param)
 	// Remove points
 	for (int32 IdxCurrentPointLeft = Idx; IdxCurrentPointLeft < Param->Points.Num(); ++IdxCurrentPointLeft) 
 	{
-		Param->RemoveElement(IdxCurrentPointLeft);
+		FHoudiniParameterUpdater::Get()->RemoveMultiParmInstance(Param, IdxCurrentPointLeft);
 
 		TObjectPtr<PointT> Point = Param->Points[IdxCurrentPointLeft];
 
@@ -142,8 +142,7 @@ UHoudiniParameterRampFloatPoint::SetInterpolation(const EHoudiniRampInterpolatio
 	if (InterpolationParentParm)
 	{
 		Interpolation = InInterpolation;
-		InterpolationParentParm->SetIntValue((int32)InInterpolation);
-		InterpolationParentParm->UpdateStringValueFromInt();
+		InterpolationParentParm->SetChoiceSelection((int32)InInterpolation);
 		InterpolationParentParm->SetIsChildOfRamp();
 	}
 }
@@ -238,8 +237,7 @@ UHoudiniParameterRampColorPoint::SetInterpolation(const EHoudiniRampInterpolatio
 		return;
 
 	Interpolation = InInterpolation;
-	InterpolationParentParm->SetIntValue((int32)InInterpolation);
-	InterpolationParentParm->UpdateStringValueFromInt();
+	InterpolationParentParm->SetChoiceSelection((int32)InInterpolation);
 	InterpolationParentParm->SetIsChildOfRamp();
 }
 UHoudiniParameterRampColorPoint*
@@ -558,7 +556,7 @@ UHoudiniParameterRampFloat::UpdatePointsArray(const TArray<UHoudiniParameter*>& 
 			if (ChoiceParameter)
 			{
 				Point->InterpolationParentParm = ChoiceParameter;
-				Point->SetInterpolation(UHoudiniParameter::GetHoudiniInterpMethodFromInt(ChoiceParameter->GetIntValueIndex()));
+				Point->SetInterpolation(UHoudiniParameter::GetHoudiniInterpMethodFromInt(ChoiceParameter->GetChoiceSelection()));
 				CurrentInstanceIndex++;
 			}
 		}
@@ -849,7 +847,7 @@ UHoudiniParameterRampColor::UpdatePointsArray(const TArray<UHoudiniParameter*>& 
 			if (ChoiceParameter)
 			{
 				Point->InterpolationParentParm = ChoiceParameter;
-				Point->SetInterpolation(UHoudiniParameter::GetHoudiniInterpMethodFromInt(ChoiceParameter->GetIntValueIndex()));
+				Point->SetInterpolation(UHoudiniParameter::GetHoudiniInterpMethodFromInt(ChoiceParameter->GetChoiceSelection()));
 				CurrentInstanceIndex++;
 			}
 		}

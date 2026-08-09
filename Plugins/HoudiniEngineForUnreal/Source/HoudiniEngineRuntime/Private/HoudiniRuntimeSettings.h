@@ -248,7 +248,11 @@ protected:
 		// If enabled, Houdini's viewport will be synchronized to Unreal's when using Session Sync.
 		UPROPERTY(GlobalConfig, EditAnywhere, AdvancedDisplay, Category = Session, meta = (DisplayName = "Sync the Houdini Viewport to Unreal's viewport.", EditCondition = "bSyncViewport"))
 		bool bSyncHoudiniViewport;
-		
+
+		// Enable to send PDG commandlet output to the main Unreal process.
+		UPROPERTY(GlobalConfig, EditAnywhere, AdvancedDisplay, Category = Session)
+		bool bSendCommandletOutputToConsole;
+
 		// If enabled, Unreal's viewport will be synchronized to Houdini's when using Session Sync.
 		UPROPERTY(GlobalConfig, EditAnywhere, AdvancedDisplay, Category = Session, meta = (DisplayName = "Sync the Unreal Viewport to Houdini's viewport", EditCondition = "bSyncViewport"))
 		bool bSyncUnrealViewport;
@@ -277,8 +281,9 @@ protected:
 		UPROPERTY(GlobalConfig, EditAnywhere, Category = Cooking)
 		bool bPauseCookingOnStart;
 
-		// Whether to display instantiation and cooking Slate notifications.
-		UPROPERTY(GlobalConfig, EditAnywhere, Category = Cooking)
+		// Whether to display instantiation and cooking Slate notifications. This is disabled in H21.5 and code will
+		// be deleted at a later date.
+		//UPROPERTY(GlobalConfig, EditAnywhere, Category = Cooking)
 		bool bDisplaySlateCookingNotifications;
 
 		// Default content folder storing all the temporary cook data (Static meshes, materials, textures, landscape layer infos...)

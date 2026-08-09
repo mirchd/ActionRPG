@@ -949,6 +949,10 @@ FHoudiniEngineEditor::RegisterSectionMappings()
 	CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_MESHGEN);
 	Section->AddCategory(*CatName);
 
+	// HoudiniImageData
+	CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_IMAGE);
+	Section->AddCategory(*CatName);
+
 	// HoudiniProxyMeshGeneration
 	//CatName = TEXT(HOUDINI_ENGINE_EDITOR_CATEGORY_PROXY);
 	//Section->AddCategory(*CatName);
@@ -1061,6 +1065,14 @@ FHoudiniEngineEditor::InitializeWidgetResource()
 	HoudiniEngineBakeActorOptionsLabels.Add(MakeShareable(new FString(FHoudiniEngineEditor::GetStringfromActorBakeOption(EHoudiniEngineActorBakeOption::OneActorPerComponent))));
 	HoudiniEngineBakeActorOptionsLabels.Add(MakeShareable(new FString(FHoudiniEngineEditor::GetStringfromActorBakeOption(EHoudiniEngineActorBakeOption::OneActorPerHDA))));
 
+	// Choice labels for image data types
+	HoudiniImageDataFormatOptionsLabels.Reset();
+	HoudiniImageDataFormatOptionsLabels.Add(MakeShareable(new FString(TEXT("Auto"))));
+	HoudiniImageDataFormatOptionsLabels.Add(MakeShareable(new FString(TEXT("Int8"))));
+	HoudiniImageDataFormatOptionsLabels.Add(MakeShareable(new FString(TEXT("Int16"))));
+	HoudiniImageDataFormatOptionsLabels.Add(MakeShareable(new FString(TEXT("Float16"))));
+	HoudiniImageDataFormatOptionsLabels.Add(MakeShareable(new FString(TEXT("Float32"))));
+
 	static FString IconsDir = FHoudiniEngineUtils::GetHoudiniEnginePluginDir() / TEXT("Resources/Icons/");
 
 	// Houdini Logo Brush
@@ -1160,6 +1172,48 @@ FHoudiniEngineEditor::InitializeWidgetResource()
 		{
 			static const int32 ProgressIconSize = 32;
 			HoudiniEngineUIBakeIconBrush = MakeShareable(new FSlateDynamicImageBrush(
+				BrushName, FVector2D(ProgressIconSize, ProgressIconSize)));
+		}
+	}
+
+	// Delete Bake
+	FString DeleteBakeIconFilePath = IconsDir + TEXT("delete_bake16x16.png");
+	if(FSlateApplication::IsInitialized() && FPlatformFileManager::Get().GetPlatformFile().FileExists(*DeleteBakeIconFilePath))
+	{
+		const FName BrushName(*DeleteBakeIconFilePath);
+		const FIntPoint Size = FSlateApplication::Get().GetRenderer()->GenerateDynamicImageResource(BrushName);
+		if(Size.X > 0 && Size.Y > 0)
+		{
+			static const int32 ProgressIconSize = 32;
+			HoudiniEngineUIDeleteBakeIconBrush = MakeShareable(new FSlateDynamicImageBrush(
+				BrushName, FVector2D(ProgressIconSize, ProgressIconSize)));
+		}
+	}
+
+	// Delete Cook
+	FString DeleteCookIconFilePath = IconsDir + TEXT("delete_bake16x16.png");
+	if(FSlateApplication::IsInitialized() && FPlatformFileManager::Get().GetPlatformFile().FileExists(*DeleteCookIconFilePath))
+	{
+		const FName BrushName(*DeleteCookIconFilePath);
+		const FIntPoint Size = FSlateApplication::Get().GetRenderer()->GenerateDynamicImageResource(BrushName);
+		if(Size.X > 0 && Size.Y > 0)
+		{
+			static const int32 ProgressIconSize = 32;
+			HoudiniEngineUIDeleteCookIconBrush = MakeShareable(new FSlateDynamicImageBrush(
+				BrushName, FVector2D(ProgressIconSize, ProgressIconSize)));
+		}
+	}
+
+	// Unlink Bake
+	FString UnlinkBakeIconFilePath = IconsDir + TEXT("unlink_bake16x16.png");
+	if(FSlateApplication::IsInitialized() && FPlatformFileManager::Get().GetPlatformFile().FileExists(*UnlinkBakeIconFilePath))
+	{
+		const FName BrushName(*UnlinkBakeIconFilePath);
+		const FIntPoint Size = FSlateApplication::Get().GetRenderer()->GenerateDynamicImageResource(BrushName);
+		if(Size.X > 0 && Size.Y > 0)
+		{
+			static const int32 ProgressIconSize = 32;
+			HoudiniEngineUIUnlinkBakeIconBrush = MakeShareable(new FSlateDynamicImageBrush(
 				BrushName, FVector2D(ProgressIconSize, ProgressIconSize)));
 		}
 	}
@@ -1535,7 +1589,7 @@ FHoudiniEngineEditor::GetLevelViewportContextMenuExtender(const TSharedRef<FUICo
 				FUIAction(
 					FExecuteAction::CreateLambda([this]() { return SendToHoudini_World(); }),
 					// Prevent a crash if the NodeSyncPanel hasn't been created yet...
-					FCanExecuteAction::CreateLambda([this, &Actors] { return Actors.Num() > 0 && NodeSyncPanel.IsValid(); })
+					FCanExecuteAction::CreateLambda([this, Actors] { return Actors.Num() > 0 && NodeSyncPanel.IsValid(); })
 				)
 			);
 		})
@@ -1892,6 +1946,53 @@ FHoudiniEngineEditor::GetStringfromActorBakeOption(EHoudiniEngineActorBakeOption
 		break;
 	}
 	return Str;
+}
+
+FString
+FHoudiniEngineEditor::GetStringFromHoudiniImageDataFormat(EHoudiniEngineImageDataFormat ImageDataFormat)
+{
+	FString Str;
+	switch (ImageDataFormat)
+	{
+	case EHoudiniEngineImageDataFormat::Auto:
+		Str = "Auto";
+		break;
+
+	case EHoudiniEngineImageDataFormat::Int8:
+		Str = "Int8";
+		break;
+
+	case EHoudiniEngineImageDataFormat::Int16:
+		Str = "Int16";
+		break;
+
+	case EHoudiniEngineImageDataFormat::Float16:
+		Str = "Float16";
+		break;
+
+	case EHoudiniEngineImageDataFormat::Float32:
+		Str = "Float32";
+		break;
+	}
+
+	return Str;
+}
+
+EHoudiniEngineImageDataFormat
+FHoudiniEngineEditor::StringToImageDataFormat(const FString& InString)
+{
+	if (InString == "Auto")
+		return  EHoudiniEngineImageDataFormat::Auto;
+	if (InString == "Int8")
+		return  EHoudiniEngineImageDataFormat::Int8;
+	if (InString == "Int16")
+		return  EHoudiniEngineImageDataFormat::Int16;
+	if (InString == "Float16")
+		return  EHoudiniEngineImageDataFormat::Float16;
+	if (InString == "Float32")
+		return  EHoudiniEngineImageDataFormat::Float32;
+
+	return EHoudiniEngineImageDataFormat::Auto;
 }
 
 

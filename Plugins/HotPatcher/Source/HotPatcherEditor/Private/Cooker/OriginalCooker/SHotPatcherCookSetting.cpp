@@ -33,7 +33,7 @@ void SHotPatcherCookSetting::Construct(const FArguments& InArgs, TSharedPtr<FHot
 					.DefaultLabel(LOCTEXT("SettingListSettingNameColumnHeader", "Setting"))
 					.FillWidth(1.0f)
 				)
-				//.ItemHeight(16.0f)
+				.ItemHeight(16.0f)
 				.ListItemsSource(&SettingList)
 				.OnGenerateRow(this, &SHotPatcherCookSetting::HandleCookSettingListViewGenerateRow)
 				.SelectionMode(ESelectionMode::None)
@@ -109,7 +109,7 @@ void SHotPatcherCookSetting::DeSerializeFromJsonObj(TSharedPtr<FJsonObject>const
 		SelectedCookSettingList.Add(MakeShareable(new FString(Setting)));
 		GetCookerContextPtr()->AddSelectedSetting(Setting);
 	}
-	ExternSettingTextBox->SetText(UKismetTextLibrary::Conv_StringToText(InJsonObject->GetStringField(TEXT("Options"))));
+	ExternSettingTextBox->SetText(UKismetTextLibrary::Conv_StringToText(InJsonObject->GetStringField("Options")));
 }
 
 

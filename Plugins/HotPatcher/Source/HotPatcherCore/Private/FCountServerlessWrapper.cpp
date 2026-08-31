@@ -67,7 +67,7 @@ void FCountServerlessWrapper::Processor()
 void FCountServerlessWrapper::RequestObjectID()
 {
 	CancelRequest(ObjectIDRequest);
-	//FHttpModule::Get().SetHttpTimeout(5.0);
+	FHttpModule::Get().SetHttpTimeout(5.0);
 	ObjectIDRequest = FHttpModule::Get().CreateRequest();
 	ObjectIDRequest->OnProcessRequestComplete().BindRaw(this, &FCountServerlessWrapper::OnObjectIdReceived);
 	ObjectIDRequest->SetURL(RequestInfo.Host);
@@ -110,7 +110,7 @@ void FCountServerlessWrapper::OnObjectIdReceived(FHttpRequestPtr Request, FHttpR
 		{
 			ToServerRequest = UpdateToServer(Desc,*NameIdMaps.Find(FApp::GetProjectName()));
 		}
-		else if(!!Count)
+		else
 		{
 			ToServerRequest = CreateToServer(Desc);
 		}

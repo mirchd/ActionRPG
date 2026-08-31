@@ -4,8 +4,6 @@
 #include "ShaderLibUtils//FlibShaderCodeLibraryHelper.h"
 #include "Interfaces/ITargetPlatform.h"
 #include "Resources/Version.h"
-#include "LayeredCookArtifactReader.h"
-#include "LooseFilesCookArtifactReader.h"
 
 FCookShaderCollectionProxy::FCookShaderCollectionProxy(const TArray<FString>& InPlatformNames,const FString& InLibraryName,bool bInShareShader,bool InIsNative,bool bInMaster,const FString& InSaveBaseDir)
 :PlatformNames(InPlatformNames),LibraryName(InLibraryName),bShareShader(bInShareShader),bIsNative(InIsNative),bMaster(bInMaster),SaveBaseDir(InSaveBaseDir){}
@@ -16,10 +14,7 @@ void FCookShaderCollectionProxy::Init()
 {
 	if(bShareShader)
 	{
-		TSharedPtr<FLooseFilesCookArtifactReader> SharedLooseFilesCookArtifactReader = MakeShared<FLooseFilesCookArtifactReader>();
-		TUniquePtr<FLayeredCookArtifactReader> AllContextArtifactReader = MakeUnique<FLayeredCookArtifactReader>();
-		AllContextArtifactReader->AddLayer(SharedLooseFilesCookArtifactReader.ToSharedRef());
-		SHADER_COOKER_CLASS::InitForCooking(bIsNative, AllContextArtifactReader.Get());
+		SHADER_COOKER_CLASS::InitForCooking(bIsNative);
 		for(const auto& PlatformName:PlatformNames)
 		{
 			ITargetPlatform* TargetPlatform = UFlibHotPatcherCoreHelper::GetPlatformByName(PlatformName);

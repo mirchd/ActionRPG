@@ -1,8 +1,7 @@
-#pragma once
+﻿#pragma once
 // engine
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
-#include "CreatePatch/HotPatcherSettingBase.h"
 #include "HotPatcherCookerSettingBase.generated.h"
 
 USTRUCT(BlueprintType)

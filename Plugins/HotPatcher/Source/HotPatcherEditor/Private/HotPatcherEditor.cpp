@@ -94,7 +94,9 @@ void FHotPatcherEditorModule::StartupModule()
 	if(::IsRunningCommandlet())
 		return;
 	
-	FCoreUObjectDelegates::OnObjectPreSave.AddRaw(this, &FHotPatcherEditorModule::OnObjectPreSave);
+	PRAGMA_DISABLE_DEPRECATION_WARNINGS
+	FCoreUObjectDelegates::OnObjectSaved.AddRaw(this,&FHotPatcherEditorModule::OnObjectSaved);
+	PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	MakeProjectSettingsForHotPatcher();
 
 	MissionNotifyProay = NewObject<UMissionNotificationProxy>();
@@ -518,7 +520,7 @@ void FHotPatcherEditorModule::OnAddToPatchSettings(const FToolMenuContext& MenuC
 	{
 		FPatcherSpecifyAsset PatchSettingAssetElement;
 		FSoftObjectPath AssetObjectPath;
-		AssetObjectPath.SetPath(UFlibAssetManageHelper::GetObjectPathByAssetData(AssetData).ToString());
+		AssetObjectPath.SetPath(UFlibAssetManageHelper::GetObjectPathByAssetData(AssetData));
 		PatchSettingAssetElement.Asset = AssetObjectPath;
 		PatchSettingAssetElement.bAnalysisAssetDependencies = true;
 		AssetsSoftPath.AddUnique(PatchSettingAssetElement);
@@ -674,7 +676,7 @@ void FHotPatcherEditorModule::OnCookAndPakPlatform(ETargetPlatform Platform, boo
 	);
 }
 
-void FHotPatcherEditorModule::OnObjectPreSave(UObject* ObjectSaved, FObjectPreSaveContext InObjectPreSaveContext)
+void FHotPatcherEditorModule::OnObjectSaved(UObject* ObjectSaved)
 {
 	if (GIsCookerLoadingPackage)
 	{

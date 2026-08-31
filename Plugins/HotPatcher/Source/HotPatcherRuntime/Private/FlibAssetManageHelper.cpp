@@ -93,13 +93,8 @@ void UFlibAssetManageHelper::UpdateAssetMangerDatabase(bool bForceRefresh)
 {
 	SCOPED_NAMED_EVENT_TEXT("UpdateAssetMangerDatabase",FColor::Red);
 #if WITH_EDITOR
-	EUpdateManagementDatabaseFlags UpdateFlags = EUpdateManagementDatabaseFlags::BuildChunkMap;
-	if (bForceRefresh)
-	{
-		UpdateFlags |= EUpdateManagementDatabaseFlags::ForceRefresh;
-	}
 	UAssetManager& AssetManager = UAssetManager::Get();
-	AssetManager.UpdateManagementDatabase(UpdateFlags);
+	AssetManager.UpdateManagementDatabase(bForceRefresh);
 #endif
 }
 
@@ -150,7 +145,7 @@ bool UFlibAssetManageHelper::GetAssetPackageGUID(FAssetDetail& AssetDetail)
 	if(!GetWPWorldGUID(AssetDetail))
 #endif
 	{
-		FSoftObjectPath PackagePath(AssetDetail.PackagePath.ToString());
+		FSoftObjectPath PackagePath(AssetDetail.PackagePath);
 		return GetAssetPackageGUID(PackagePath.GetLongPackageName(),AssetDetail.Guid);
 	}
 	return false;
@@ -162,7 +157,7 @@ bool UFlibAssetManageHelper::GetWPWorldGUID(FAssetDetail& AssetDetail)
 	bool bIsWPMap = false;
 	if(AssetDetail.AssetType.IsEqual(TEXT("World")))
 	{
-		FSoftObjectPath WorldPath(AssetDetail.PackagePath.ToString());
+		FSoftObjectPath WorldPath(AssetDetail.PackagePath);
 		FString Filename = FPackageName::LongPackageNameToFilename(WorldPath.GetLongPackageName(),FPackageName::GetMapPackageExtension());
 		if(FPaths::FileExists(Filename))
 		{
@@ -276,7 +271,7 @@ FAssetDependenciesInfo UFlibAssetManageHelper::CombineAssetDependencies(const FA
 
 
 bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& LongPackageName,
-	const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
+	const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	bool bStatus = false;
 	{
@@ -294,8 +289,15 @@ bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& L
 			{
 				TArray<FAssetIdentifier> CurrentTypeReferenceNames;
 
-				AssetRegistryModule.Get().GetReferencers(AssetId, CurrentTypeReferenceNames, AssetDepType);
-
+				PRAGMA_DISABLE_DEPRECATION_WARNINGS
+				AssetRegistryModule.Get().GetReferencers(AssetId, CurrentTypeReferenceNames,
+#if UE_VERSION_OLDER_THAN(5,3,0)
+					AssetDepType
+#else
+					UE::AssetRegistry::EDependencyCategory::Package
+#endif
+				);
+				PRAGMA_ENABLE_DEPRECATION_WARNINGS
 				for (const auto& Name : CurrentTypeReferenceNames)
 				{
 					if (!(Name.PackageName.ToString() == LongPackageName))
@@ -321,7 +323,7 @@ bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& L
 }
 
 
-bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
+bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetReference",FColor::Red);
 	FString LongPackageName = UFlibAssetManageHelper::PackagePathToLongPackageName(InAsset.PackagePath.ToString());
@@ -329,7 +331,7 @@ bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, cons
 }
 
 void UFlibAssetManageHelper::GetAssetReferenceRecursively(const FAssetDetail& InAsset,
-                                                          const TArray<UE::AssetRegistry::EDependencyCategory>&
+                                                          const TArray<EAssetRegistryDependencyType::Type>&
                                                           SearchAssetDepTypes,
                                                           const TArray<FString>& SearchAssetsTypes,
                                                           TArray<FAssetDetail>& OutRefAsset, bool bRecursive)
@@ -378,7 +380,7 @@ void UFlibAssetManageHelper::GetAssetReferenceRecursively(const FAssetDetail& In
 bool UFlibAssetManageHelper::GetAssetReferenceEx(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyTypeEx>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetReferenceEx",FColor::Red);
-	TArray<UE::AssetRegistry::EDependencyCategory> local_SearchAssetDepTypes;
+	TArray<EAssetRegistryDependencyType::Type> local_SearchAssetDepTypes;
 	for (const auto& type : SearchAssetDepTypes)
 	{
 		local_SearchAssetDepTypes.AddUnique(UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(type));
@@ -408,7 +410,7 @@ FAssetDetail UFlibAssetManageHelper::GetAssetDetailByPackageName(const FString& 
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetDetailByPackageName",FColor::Red);
 	FAssetDetail AssetDetail;
 	UAssetManager& AssetManager = UAssetManager::Get();
-	if (AssetManager.IsInitialized())
+	if (AssetManager.IsValid())
 	{
 		FString PackagePath = UFlibAssetManageHelper::LongPackageNameToPackagePath(InPackageName);
 		{
@@ -1218,9 +1220,9 @@ FString UFlibAssetManageHelper::ParserModuleAssetsNumMap(const TMap<FString, uin
 	return result;
 }
 
-UE::AssetRegistry::EDependencyCategory UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType)
+EAssetRegistryDependencyType::Type UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType)
 {
-	return static_cast<UE::AssetRegistry::EDependencyCategory>((uint8)(InType));
+	return static_cast<EAssetRegistryDependencyType::Type>((uint8)(InType));
 }
 
 void UFlibAssetManageHelper::GetAssetDataInPaths(const TArray<FString>& Paths, TArray<FAssetData>& OutAssetData)
@@ -1482,10 +1484,11 @@ TArray<UPackage*> UFlibAssetManageHelper::LoadPackagesForCooking(const TArray<FS
 	{
 		if(!bStorageConcurrent && Package->IsFullyLoaded())
 		{
-#if WITH_METADATA
-			FMetaData& MetaData = Package->GetMetaData();
-			MetaData.RemoveMetaDataOutsidePackage(Package);
-#endif
+			UMetaData* MetaData = Package->GetMetaData();
+			if(MetaData)
+			{
+				MetaData->RemoveMetaDataOutsidePackage();
+			}
 		}
 		// Precache the metadata so we don't risk rehashing the map in the parallelfor below
 		if(bStorageConcurrent)
@@ -1494,9 +1497,7 @@ TArray<UPackage*> UFlibAssetManageHelper::LoadPackagesForCooking(const TArray<FS
 			{
 				Package->FullyLoad();
 			}
-#if WITH_METADATA
 			Package->GetMetaData();
-#endif
 		}
 	}
 	GIsCookerLoadingPackage = false;
@@ -1774,7 +1775,7 @@ FAssetData UFlibAssetManageHelper::GetAssetByObjectPath(FName Path)
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 	IAssetRegistry* AssetRegistry = &AssetRegistryModule.Get();
 #if WITH_UE5
-	return  AssetRegistry->GetAssetByObjectPath(FSoftObjectPath{Path.ToString()}, true);
+	return  AssetRegistry->GetAssetByObjectPath(FSoftObjectPath{Path}, true);
 #else
 	return  AssetRegistry->GetAssetByObjectPath(Path, true);
 #endif

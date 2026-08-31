@@ -14,6 +14,7 @@
 #include "Interfaces/ITargetPlatform.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Interfaces/ITargetPlatformManagerModule.h"
+#include "GameDelegates.h"
 #include "GameMapsSettings.h"
 #include "INetworkFileSystemModule.h"
 #include "IPlatformFileSandboxWrapper.h"
@@ -39,8 +40,6 @@
 #include "Internationalization/PackageLocalizationManager.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/EngineVersionComparison.h"
-#include "ZenCookArtifactReader.h"
-
 #if !UE_VERSION_OLDER_THAN(5,4,0)
 #include "AssetCompilingManager.h"
 #endif
@@ -348,8 +347,7 @@ FSavePackageContext* UFlibHotPatcherCoreHelper::CreateSaveContext(const ITargetP
 	FString WriterDebugName;
 	if (bUseZenLoader)
 	{
-		TSharedRef<FZenCookArtifactReader> ZenCookArtifactReader = MakeShared<FZenCookArtifactReader>(ResolvedProjectPath, ResolvedMetadataPath, TargetPlatform);
-		PackageWriter = new FZenStoreWriter(ResolvedProjectPath, ResolvedMetadataPath, TargetPlatform, ZenCookArtifactReader);
+		PackageWriter = new FZenStoreWriter(ResolvedProjectPath, ResolvedMetadataPath, TargetPlatform);
 		WriterDebugName = TEXT("ZenStore");
 	}
 	else
@@ -644,13 +642,13 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 			PackageArgs.SaveFlags = SaveFlags;
 			PackageArgs.Error = GError;
 			PackageArgs.SavePackageContext = CurrentPlatformPackageContext;
+			PackageArgs.TargetPlatform = Platform.Value;
 			PackageArgs.bSlowTask = false;
 			PackageArgs.FinalTimeStamp = FDateTime::MinValue();
 			#if UE_VERSION_OLDER_THAN(5,4,0)
 			FArchiveCookContext ArchiveCookContext(Package, FArchiveCookContext::ECookType::ECookByTheBook, FArchiveCookContext::ECookingDLC::ECookingDLCNo);
 			#else
-			UE::Cook::ICookInfo* CookInfo = nullptr;
-			FArchiveCookContext ArchiveCookContext(Package, UE::Cook::ECookType::ByTheBook, UE::Cook::ECookingDLC::No, Platform.Value, CookInfo);
+			FArchiveCookContext ArchiveCookContext(Package, UE::Cook::ECookType::ByTheBook, UE::Cook::ECookingDLC::No);
 			#endif
 			FArchiveCookData CookData(*Platform.Value, ArchiveCookContext);
 			PackageArgs.ArchiveCookData = &CookData;
@@ -681,13 +679,16 @@ bool UFlibHotPatcherCoreHelper::CookPackage(
 #endif
 				Info.PackageName = Package->GetFName();
 				// PRAGMA_DISABLE_DEPRECATION_WARNINGS
-				//Info.PackageGuid = FGuid::NewGuid(); //AssetPackageData ? AssetPackageData->PackageGuid : FGuid::NewGuid();
-				Info.PackageHash = FIoHash();
+				Info.PackageGuid = FGuid::NewGuid(); //AssetPackageData ? AssetPackageData->PackageGuid : FGuid::NewGuid();
 				// PRAGMA_ENABLE_DEPRECATION_WARNINGS
 				// Info.Attachments.Add({ "Dependencies", TargetDomainDependencies });
 				// TODO: Reenable BuildDefinitionList once FCbPackage support for empty FCbObjects is in
 				//Info.Attachments.Add({ "BuildDefinitionList", BuildDefinitionList });
-				Info.WriteOptions = IPackageWriter::EWriteOptions::Write | IPackageWriter::EWriteOptions::ComputeHash;
+				Info.WriteOptions = IPackageWriter::EWriteOptions::Write;
+				if (!!(SaveFlags & SAVE_ComputeHash))
+				{
+					Info.WriteOptions |= IPackageWriter::EWriteOptions::ComputeHash;
+				}
 				CurrentPlatformPackageContext->PackageWriter->CommitPackage(MoveTemp(Info));
 			}
 		#endif
@@ -728,7 +729,7 @@ bool UFlibHotPatcherCoreHelper::RunCmdlet(const FString& CmdletName,const FStrin
 		CmdletNameStr.Append(TEXT("Commandlet"));
 	}
 	UCommandlet* CmdletCDO = nullptr;
-	UClass* SPCTCmdletClass = FindObject<UClass>(nullptr, *CmdletNameStr, EFindObjectFlags::ExactClass);
+	UClass* SPCTCmdletClass = FindObject<UClass>(ANY_PACKAGE, *CmdletNameStr, false);
 	if(SPCTCmdletClass && SPCTCmdletClass->IsChildOf(UCommandlet::StaticClass()))
 	{
 		// CmdletCDO = Cast<UCommandlet>(SPCTCmdletClass->GetDefaultObject());
@@ -1447,7 +1448,7 @@ TArray<FAssetDetail> UFlibHotPatcherCoreHelper::GetReferenceRecursivelyByClassNa
 	TArray<FAssetDetail> Results;
 	
 	TArray<EAssetRegistryDependencyTypeEx> AssetRegistryDepTypes {EAssetRegistryDependencyTypeEx::Hard};
-	TArray<UE::AssetRegistry::EDependencyCategory> SearchTypes;
+	TArray<EAssetRegistryDependencyType::Type> SearchTypes;
 	for(auto TypeEx:AssetRegistryDepTypes)
 	{
 		SearchTypes.AddUnique(UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(TypeEx));
@@ -1585,7 +1586,7 @@ bool UFlibHotPatcherCoreHelper::SerializeAssetRegistryByDetails(IAssetRegistry* 
 	SCOPED_NAMED_EVENT_TEXT("SerializeAssetRegistryByDetails",FColor::Red);
 	ITargetPlatform* TargetPlatform =  UFlibHotPatcherCoreHelper::GetPlatformByName(PlatformName);
 	FAssetRegistrySerializationOptions SaveOptions;
-	AssetRegistry->InitializeSerializationOptions(SaveOptions, TargetPlatform, UE::AssetRegistry::ESerializationTarget::ForGame);
+	AssetRegistry->InitializeSerializationOptions(SaveOptions, TargetPlatform->IniPlatformName());
 	SaveOptions.bSerializeAssetRegistry = true;
 	
 	return UFlibHotPatcherCoreHelper::SerializeAssetRegistryByDetails(AssetRegistry,PlatformName,AssetDetails,SavePath, SaveOptions);
@@ -1616,7 +1617,7 @@ bool UFlibHotPatcherCoreHelper::SerializeAssetRegistry(IAssetRegistry* AssetRegi
 	AssetRegistry->InitializeTemporaryAssetRegistryState(State, SaveOptions, true);
 	for(const auto& AssetPackagePath:PackagePaths)
 	{
-		if (State.GetAssetByObjectPath(FSoftObjectPath(*AssetPackagePath)))
+		if (State.GetAssetByObjectPath(FName(*AssetPackagePath)))
 		{
 			UE_LOG(LogHotPatcherCoreHelper, Warning, TEXT("%s already add to AssetRegistryState!"), *AssetPackagePath);
 			continue;
@@ -1845,19 +1846,14 @@ FProjectPackageAssetCollection UFlibHotPatcherCoreHelper::ImportProjectSettingsP
 	
 	{
 		// allow the game to fill out the asset registry, as well as get a list of objects to always cook
-		TArray<FName> FilesInPathStrings;
-
-		ITargetPlatformManagerModule* TPM = GetTargetPlatformManager();
-		const TArray<ITargetPlatform*>& Platforms = TPM->GetActiveTargetPlatforms();
-		for (const ITargetPlatform* TargetPlatform : Platforms)
-		{
-			TargetPlatform->GetExtraPackagesToCook(FilesInPathStrings);
-		}
-		
+		TArray<FString> FilesInPathStrings;
+		PRAGMA_DISABLE_DEPRECATION_WARNINGS;
+		FGameDelegates::Get().GetCookModificationDelegate().ExecuteIfBound(FilesInPathStrings);
+		PRAGMA_ENABLE_DEPRECATION_WARNINGS;
 		for(const auto& BuildFilename:FilesInPathStrings)
 		{
 			FString OutPackageName;
-			if (FPackageName::TryConvertFilenameToLongPackageName(FPaths::ConvertRelativePathToFull(BuildFilename.ToString()), OutPackageName))
+			if (FPackageName::TryConvertFilenameToLongPackageName(FPaths::ConvertRelativePathToFull(BuildFilename), OutPackageName))
 			{
 				AddSoftObjectPath(OutPackageName);
 			}
@@ -2320,13 +2316,7 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
 {
 	SCOPED_NAMED_EVENT_TEXT("CacheForCookedPlatformData",FColor::Red);
 	
-	struct FSaveRootArgs
-	{
-		bool bCleanupIsRequired;
-		uint32 SaveFlags;
-	};
-
-	TMap<UWorld*, FSaveRootArgs> WorldsToPostSaveRoot;
+	TMap<UWorld*, bool> WorldsToPostSaveRoot;
 	WorldsToPostSaveRoot.Reserve(1024);
 	
 	for(auto Package:Packages)
@@ -2393,10 +2383,8 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
 #endif
     				}
     				{
-						FSaveRootArgs Args;
-						Args.bCleanupIsRequired = false;
-						Args.SaveFlags = SaveFlags;
-    					WorldsToPostSaveRoot.Add(World, Args);
+    					bool bCleanupIsRequired = World->PreSaveRoot(TEXT(""));
+    					WorldsToPostSaveRoot.Add(World, bCleanupIsRequired);
     				}
     				GIsCookerLoadingPackage = false;
     			}
@@ -2431,11 +2419,7 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
     					SCOPED_NAMED_EVENT_TEXT("Export PreSave",FColor::Red);
     					GIsCookerLoadingPackage = true;
     					{
-							FObjectSaveContextData ContextData;
-							ContextData.SaveFlags = SaveFlags;
-							FObjectPreSaveContext ObjectPreSaveContext(ContextData);
-
-    						ExportObj->PreSave(ObjectPreSaveContext);
+    						ExportObj->PreSave(Platform);
     					}
     					GIsCookerLoadingPackage = false;
     				}
@@ -2487,13 +2471,7 @@ void UFlibHotPatcherCoreHelper::CacheForCookedPlatformData(
 #endif
 			UWorld* World = WorldIt.Key();
 			check(World);
-
-			FObjectSaveContextData ObjectSaveContext;
-			ObjectSaveContext.Object = World;
-
-			const FSaveRootArgs& Args = WorldIt.Value();
-			ObjectSaveContext.bCleanupRequired = Args.bCleanupIsRequired;
-			World->PostSaveRoot(FObjectPostSaveRootContext(ObjectSaveContext));
+			World->PostSaveRoot(WorldIt.Value());
 		}
 	}
 	
@@ -2591,13 +2569,13 @@ void UFlibHotPatcherCoreHelper::WaitObjectsCachePlatformDataComplete(TSet<UObjec
 uint32 UFlibHotPatcherCoreHelper::GetCookSaveFlag(UPackage* Package, bool bUnversioned, bool bStorageConcurrent,
                                                   bool CookLinkerDiff)
 {
-	uint32 SaveFlags = SAVE_Async | (bUnversioned ? SAVE_Unversioned : 0);
+	uint32 SaveFlags = SAVE_KeepGUID | SAVE_Async| SAVE_ComputeHash | (bUnversioned ? SAVE_Unversioned : 0);
 
 #if ENGINE_MAJOR_VERSION >4 || ENGINE_MINOR_VERSION >25
 	// bool CookLinkerDiff = false;
 	if(CookLinkerDiff)
 	{
-		//SaveFlags |= SAVE_CompareLinker;
+		SaveFlags |= SAVE_CompareLinker;
 	}
 #endif
 	if (bStorageConcurrent)
@@ -2680,11 +2658,11 @@ FString UFlibHotPatcherCoreHelper::GetSavePackageResultStr(ESavePackageResult Re
 			Str = TEXT("Error");
 			break;
 		}
-	/*case ESavePackageResult::DifferentContent:
+	case ESavePackageResult::DifferentContent:
 		{
 			Str = TEXT("DifferentContent");
 			break;
-		}*/
+		}
 	case ESavePackageResult::GenerateStub:
 		{
 			Str = TEXT("GenerateStub");
@@ -2705,11 +2683,11 @@ FString UFlibHotPatcherCoreHelper::GetSavePackageResultStr(ESavePackageResult Re
 			Str = TEXT("ContainsEditorOnlyData");
 			break;
 		}
-	/*case ESavePackageResult::ReferencedOnlyByEditorOnlyData:
+	case ESavePackageResult::ReferencedOnlyByEditorOnlyData:
 		{
 			Str = TEXT("ReferencedOnlyByEditorOnlyData");
 			break;
-		}*/
+		}
 	}
 	return Str;
 }

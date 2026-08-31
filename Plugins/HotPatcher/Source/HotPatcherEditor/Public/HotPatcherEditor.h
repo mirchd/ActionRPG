@@ -22,7 +22,6 @@
 #include "ContentBrowserDelegates.h"
 #include "MissionNotificationProxy.h"
 #include "ThreadUtils/FProcWorkerThread.hpp"
-#include "UObject/ObjectSaveContext.h"
 
 #if ENGINE_MAJOR_VERSION > 4 || ENGINE_MINOR_VERSION>=26
 	#define InvokeTab TryInvokeTab
@@ -91,7 +90,7 @@ public:
 	void CookAndPakByPatchSettings(TSharedPtr<FExportPatchSettings> PatchSettings,bool bForceStandalone);
 	void OnPakPreset(FExportPatchSettings Config,ETargetPlatform Platform);
 	void OnPakPreset(FExportPatchSettings Config);
-	void OnObjectPreSave(UObject* ObjectSaved, FObjectPreSaveContext InObjectPreSaveContext);
+	void OnObjectSaved( UObject* ObjectSaved );
 
 
 	FExportPatchSettings MakeTempPatchSettings(

@@ -1839,7 +1839,7 @@ FPakEncryptionKeys UFlibPatchParserHelper::GetCryptoByProjectSettings()
 	result.EncryptionKey.Name = TEXT("Embedded");
 	result.EncryptionKey.Guid = FGuid::NewGuid().ToString();
 	
-	UClass* Class = FindObject<UClass>(nullptr, TEXT("/Script/CryptoKeys.CryptoKeysSettings"), EFindObjectFlags::ExactClass);
+	UClass* Class = FindObject<UClass>(ANY_PACKAGE, TEXT("/Script/CryptoKeys.CryptoKeysSettings"), true);
 	if(Class)
 	{
 		FString AESKey;

@@ -104,11 +104,11 @@ public:
 	// Get All invalid reference asset
 	static void GetAllInValidAssetInProject(FAssetDependenciesInfo InAllDependencies, TArray<FString> &OutInValidAsset, TArray<FString> InIgnoreModules = {});
 
-	// UE::AssetRegistry::EDependencyCategory::Package
-	static bool GetAssetReferenceByLongPackageName(const FString& LongPackageName, const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset);
-	static bool GetAssetReference(const FAssetDetail& InAsset, const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset);
+
+	static bool GetAssetReferenceByLongPackageName(const FString& LongPackageName,const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset);
+	static bool GetAssetReference(const FAssetDetail& InAsset,const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset);
 	static void GetAssetReferenceRecursively(const FAssetDetail& InAsset,
-	                                         const TArray<UE::AssetRegistry::EDependencyCategory>& SearchAssetDepTypes,
+	                                         const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes,
 	                                         const TArray<FString>& SearchAssetsTypes,
 	                                         TArray<FAssetDetail>& OutRefAsset, bool bRecursive = true);
 	UFUNCTION(BlueprintPure, BlueprintCallable, Category = "GWorld|Flib|AssetManager")
@@ -211,7 +211,7 @@ public:
 	static uint32 ParserAssetDependenciesInfoNumber(const FAssetDependenciesInfo& AssetDependenciesInfo, TMap<FString,uint32>);
 	static FString ParserModuleAssetsNumMap(const TMap<FString,uint32>& InMap);
 
-	static UE::AssetRegistry::EDependencyCategory ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType);
+	static EAssetRegistryDependencyType::Type ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType);
 
 	static void GetAssetDataInPaths(const TArray<FString>& Paths, TArray<FAssetData>& OutAssetData);
 	

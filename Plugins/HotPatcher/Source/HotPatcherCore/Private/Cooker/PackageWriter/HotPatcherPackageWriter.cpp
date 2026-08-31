@@ -2,7 +2,6 @@
 #include "Cooker/PackageWriter/HotPatcherPackageWriter.h"
 
 #if WITH_PACKAGE_CONTEXT && ENGINE_MAJOR_VERSION > 4
-#include "AssetRegistry/AssetRegistryState.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Async/Async.h"
 #include "Serialization/LargeMemoryWriter.h"
@@ -16,24 +15,6 @@ void FHotPatcherPackageWriter::AddToExportsSize(int64& ExportsSize)
 	TPackageWriterToSharedBuffer<ICookedPackageWriter>::AddToExportsSize(ExportsSize);
 }
 #endif
-
-void FHotPatcherPackageWriter::SetCooker(UE::PackageWriter::Private::ICookerInterface* CookerInterface)
-{
-}
-
-void FHotPatcherPackageWriter::GetBaseGameOplogAttachments(TArrayView<FName> PackageNames, TArrayView<FUtf8StringView> AttachmentKeys, TUniqueFunction<void(FName PackageName, FUtf8StringView AttachmentKey, FCbObject&& Attachment)>&& Callback)
-{
-}
-
-TUniquePtr<FLargeMemoryWriter> FHotPatcherPackageWriter::CreateLinkerArchive(FName PackageName, UObject* Asset, uint16 MultiOutputIndex)
-{
-	return TUniquePtr<FLargeMemoryWriter>();
-}
-
-TUniquePtr<FLargeMemoryWriter> FHotPatcherPackageWriter::CreateLinkerExportsArchive(FName PackageName, UObject* Asset, uint16 MultiOutputIndex)
-{
-	return TUniquePtr<FLargeMemoryWriter>();
-}
 
 void FHotPatcherPackageWriter::BeginPackage(const FBeginPackageInfo& Info)
 {
@@ -59,33 +40,12 @@ void FHotPatcherPackageWriter::EndCook(
 
 TUniquePtr<FAssetRegistryState> FHotPatcherPackageWriter::LoadPreviousAssetRegistry()
 {
-
 	return TUniquePtr<FAssetRegistryState>();
 }
 
 FCbObject FHotPatcherPackageWriter::GetOplogAttachment(FName PackageName, FUtf8StringView AttachmentKey)
 {
 	return FCbObject();
-}
-
-void FHotPatcherPackageWriter::GetOplogAttachments(TArrayView<FName> PackageNames,
-	TArrayView<FUtf8StringView> AttachmentKeys,
-	TUniqueFunction<void(FName PackageName, FUtf8StringView AttachmentKey, FCbObject&& Attachment)>&& Callback)
-{
-	/** Oplog attachments are not implemented by FLooseCookedPackageWriter */
-	for (FName PackageName : PackageNames)
-	{
-		for (FUtf8StringView AttachmentKey : AttachmentKeys)
-		{
-			Callback(PackageName, AttachmentKey, FCbObject());
-		}
-	}
-}
-
-IPackageWriter::ECommitStatus FHotPatcherPackageWriter::GetCommitStatus(FName PackageName)
-{
-	// GetCommitStatus is not implemented by FLooseCookedPackageWriter
-	return IPackageWriter::ECommitStatus::NotCommitted;
 }
 
 void FHotPatcherPackageWriter::RemoveCookedPackages(TArrayView<const FName> PackageNamesToRemove)

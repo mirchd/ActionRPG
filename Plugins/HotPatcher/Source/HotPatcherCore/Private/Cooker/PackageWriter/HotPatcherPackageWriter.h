@@ -16,13 +16,6 @@ public:
 		return Result;
 	}
 
-	virtual void SetCooker(UE::PackageWriter::Private::ICookerInterface* CookerInterface) override;
-	virtual void GetBaseGameOplogAttachments(TArrayView<FName> PackageNames,
-		TArrayView<FUtf8StringView> AttachmentKeys,
-		TUniqueFunction<void(FName PackageName, FUtf8StringView AttachmentKey, FCbObject&& Attachment)>&& Callback) override;
-	virtual TUniquePtr<FLargeMemoryWriter> CreateLinkerArchive(FName PackageName, UObject* Asset, uint16 MultiOutputIndex) override;
-	virtual TUniquePtr<FLargeMemoryWriter> CreateLinkerExportsArchive(FName PackageName, UObject* Asset, uint16 MultiOutputIndex) override;
-
 	virtual void BeginPackage(const FBeginPackageInfo& Info) override;
 #if !UE_VERSION_NEWER_THAN(5,1,1) // FOR UE5.1
 	virtual void AddToExportsSize(int64& ExportsSize) override;
@@ -43,10 +36,6 @@ public:
 	virtual TUniquePtr<FAssetRegistryState> LoadPreviousAssetRegistry()override;
 	
 	virtual FCbObject GetOplogAttachment(FName PackageName, FUtf8StringView AttachmentKey) override;
-	virtual void GetOplogAttachments(TArrayView<FName> PackageNames,
-		TArrayView<FUtf8StringView> AttachmentKeys,
-		TUniqueFunction<void(FName PackageName, FUtf8StringView AttachmentKey, FCbObject&& Attachment)>&& Callback) override;
-	virtual IPackageWriter::ECommitStatus GetCommitStatus(FName PackageName) override;
 	virtual void RemoveCookedPackages(TArrayView<const FName> PackageNamesToRemove) override;
 	virtual void RemoveCookedPackages() override;
 #if UE_VERSION_OLDER_THAN(5,4,0)
